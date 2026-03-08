@@ -1,0 +1,12 @@
+{
+  "name": "dataverse",
+  "description": "Dataverse and Power Platform developer tools. Covers environment provisioning, solution management, security, metadata authoring, C# plugins, Python SDK, MCP server setup, CI/CD, and demo data management.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "homepage": "https://github.com/microsoft/PowerPlatform-Dataverse-Skills",
+  "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365"],
+  "license": "MIT"
+}

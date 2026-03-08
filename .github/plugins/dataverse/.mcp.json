@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "dataverse": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "scripts/mcp_proxy.py"
+      ],
+      "env": {}
+    }
+  }
+}

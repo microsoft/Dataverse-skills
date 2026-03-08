@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dataverse-skills",
+  "owner": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "plugins": [
+    {
+      "name": "dataverse",
+      "description": "Official Dataverse plugin for agent-guided development with MCP, PAC CLI, and Python SDK",
+      "source": "./.github/plugins/dataverse",
+      "homepage": "https://github.com/microsoft/PowerPlatform-Dataverse-Skills"
+    }
+  ]
+}

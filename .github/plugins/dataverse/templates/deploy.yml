@@ -1,0 +1,35 @@
+name: Deploy to Power Platform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'solutions/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pack solution
+        uses: microsoft/powerplatform-actions/pack-solution@v1
+        with:
+          solution-folder: solutions/${{ secrets.POWERPLATFORM_SOLUTION_NAME }}
+          solution-file: solutions/${{ secrets.POWERPLATFORM_SOLUTION_NAME }}.zip
+          solution-type: Unmanaged
+
+      - name: Import solution
+        uses: microsoft/powerplatform-actions/import-solution@v1
+        with:
+          environment-url: ${{ secrets.POWERPLATFORM_ENVIRONMENT_URL }}
+          app-id: ${{ secrets.POWERPLATFORM_CLIENT_ID }}
+          client-secret: ${{ secrets.POWERPLATFORM_CLIENT_SECRET }}
+          tenant-id: ${{ secrets.POWERPLATFORM_TENANT_ID }}
+          solution-file: solutions/${{ secrets.POWERPLATFORM_SOLUTION_NAME }}.zip
+          force-overwrite: true
+          publish-changes: true
+          skip-dependency-check: false
