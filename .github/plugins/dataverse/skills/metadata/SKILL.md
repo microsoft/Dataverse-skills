@@ -1,6 +1,12 @@
 ---
 name: dataverse-metadata
-description: Create or modify Dataverse tables, columns, relationships, forms, and views. Covers environment-first approach, MetadataService API patterns, and direct Web API calls for forms and views.
+description: >
+  Create or modify Dataverse tables, columns, relationships, forms, and views.
+  WHEN: "add column", "create table", "add relationship", "lookup column", "create form",
+  "create view", "modify form", "FormXml", "SavedQuery", "option set", "picklist",
+  "MetadataService", "EntityDefinitions".
+  DO NOT USE WHEN: reading/writing data records (use dataverse-python-sdk),
+  exporting solutions (use dataverse-solution), managing users/roles (use dataverse-security).
 ---
 
 # Skill: Metadata — Making Changes

@@ -1,6 +1,12 @@
 ---
 name: dataverse-init
-description: Initialize a Dataverse workspace on a new machine or new repo. Use this when .env is missing, setting up on a new machine, or starting a new project.
+description: >
+  Initialize a Dataverse workspace on a new machine or new repo.
+  WHEN: ".env is missing", "setting up on a new machine", "starting a new project",
+  "initialize workspace", "new repo", "first time setup", "configure MCP server",
+  "MCP not connected", "load demo data", "sample data".
+  DO NOT USE WHEN: installing tools (use dataverse-setup),
+  creating environments (use dataverse-environment).
 ---
 
 # Skill: Init
@@ -20,6 +26,7 @@ The repo is already cloned. Scripts and CLAUDE.md are present. Only machine-loca
 ```
 ls .env 2>/dev/null && echo "found" || echo "missing"
 ls .vscode/settings.json 2>/dev/null && echo "found" || echo "missing"
+ls .claude/mcp_settings.json 2>/dev/null && echo "found" || echo "missing"
 ```
 
 ### 2. Discover TENANT_ID automatically
@@ -51,9 +58,10 @@ How to prompt the user:
 - `DATAVERSE_URL`: "What is your Dataverse environment URL?"
 - `TENANT_ID`: Auto-discover from the URL above before asking. Only ask if discovery fails.
 - `SOLUTION_NAME`: "What is the unique name of your solution?"
-- `CLIENT_ID` / `CLIENT_SECRET`: Only needed for service principal auth. If the user authenticates via browser (interactive login), skip these. When omitted, auth.py uses interactive device code flow with automatic OS-level token caching (no browser re-prompt on subsequent runs).
+- `CLIENT_ID` / `CLIENT_SECRET`: Only needed for service principal auth. If the user authenticates via browser (interactive login), skip these. When omitted, auth.py uses interactive device code flow with AuthenticationRecord persistence (no browser re-prompt on subsequent runs).
 
 Write the file directly — do not instruct the user to create it:
+
 ```python
 # Write .env
 with open(".env", "w") as f:
@@ -75,6 +83,7 @@ Write a comprehensive `.gitignore` that covers all credential and generated file
 GITIGNORE_ENTRIES = [
     ".env",
     ".vscode/settings.json",
+    ".claude/mcp_settings.json",
     ".token_cache.bin",
     "*.snk",
     "__pycache__/",
@@ -91,9 +100,42 @@ if missing:
         f.write("\n" + "\n".join(missing) + "\n")
 ```
 
-### 5. Create .vscode/settings.json if missing
+### 5. Configure MCP server (if service principal credentials available)
 
-Only create this if the user has CLIENT_ID/CLIENT_SECRET (service principal). Do not ask the user to do this:
+The Dataverse MCP server requires service principal credentials (`CLIENT_ID`, `CLIENT_SECRET`, `TENANT_ID`). Interactive/device code auth is not supported for MCP.
+
+**For Claude Code CLI** — create `.claude/mcp_settings.json`:
+
+```python
+import os, json
+from pathlib import Path
+
+env = {}
+for line in Path(".env").read_text().splitlines():
+    if line and not line.startswith("#") and "=" in line:
+        k, _, v = line.partition("=")
+        env[k.strip()] = v.strip()
+
+os.makedirs(".claude", exist_ok=True)
+config = {
+    "mcpServers": {
+        "dataverse": {
+            "command": "npx",
+            "args": ["@microsoft/dataverse-mcp"],
+            "env": {
+                "DATAVERSE_URL": env["DATAVERSE_URL"],
+                "TENANT_ID": env["TENANT_ID"],
+                "CLIENT_ID": env["CLIENT_ID"],
+                "CLIENT_SECRET": env["CLIENT_SECRET"]
+            }
+        }
+    }
+}
+with open(".claude/mcp_settings.json", "w") as f:
+    json.dump(config, f, indent=2)
+```
+
+**For GitHub Copilot (VS Code)** — create `.vscode/settings.json`:
 
 ```python
 import os, json
@@ -116,6 +158,10 @@ settings = {
 with open(".vscode/settings.json", "w") as f:
     json.dump(settings, f, indent=2)
 ```
+
+Both files contain credentials and must never be committed — confirm they are in `.gitignore`.
+
+If the user does not have service principal credentials yet, skip MCP setup. They can set it up later after running `dataverse-cicd` steps 1-4 to create a service principal.
 
 ### 6. Ensure PAC CLI is on PATH
 
@@ -157,6 +203,7 @@ pac auth create --name <profile-name>
 ```
 
 For service principal auth (non-interactive, used in CI):
+
 ```
 pac auth create --name <profile-name> \
   --applicationId <CLIENT_ID> \
@@ -197,9 +244,9 @@ curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
 
 Use the resulting GUID as `TENANT_ID` in `.env`. Only ask the user if this command fails.
 
-### 3. Create .env and .vscode/settings.json
+### 3. Create .env, MCP config, and .gitignore
 
-Follow steps 3–5 from Scenario A above. Ask the user for DATAVERSE_URL and SOLUTION_NAME if not already known. Skip CLIENT_ID/CLIENT_SECRET if the user authenticates interactively. Device code tokens are cached automatically in the OS credential store.
+Follow steps 3–5 from Scenario A above. Ask the user for DATAVERSE_URL and SOLUTION_NAME if not already known. Skip CLIENT_ID/CLIENT_SECRET (and MCP setup) if the user authenticates interactively. Device code tokens are cached automatically via AuthenticationRecord persistence.
 
 ### 4. Create the directory structure
 
@@ -208,12 +255,10 @@ mkdir -p solutions plugins scripts
 ```
 
 Copy plugin scripts into the repo so they're committed and available to teammates:
+
 ```
 cp .dataverse/scripts/auth.py scripts/
-cp .dataverse/scripts/validate.py scripts/
 cp .dataverse/scripts/assign-user.py scripts/
-cp .dataverse/scripts/mcp_proxy.py scripts/
-cp .dataverse/scripts/sdk_check.py scripts/
 ```
 
 ### 5. Write CLAUDE.md
@@ -278,9 +323,76 @@ pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutio
 rm ./solutions/<SOLUTION_NAME>.zip
 ```
 
-### 10. Commit
+### 10. Load demo data (optional)
+
+If the user wants sample data for testing (accounts, contacts, opportunities), use the built-in Dataverse sample data feature:
+
+```python
+from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_credential, load_env
+import requests, os
+
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+
+# Check if already installed
+client = DataverseClient(base_url=env_url, credential=get_credential())
+pages = client.records.get(
+    "organization",
+    select=["friendlyname", "sampledataimported"],
+    top=1,
+)
+orgs = [o for page in pages for o in page]
+if orgs and orgs[0].get("sampledataimported"):
+    print("Demo data is already installed.")
+else:
+    # Install via Web API action (SDK doesn't support unbound actions)
+    from auth import get_token
+    token = get_token()
+    resp = requests.post(
+        f"{env_url}/api/data/v9.2/InstallSampleData",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "OData-MaxVersion": "4.0",
+            "OData-Version": "4.0",
+            "Content-Type": "application/json",
+        },
+    )
+    resp.raise_for_status()
+    print("Demo data installation started. Takes 2-10 minutes.")
+```
+
+To remove demo data later, call `UninstallSampleData` the same way.
+
+### 11. Commit
 
 ```
 git add .gitignore CLAUDE.md solutions/ plugins/ scripts/
 git commit -m "chore: initialize Dataverse workspace"
 ```
+
+---
+
+## MCP Server Verification
+
+After configuring the MCP server, verify it works by asking the agent: *"List the tables in my Dataverse environment."*
+
+If the agent calls `list_tables` directly, MCP is connected. If it falls back to PAC CLI or Web API, the MCP server is not connected — check:
+
+1. `.claude/mcp_settings.json` (Claude Code) or `.vscode/settings.json` (Copilot) exists and has correct values
+2. `CLIENT_ID`/`CLIENT_SECRET`/`TENANT_ID` in the config match a valid service principal
+3. The service principal has been granted access to the environment (see `dataverse-cicd` steps 1-4)
+
+### MCP Server Capabilities
+
+| Task | Use |
+| --- | --- |
+| Create/read/update/delete data records | MCP server |
+| Create a new table | MCP server |
+| Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
+| Add a column to an existing table | Web API (see `dataverse-metadata`) |
+| Create a relationship / lookup | Web API (see `dataverse-metadata`) |
+| Create or modify a form | Web API (see `dataverse-metadata`) |
+| Create or modify a view | Web API (see `dataverse-metadata`) |
+
+For anything beyond data CRUD and basic table operations, use the Web API directly.

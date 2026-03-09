@@ -29,9 +29,25 @@ pac solution import --path ./solutions/{{SOLUTION_NAME}}.zip --environment {{DAT
 rm ./solutions/{{SOLUTION_NAME}}.zip
 ```
 
-**Validate after push:**
-```
-python scripts/validate.py --all
+**Validate after push (using Python SDK):**
+
+```python
+from PowerPlatform.Dataverse.client import DataverseClient
+from scripts.auth import get_credential, load_env
+import os
+
+load_env()
+client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+
+# Check table exists
+info = client.tables.get("<logical_name>")
+print(f"[{'PASS' if info else 'FAIL'}] Table '<logical_name>'")
+
+# Check import errors
+pages = client.records.get("msdyn_solutionhistory", filter="msdyn_status eq 1",
+    select=["msdyn_name", "msdyn_exceptionmessage"], orderby=["msdyn_starttime desc"], top=5)
+errors = [e for page in pages for e in page]
+print(f"[{'FAIL' if errors else 'PASS'}] {len(errors)} failed import(s)")
 ```
 
 ## Metadata Conventions

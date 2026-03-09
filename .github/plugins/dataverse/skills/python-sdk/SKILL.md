@@ -1,6 +1,11 @@
 ---
 name: dataverse-python-sdk
-description: Use the official Microsoft Dataverse Python SDK for data operations. Use this when reading or writing records, bulk operations, or querying live data.
+description: >
+  Use the official Microsoft Dataverse Python SDK for data operations.
+  WHEN: "use the SDK", "query records", "create records", "bulk operations", "upsert",
+  "Python script for Dataverse", "read data", "write data", "upload file".
+  DO NOT USE WHEN: creating forms/views/relationships (use dataverse-metadata with Web API),
+  exporting solutions (use dataverse-solution with PAC CLI).
 ---
 
 # Skill: Python SDK
@@ -20,19 +25,23 @@ pip install PowerPlatform-Dataverse-Client
 ## What This SDK Supports
 
 - Data CRUD: create, read, update, delete records
-- Bulk operations: `CreateMultiple`, `UpdateMultiple`
+- Upsert (with alternate key support)
+- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
 - OData queries: `select`, `filter`, `orderby`, `expand`, `top`, paging
-- Table create and delete
+- SQL queries (read-only, via Web API `?sql=` parameter)
+- Table create, delete, and metadata (`tables.get()`, `tables.list()`)
+- Relationship metadata: create/delete 1:N and N:N relationship definitions
+- Alternate key management
 - File column uploads (chunked for files >128MB)
+- Context manager support with HTTP connection pooling
 
 ## What This SDK Does NOT Support
 
 - **Forms** (FormXml) — use the Web API directly (see `dataverse-metadata`)
 - **Views** (SavedQueries) — use the Web API directly
-- **Relationships** (1:N, N:N) — use the Web API directly
-- **Lookup columns** — explicitly listed as a current limitation; use the Web API directly
 - **Option sets** — use the Web API directly
-- Upsert, DeleteMultiple, general OData batching
+- **Record association** ($ref linking for N:N data, e.g., role assignments) — use the Web API directly
+- DeleteMultiple, general OData batching
 
 For anything not in the "supports" list above, write a Web API script using `scripts/auth.py` for token acquisition.
 
@@ -129,13 +138,12 @@ client.create_table(
 
 Scripts using the SDK go in `/scripts/`. Keep them small and single-purpose:
 
-```
+```text
 scripts/
   auth.py              — Azure Identity token acquisition (used by all scripts)
-  validate.py          — post-import validation
   assign-user.py       — user provisioning and role assignment
-  seed-data.py         — example: load test data into an environment
-  export-to-csv.py     — example: export table data
 ```
 
-Both the SDK and Web API scripts now use Azure Identity for auth via `auth.py`. For Web API scripts (forms, views, relationships), use `get_token()`. For data scripts using this SDK, use `get_credential()` to get a `TokenCredential` directly.
+Both the SDK and Web API scripts use Azure Identity for auth via `auth.py`. For Web API scripts (forms, views, relationships), use `get_token()`. For data scripts using this SDK, use `get_credential()` to get a `TokenCredential` directly.
+
+Post-import validation (table existence, form checks, role checks, import errors) is done inline using the SDK — see `/dataverse:solution` for patterns.

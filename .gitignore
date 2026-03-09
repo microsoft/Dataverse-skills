@@ -398,7 +398,6 @@ FodyWeavers.xsd
 
 # VS Code files for those working on multiple tools
 .vscode/*
-!.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
@@ -416,3 +415,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Dataverse workspace
+.token_cache.bin
+*.snk
+solutions/*.zip
+.claude/mcp_settings.json

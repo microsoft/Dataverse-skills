@@ -1,6 +1,11 @@
 ---
 name: dataverse-security
-description: Add users to a Dataverse environment and assign or modify security roles.
+description: >
+  Add users to a Dataverse environment and assign or modify security roles.
+  WHEN: "add user", "assign role", "security role", "list roles", "user permissions",
+  "system administrator", "system customizer".
+  DO NOT USE WHEN: creating tables/columns (use dataverse-metadata),
+  importing solutions (use dataverse-solution), setting up CI/CD service principals (use dataverse-cicd).
 ---
 
 # Skill: Security
@@ -47,8 +52,20 @@ GET /api/data/v9.2/roles?$select=name,roleid&$orderby=name
 
 ## Verify Role Assignment
 
-```
-python scripts/validate.py --check-role <email@domain.com> "<Security Role Name>"
+Use the Python SDK to check the user's roles:
+
+```python
+pages = client.records.get(
+    "systemuser",
+    filter="internalemailaddress eq '<email>'",
+    expand=["systemuserroles_association"],
+    select=["fullname", "internalemailaddress"],
+    top=1,
+)
+users = [u for page in pages for u in page]
+if users:
+    roles = [r["name"] for r in users[0].get("systemuserroles_association", [])]
+    print(f"Roles for {users[0]['fullname']}: {', '.join(roles)}")
 ```
 
 ## Notes

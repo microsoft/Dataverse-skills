@@ -1,11 +1,17 @@
 ---
 name: dataverse-solution
-description: Create, export, unpack, pack, and import Dataverse solutions. Use this for creating new solutions, pulling changes from an environment to the repo, or pushing repo changes to an environment.
+description: >
+  Create, export, unpack, pack, import, and validate Dataverse solutions.
+  WHEN: "export solution", "import solution", "pack solution", "unpack solution", "create solution",
+  "pull from environment", "push to environment", "validate import", "check import errors",
+  "check if table exists", "check if form is published", "verify deployment".
+  DO NOT USE WHEN: creating tables/columns/forms/views (use dataverse-metadata),
+  managing users/roles (use dataverse-security), setting up CI/CD (use dataverse-cicd).
 ---
 
 # Skill: Solution
 
-Create, export, unpack, pack, and import Dataverse solutions via PAC CLI.
+Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
 ## Create a New Solution
 
@@ -124,9 +130,94 @@ After async import, check the job:
 ```
 pac solution list --environment <url>
 ```
-Or query the import job directly via Web API (see `dataverse-validation/SKILL.md`).
 
-If the import fails, the error details are in the import job record. Run `validate.py --import-errors` to retrieve them in readable form.
+## Post-Import Validation
+
+After importing a solution, verify that components are live. Use the Python SDK to check directly — no external scripts needed.
+
+### Check a table exists
+
+```python
+info = client.tables.get("<logical_name>")
+if info:
+    print(f"[PASS] Table '{info['LogicalName']}' exists")
+else:
+    print(f"[FAIL] Table '<logical_name>' not found")
+```
+
+### Check a form is published
+
+```python
+pages = client.records.get(
+    "systemform",
+    filter="objecttypecode eq '<entity>' and type eq <form_type_code>",
+    select=["name", "formid"],
+    top=5,
+)
+forms = [f for page in pages for f in page]
+# Form type codes: 2 = main, 7 = quick create
+```
+
+### Check a view exists
+
+```python
+pages = client.records.get(
+    "savedquery",
+    filter="returnedtypecode eq '<entity>'",
+    select=["name", "savedqueryid", "statuscode"],
+    top=10,
+)
+views = [v for page in pages for v in page]
+```
+
+### Check a user's role assignment
+
+```python
+pages = client.records.get(
+    "systemuser",
+    filter="internalemailaddress eq '<email>'",
+    expand=["systemuserroles_association"],
+    select=["fullname", "internalemailaddress"],
+    top=1,
+)
+users = [u for page in pages for u in page]
+if users:
+    roles = [r["name"] for r in users[0].get("systemuserroles_association", [])]
+    print(f"Roles: {', '.join(roles)}")
+```
+
+### Check import errors
+
+```python
+pages = client.records.get(
+    "importjob",
+    select=["importjobid", "solutionname", "startedon", "completedon", "progress"],
+    orderby=["startedon desc"],
+    top=5,
+)
+jobs = [j for page in pages for j in page]
+```
+
+For detailed error history, also query `msdyn_solutionhistory`:
+
+```python
+pages = client.records.get(
+    "msdyn_solutionhistory",
+    filter="msdyn_status eq 1",  # 1 = failed
+    select=["msdyn_name", "msdyn_starttime", "msdyn_exceptionmessage"],
+    orderby=["msdyn_starttime desc"],
+    top=5,
+)
+```
+
+### Validation error reference
+
+| Error | Cause | Fix |
+| --- | --- | --- |
+| Table not found after import | Component not in solution | Add via `pac solution add-solution-component` |
+| Form check fails immediately | Publishing is async | Wait 30 seconds and retry |
+| Role not assigned | User not provisioned | Run `/dataverse:security` flow first |
+| Import job at 0% | Import still running | Poll again in 60 seconds |
 
 ## Notes
 
@@ -134,3 +225,4 @@ If the import fails, the error details are in the import job record. Run `valida
 - `--activate-plugins` ensures any registered plugins in the solution are activated on import.
 - If you see "solution already exists" errors, use `--import-mode ForceUpgrade` to overwrite.
 - Large solutions (Sales, Customer Service) can take 10–20 minutes to import. Be patient and poll rather than re-importing.
+- All validation queries above require auth. Use `scripts/auth.py` for credential/token acquisition. See `/dataverse:python-sdk` for SDK setup patterns.

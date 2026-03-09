@@ -1,6 +1,11 @@
 ---
 name: dataverse-cicd
-description: Set up GitHub Actions to auto-deploy Dataverse solutions on merge to main. Covers app registration, service principal, GitHub secrets, and workflow file creation.
+description: >
+  Set up GitHub Actions to auto-deploy Dataverse solutions on merge to main.
+  WHEN: "set up CI/CD", "GitHub Actions", "deploy on merge", "service principal",
+  "app registration", "GitHub secrets", "automate deployment".
+  DO NOT USE WHEN: manually importing solutions (use dataverse-solution),
+  setting up a local dev environment (use dataverse-init).
 ---
 
 # Skill: CI/CD Setup
@@ -72,7 +77,7 @@ CLIENT_SECRET=<password>
 TENANT_ID=<tenant>
 ```
 
-With these set, all scripts (`auth.py`, `validate.py`, `assign-user.py`) and `pac auth create --kind ServicePrincipal` will authenticate non-interactively. No browser required.
+With these set, all scripts (`auth.py`, `assign-user.py`) and `pac auth create --kind ServicePrincipal` will authenticate non-interactively. No browser required.
 
 ---
 

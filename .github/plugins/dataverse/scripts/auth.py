@@ -3,13 +3,14 @@ auth.py — Acquire Dataverse tokens via Azure Identity.
 
 Auth priority:
   1. Service principal (CLIENT_ID + CLIENT_SECRET in .env) — non-interactive
-  2. Device code flow — interactive, opens browser prompt
+  2. Device code flow — interactive on first login, silent refresh thereafter
 
 Token caching:
   - Service principal: in-memory (tokens are short-lived, no persistent cache needed)
   - Device code: OS credential store (Windows Credential Manager, macOS Keychain,
-    Linux libsecret) via TokenCachePersistenceOptions. No plaintext files on disk.
-    Falls back to encrypted file if OS store is unavailable.
+    Linux libsecret) via TokenCachePersistenceOptions. An AuthenticationRecord is
+    persisted alongside the token cache so that new processes can silently refresh
+    without re-prompting the user.
 
 Functions:
   load_env()            — loads .env into os.environ
@@ -37,6 +38,9 @@ Reads from .env in the current working directory or from environment variables:
 import os
 import sys
 from pathlib import Path
+
+# AuthenticationRecord is persisted here so new processes skip device code flow
+_AUTH_RECORD_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".IdentityService" / "dataverse_cli_auth_record.json"
 
 
 def load_env():
@@ -75,8 +79,8 @@ def get_credential():
 
     if not tenant_id or not dataverse_url:
         missing = [k for k, v in [("TENANT_ID", tenant_id), ("DATAVERSE_URL", dataverse_url)] if not v]
-        print(f"ERROR: .env is missing required values: {', '.join(missing)}")
-        print("  Run the init sequence (dataverse-init) to create .env.")
+        print(f"ERROR: .env is missing required values: {', '.join(missing)}", flush=True)
+        print("  Run the init sequence (/dataverse:init) to create .env.", flush=True)
         sys.exit(1)
 
     try:
@@ -86,13 +90,13 @@ def get_credential():
             TokenCachePersistenceOptions,
         )
     except ImportError:
-        print("ERROR: azure-identity not installed. Run: pip install azure-identity")
+        print("ERROR: azure-identity not installed. Run: pip install azure-identity", flush=True)
         sys.exit(1)
 
     # Warn if only one of CLIENT_ID / CLIENT_SECRET is set
     if bool(client_id) != bool(client_secret):
-        print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for")
-        print("  service principal auth. Falling back to interactive device code flow.")
+        print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for", flush=True)
+        print("  service principal auth. Falling back to interactive device code flow.", flush=True)
 
     # Path 1: Service principal (non-interactive)
     if client_id and client_secret:
@@ -102,7 +106,18 @@ def get_credential():
             client_secret=client_secret,
         )
     else:
-        # Path 2: Device code flow (interactive) with persistent OS-level token cache
+        # Path 2: Device code flow (interactive) with persistent OS-level token cache.
+        # AuthenticationRecord tells the credential which cached account to silently
+        # refresh, avoiding a device code prompt on every new process.
+        from azure.identity import AuthenticationRecord
+
+        auth_record = None
+        if _AUTH_RECORD_PATH.exists():
+            try:
+                auth_record = AuthenticationRecord.deserialize(_AUTH_RECORD_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                pass  # Corrupt or stale record — will re-authenticate
+
         def _prompt_callback(verification_uri, user_code, _expires_on):
             print(f"\nTo sign in, visit {verification_uri} and enter code: {user_code}", flush=True)
             print("(Waiting for you to complete the login in your browser...)\n", flush=True)
@@ -115,30 +130,52 @@ def get_credential():
                 name="dataverse_cli",
                 allow_unencrypted_storage=True,
             ),
+            authentication_record=auth_record,
         )
 
     return _credential
+
+
+_auth_record_saved = False
 
 
 def get_token(scope=None):
     """
     Acquire a raw access token string for the Dataverse environment.
 
+    On first call with a DeviceCodeCredential that has no saved AuthenticationRecord,
+    this triggers authenticate() to get the record and persist it. Subsequent calls
+    (same process or new processes) use silent refresh via the cached record + token cache.
+
     :param scope: OAuth2 scope. Defaults to "{DATAVERSE_URL}/.default".
     :returns: Access token string suitable for a Bearer Authorization header.
     """
+    global _auth_record_saved
     load_env()
     dataverse_url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
     if not scope:
         scope = f"{dataverse_url}/.default"
 
     credential = get_credential()
+
+    try:
+        from azure.identity import DeviceCodeCredential
+        if isinstance(credential, DeviceCodeCredential) and not _auth_record_saved and not _AUTH_RECORD_PATH.exists():
+            # First login ever — use authenticate() to get and save the record
+            record = credential.authenticate(scopes=[scope])
+            _AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _AUTH_RECORD_PATH.write_text(record.serialize(), encoding="utf-8")
+            _auth_record_saved = True
+    except Exception:
+        pass  # Fall through to normal get_token flow
+
     try:
         token = credential.get_token(scope)
     except Exception as e:
-        print(f"ERROR: Failed to acquire access token: {e}")
-        print("  Check your network connection, credentials, and .env configuration.")
+        print(f"ERROR: Failed to acquire access token: {e}", flush=True)
+        print("  Check your network connection, credentials, and .env configuration.", flush=True)
         sys.exit(1)
+
     return token.token
 
 
