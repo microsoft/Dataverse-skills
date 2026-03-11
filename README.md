@@ -1,4 +1,4 @@
-# PowerPlatform-Dataverse-Skills
+# Dataverse-skills
 
 Agent skills and MCP configuration for Microsoft Dataverse — works with Claude Code and GitHub Copilot.
 
@@ -7,7 +7,7 @@ Agent skills and MCP configuration for Microsoft Dataverse — works with Claude
 ### Claude Code
 
 ```
-/plugin marketplace add microsoft/PowerPlatform-Dataverse-Skills
+/plugin marketplace add microsoft/Dataverse-skills
 /plugin install dataverse@dataverse-skills
 ```
 
@@ -17,7 +17,7 @@ Available via [awesome-copilot](https://github.com/github/awesome-copilot) as th
 
 ## What's included
 
-- **13 skills** covering environment setup, metadata authoring, solution management, security, C# plugins, Python SDK, MCP server setup, CI/CD, demo data, and validation
+- **10 skills** covering environment setup, metadata authoring, solution management, security, C# plugins, Python SDK, MCP configuration, CI/CD, and demo data
 - **MCP server** configuration for Dataverse Web API access
 - **Scripts** for authentication, role assignment, and post-deployment validation
 - **Templates** for CLAUDE.md project files and CI/CD workflows

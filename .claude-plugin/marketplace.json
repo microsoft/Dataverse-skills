@@ -10,7 +10,7 @@
       "name": "dataverse",
       "description": "Official Dataverse plugin for agent-guided development with MCP, PAC CLI, and Python SDK",
       "source": "./.github/plugins/dataverse",
-      "homepage": "https://github.com/microsoft/PowerPlatform-Dataverse-Skills"
+      "homepage": "https://github.com/microsoft/Dataverse-skills"
     }
   ]
 }
