@@ -67,14 +67,16 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 | Tool | Use for | Does NOT support |
 | --- | --- | --- |
-| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets |
+| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use Python with OData or pandas — see the python-sdk skill. **Bulk operations:** MCP `create_record` creates one record at a time. For 50+ records, use the Web API `$batch` endpoint or Python SDK `CreateMultiple` instead — see the python-sdk skill. |
 | **Python SDK** | Data CRUD, upsert (alternate keys), bulk create/update/upsert/delete, OData queries (select/filter/expand/orderby/top), read-only SQL, table create/delete/metadata, add/remove columns, relationship metadata CRUD (1:N, N:N, lookup fields), alternate key management, file column uploads (chunked >128MB), context manager with connection pooling | Forms, Views, global Option Sets, record association (`$ref`), custom action invocation, generic `$batch` |
 | **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
 | **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Data CRUD, metadata creation (tables/columns/forms) |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**When in doubt:** MCP for conversational data work → Python SDK for scripted data/validation → Web API for metadata the SDK doesn't cover → PAC CLI for solution lifecycle.
+**When in doubt:** MCP for conversational data work (single records, simple queries) → Python SDK for scripted data, bulk operations, and analysis → Web API for metadata the SDK doesn't cover → PAC CLI for solution lifecycle.
+
+**Volume guidance:** MCP `create_record` is fine for 1–50 records. For 50–1000 records, use Web API `$batch` (see python-sdk skill). For 1000+ records, use Python SDK `CreateMultiple`. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill).
 
 Note: The Python SDK is in **preview** — breaking changes possible.
 
@@ -89,7 +91,7 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | **init** | Workspace setup: `.env`, MCP config, directory structure, demo data |
 | **setup** | Machine setup: install tools (PAC CLI, .NET, Python), authenticate |
 | **metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
-| **python-sdk** | Data CRUD, bulk ops, OData queries, file uploads via Python SDK |
+| **python-sdk** | Data CRUD, bulk ops, OData queries, file uploads, bulk import, data profiling, notebook analysis via Python SDK |
 | **solution** | Solution create/export/import/pack/unpack, post-import validation |
 | **security** | Add users, assign security roles |
 | **csharp-plugins** | Scaffold, build, register, deploy C# plugins |

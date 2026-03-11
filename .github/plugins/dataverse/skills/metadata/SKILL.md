@@ -370,3 +370,28 @@ All custom schema names must use your solution's publisher prefix (e.g., `new_`,
 pac solution list --environment <url>
 ```
 Or check `solutions/<SOLUTION_NAME>/Other/Solution.xml` after the first pull — look for `<CustomizationPrefix>`.
+
+---
+
+## FormXml Pitfalls
+
+When creating forms via the Web API (`POST /api/data/v9.2/systemforms`), FormXml schema validation is strict:
+
+- **All `id` attributes must be valid GUIDs** in `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` format. Do not use strings like `"general"`.
+- **`labelid` is also a GUID** — not a human-readable string.
+- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first, then reference it in the form.
+- **Cell, section, tab, and control IDs must all be unique** across the entire form.
+- **Control `classid` values** are fixed per control type (e.g., `{4273EDBD-AC1D-40d3-9FB2-095C621B552D}` for text, `{270BD3DB-D9AF-4782-9025-509E298DEC0A}` for lookup, `{3EF39988-22BB-4f0b-BBBE-64B5A3748AEE}` for picklist/choice).
+
+**Tip:** To avoid FormXml issues, create forms through the Dynamics maker portal and pull via `pac solution export` — then use the pulled XML as a template for programmatic creation.
+
+---
+
+## MCP Table Creation Notes
+
+When using MCP `create_table` or `update_table`:
+
+- **Timeouts don't mean failure.** Always `describe_table` before retrying. If the table exists, skip creation.
+- **Self-referential lookups** (e.g., Parent → same table) must be added via `update_table` after the table is created.
+- **Metadata cache delays.** After `create_table`, call `describe_table` before `update_table` to force cache refresh.
+- **Column name normalization.** Spaces in column names become underscores: `"Specialty Area"` → `cr9ac_specialty_area`. Always verify with `describe_table`.
