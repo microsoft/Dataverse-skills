@@ -2,7 +2,7 @@
 name: dataverse-python-sdk
 description: >
   Use the official Microsoft Dataverse Python SDK for data operations.
-  WHEN: "use the SDK", "query records", "create records", "bulk operations", "upsert",
+  USE WHEN: "use the SDK", "query records", "create records", "bulk operations", "upsert",
   "Python script for Dataverse", "read data", "write data", "upload file",
   "bulk import", "CSV import", "load data", "data profiling", "data quality",
   "analyze data", "Jupyter notebook", "pandas", "notebook".

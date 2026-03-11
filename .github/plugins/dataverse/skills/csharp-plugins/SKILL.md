@@ -2,7 +2,7 @@
 name: dataverse-csharp-plugins
 description: >
   Scaffold, build, register, and deploy C# Dataverse plugins.
-  WHEN: "C# plugin", "write a plugin", "IPlugin", "plugin registration", "pac plugin push",
+  USE WHEN: "C# plugin", "write a plugin", "IPlugin", "plugin registration", "pac plugin push",
   "PreOperation", "PostOperation", "server-side logic", "strong-name key",
   "register assembly", "plugin step".
   DO NOT USE WHEN: writing Python scripts (use dataverse-python-sdk),

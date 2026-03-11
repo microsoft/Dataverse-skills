@@ -2,7 +2,7 @@
 name: dataverse-overview
 description: >
   Start here for any Dataverse task. Routes requests to the right tools.
-  WHEN: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
+  USE WHEN: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
   "what can this plugin do", "overview", "getting started".
   DO NOT USE WHEN: you already know which specific skill to use.
 ---
@@ -97,6 +97,7 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | **csharp-plugins** | Scaffold, build, register, deploy C# plugins |
 | **environment** | Create, list, select, delete Power Platform environments |
 | **cicd** | GitHub Actions workflow for auto-deploy on merge |
+| **mcp-configure** | Configure Dataverse MCP server for GitHub Copilot or Claude Code as part of `init` |
 
 ---
 
@@ -108,6 +109,7 @@ The plugin ships two utility scripts in `scripts/`:
 | --- | --- |
 | `auth.py` | Azure Identity token/credential acquisition — used by all other scripts and the SDK |
 | `assign-user.py` | Add a user and assign a security role (PAC CLI fast path, SDK + Web API fallback) |
+| `enable-mcp-client.py` | Add the MCP Client ID to the list of allowed MCP clients in Dataverse |
 
 For data operations and post-import validation, use the Python SDK directly (inline in your own scripts). See the `python-sdk` skill for SDK patterns and the `solution` skill for validation queries.
 

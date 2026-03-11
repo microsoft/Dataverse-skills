@@ -2,7 +2,7 @@
 name: dataverse-cicd
 description: >
   Set up GitHub Actions to auto-deploy Dataverse solutions on merge to main.
-  WHEN: "set up CI/CD", "GitHub Actions", "deploy on merge", "service principal",
+  USE WHEN: "set up CI/CD", "GitHub Actions", "deploy on merge", "service principal",
   "app registration", "GitHub secrets", "automate deployment".
   DO NOT USE WHEN: manually importing solutions (use dataverse-solution),
   setting up a local dev environment (use dataverse-init).

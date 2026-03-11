@@ -2,7 +2,7 @@
 name: dataverse-solution
 description: >
   Create, export, unpack, pack, import, and validate Dataverse solutions.
-  WHEN: "export solution", "import solution", "pack solution", "unpack solution", "create solution",
+  USE WHEN: "export solution", "import solution", "pack solution", "unpack solution", "create solution",
   "pull from environment", "push to environment", "validate import", "check import errors",
   "check if table exists", "check if form is published", "verify deployment".
   DO NOT USE WHEN: creating tables/columns/forms/views (use dataverse-metadata),

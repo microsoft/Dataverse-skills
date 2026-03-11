@@ -2,7 +2,7 @@
 name: dataverse-environment
 description: >
   Create, list, select, and delete Power Platform environments using PAC CLI.
-  WHEN: "create environment", "new environment", "list environments", "delete environment",
+  USE WHEN: "create environment", "new environment", "list environments", "delete environment",
   "provision environment", "sandbox", "developer environment", "switch environment".
   DO NOT USE WHEN: initializing a workspace (use dataverse-init),
   deploying solutions (use dataverse-solution).

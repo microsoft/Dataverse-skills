@@ -2,7 +2,7 @@
 name: dataverse-init
 description: >
   Initialize a Dataverse workspace on a new machine or new repo.
-  WHEN: ".env is missing", "setting up on a new machine", "starting a new project",
+  USE WHEN: ".env is missing", "setting up on a new machine", "starting a new project",
   "initialize workspace", "new repo", "first time setup", "configure MCP server",
   "MCP not connected", "load demo data", "sample data".
   DO NOT USE WHEN: installing tools (use dataverse-setup),
@@ -26,7 +26,7 @@ The repo is already cloned. Scripts and CLAUDE.md are present. Only machine-loca
 ```
 ls .env 2>/dev/null && echo "found" || echo "missing"
 ls .vscode/settings.json 2>/dev/null && echo "found" || echo "missing"
-ls .claude/mcp_settings.json 2>/dev/null && echo "found" || echo "missing"
+ls .mcp.json 2>/dev/null && echo "found" || echo "missing"
 ```
 
 ### 2. Discover TENANT_ID automatically
@@ -36,7 +36,7 @@ If the user does not know their TENANT_ID, derive it from the Dataverse environm
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
   | grep -i "WWW-Authenticate" \
-  | grep -oP 'login\.microsoftonline\.com/\K[^/]+'
+  | sed -n 's|.*login\.microsoftonline\.com/\([^/]*\).*|\1|p'
 ```
 
 The output is the tenant GUID. Use it directly in `.env`.
@@ -100,72 +100,13 @@ if missing:
         f.write("\n" + "\n".join(missing) + "\n")
 ```
 
-### 5. Configure MCP server (if service principal credentials available)
+### 5. Configure MCP server
 
-The Dataverse MCP server requires service principal credentials (`CLIENT_ID`, `CLIENT_SECRET`, `TENANT_ID`). Interactive/device code auth is not supported for MCP.
-
-**For Claude Code CLI** — create `.claude/mcp_settings.json`:
-
-```python
-import os, json
-from pathlib import Path
-
-env = {}
-for line in Path(".env").read_text().splitlines():
-    if line and not line.startswith("#") and "=" in line:
-        k, _, v = line.partition("=")
-        env[k.strip()] = v.strip()
-
-os.makedirs(".claude", exist_ok=True)
-config = {
-    "mcpServers": {
-        "dataverse": {
-            "command": "npx",
-            "args": ["@microsoft/dataverse-mcp"],
-            "env": {
-                "DATAVERSE_URL": env["DATAVERSE_URL"],
-                "TENANT_ID": env["TENANT_ID"],
-                "CLIENT_ID": env["CLIENT_ID"],
-                "CLIENT_SECRET": env["CLIENT_SECRET"]
-            }
-        }
-    }
-}
-with open(".claude/mcp_settings.json", "w") as f:
-    json.dump(config, f, indent=2)
-```
-
-**For GitHub Copilot (VS Code)** — create `.vscode/settings.json`:
-
-```python
-import os, json
-os.makedirs(".vscode", exist_ok=True)
-
-settings = {
-    "github.copilot.chat.mcp.servers": {
-        "dataverse": {
-            "command": "npx",
-            "args": ["@microsoft/dataverse-mcp"],
-            "env": {
-                "DATAVERSE_URL": dataverse_url,
-                "TENANT_ID": tenant_id,
-                "CLIENT_ID": client_id,
-                "CLIENT_SECRET": client_secret
-            }
-        }
-    }
-}
-with open(".vscode/settings.json", "w") as f:
-    json.dump(settings, f, indent=2)
-```
-
-Both files contain credentials and must never be committed — confirm they are in `.gitignore`.
-
-If the user does not have service principal credentials yet, skip MCP setup. They can set it up later after running `dataverse-cicd` steps 1-4 to create a service principal.
+Use the `dataverse-mcp-configure` skill to set up the MCP server for GitHub Copilot or Claude Code.
 
 ### 6. Ensure PAC CLI is on PATH
 
-Find the path:
+Find the path (this may be slow, wait for it to finish):
 
 ```bash
 find /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI -name "pac.exe" 2>/dev/null
@@ -239,14 +180,14 @@ Before writing `.env`, auto-discover `TENANT_ID` from the Dataverse URL (the use
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
   | grep -i "WWW-Authenticate" \
-  | grep -oP 'login\.microsoftonline\.com/\K[^/]+'
+  | sed -n 's|.*login\.microsoftonline\.com/\([^/]*\).*|\1|p'
 ```
 
 Use the resulting GUID as `TENANT_ID` in `.env`. Only ask the user if this command fails.
 
 ### 3. Create .env, MCP config, and .gitignore
 
-Follow steps 3–5 from Scenario A above. Ask the user for DATAVERSE_URL and SOLUTION_NAME if not already known. Skip CLIENT_ID/CLIENT_SECRET (and MCP setup) if the user authenticates interactively. Device code tokens are cached automatically via AuthenticationRecord persistence.
+Follow steps 3–4 from Scenario A above. Ask the user for DATAVERSE_URL and SOLUTION_NAME if not already known. Set up MCP following step 5 from Scenario A. Skip CLIENT_ID/CLIENT_SECRET if the user authenticates interactively. Device code tokens are cached automatically via AuthenticationRecord persistence.
 
 ### 4. Create the directory structure
 
@@ -259,6 +200,7 @@ Copy plugin scripts into the repo so they're committed and available to teammate
 ```
 cp .dataverse/scripts/auth.py scripts/
 cp .dataverse/scripts/assign-user.py scripts/
+cp .dataverse/scripts/enable-mcp-client.py scripts/
 ```
 
 ### 5. Write CLAUDE.md
@@ -297,7 +239,7 @@ Continue to the next steps.
 
 **This is where changes go into Dynamics first — never into the repo directly.**
 
-Write and run `scripts/create_solution.py` to create the publisher and solution in the environment via Web API. Follow the pattern in `dataverse-solution/SKILL.md`. Run it:
+Write and run `scripts/create_solution.py` to create the publisher and solution in the environment via Web API. Follow the pattern in the `dataverse-solution` skill. Run it:
 
 ```
 python scripts/create_solution.py
@@ -311,7 +253,7 @@ python scripts/add_<whatever>_column.py
 
 ### 8. Build and deploy plugins
 
-If the project includes C# plugins, build and deploy them now. Follow `dataverse-csharp-plugins/SKILL.md` for the full sequence: generate strong-name key, build, register assembly and step via script. All of this goes into the environment. Do not commit the plugin DLL to git.
+If the project includes C# plugins, build and deploy them now. Follow the `dataverse-csharp-plugins` skill for the full sequence: generate strong-name key, build, register assembly and step via script. All of this goes into the environment. Do not commit the plugin DLL to git.
 
 ### 9. Pull the environment state to the repo
 
@@ -379,7 +321,7 @@ After configuring the MCP server, verify it works by asking the agent: *"List th
 
 If the agent calls `list_tables` directly, MCP is connected. If it falls back to PAC CLI or Web API, the MCP server is not connected — check:
 
-1. `.claude/mcp_settings.json` (Claude Code) or `.vscode/settings.json` (Copilot) exists and has correct values
+1. `.mcp.json` (Claude Code) or `.vscode/settings.json` (Copilot) exists and has correct values
 2. `CLIENT_ID`/`CLIENT_SECRET`/`TENANT_ID` in the config match a valid service principal
 3. The service principal has been granted access to the environment (see `dataverse-cicd` steps 1-4)
 

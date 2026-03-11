@@ -2,7 +2,7 @@
 name: dataverse-security
 description: >
   Add users to a Dataverse environment and assign or modify security roles.
-  WHEN: "add user", "assign role", "security role", "list roles", "user permissions",
+  USE WHEN: "add user", "assign role", "security role", "list roles", "user permissions",
   "system administrator", "system customizer".
   DO NOT USE WHEN: creating tables/columns (use dataverse-metadata),
   importing solutions (use dataverse-solution), setting up CI/CD service principals (use dataverse-cicd).
