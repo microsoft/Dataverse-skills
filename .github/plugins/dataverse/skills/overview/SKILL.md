@@ -1,10 +1,13 @@
 ---
 name: dataverse-overview
 description: >
-  Start here for any Dataverse task. Routes requests to the right tools.
-  USE WHEN: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
-  "what can this plugin do", "overview", "getting started".
-  DO NOT USE WHEN: you already know which specific skill to use.
+  ALWAYS LOAD THIS SKILL FIRST for any Dataverse task. Contains hard rules that override all other skills.
+  USE WHEN: ANY request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions,
+  records, queries, CRM, metadata, plugins, SDK, Web API, PAC CLI, or environment operations.
+  Also use for: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
+  "create table", "create column", "build solution", "query data", "bulk import", "sample data",
+  "support agent", "customer table", "ticket table".
+  This skill MUST be loaded before any other Dataverse skill. Read the Hard Rules section first.
 ---
 
 # Skill: Overview — What to Use and When
@@ -16,6 +19,19 @@ This skill provides cross-cutting context that no individual skill owns: tool ca
 ## Hard Rules — Read These First
 
 These rules are non-negotiable. Violating any of them means the task is going off-rails.
+
+### 0. Check Init State Before Anything Else
+
+Before writing ANY code or creating ANY files, check if the workspace is initialized:
+
+```bash
+ls .env scripts/auth.py 2>/dev/null
+```
+
+- If BOTH exist: workspace is initialized. Proceed to the relevant task.
+- If EITHER is missing: **STOP. Run the init flow first** (see the init skill). Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The init skill handles all of this.
+
+Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The init flow produces the correct file structure. Skipping init is the #1 cause of broken setups.
 
 ### 1. Python Only — No Exceptions
 
@@ -36,11 +52,9 @@ All scripts, data operations, and automation MUST use **Python**. This plugin's 
 
 If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read the python-sdk skill.
 
-### 2. Follow the Init Flow
+### 2. Use the SDK, Not Raw HTTP
 
-When starting work in a new or empty directory, **always run the init flow first** (see the init skill). Do not skip steps or improvise your own setup sequence. The init skill exists to prevent exactly the kind of drift that happens when you "figure it out as you go."
-
-If the workspace already has a `.env` file with `DATAVERSE_URL` and `scripts/auth.py`, init is already done — proceed to the relevant task skill.
+For data operations (CRUD, bulk, queries) and schema operations (table/column/relationship creation), use the Python Dataverse SDK — not raw `requests`/`urllib` calls. The SDK handles auth, pagination, retries, and batching. See the python-sdk skill for correct patterns. Only fall back to raw Web API for things the SDK doesn't support (forms, views, global option sets).
 
 ### 3. Use Documented Auth Patterns
 
