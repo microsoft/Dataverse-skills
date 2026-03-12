@@ -29,6 +29,20 @@ The only time you write files directly is when editing something that already ex
 
 ## Creating a Table
 
+**SDK approach (preferred for simple tables):**
+
+```python
+info = client.tables.create(
+    "new_ProjectBudget",
+    {"new_Amount": "decimal", "new_Description": "string"},
+    solution="MySolution",
+    primary_column="new_Name",
+)
+print(f"Created: {info['table_schema_name']}")
+```
+
+**Web API approach (needed for full control over metadata — OwnershipType, HasActivities, etc.):**
+
 ```python
 # create_table.py — run via: python scripts/create_table.py
 import os, json, urllib.request
@@ -144,7 +158,7 @@ attribute = {
 }
 ```
 
-**Lookup column + relationship:**
+**Lookup column + relationship (Web API):**
 
 Lookups require creating a relationship, not just an attribute. Use the `OneToManyRelationships` endpoint:
 ```python
@@ -155,7 +169,7 @@ relationship = {
     "ReferencingEntity": "new_projectbudget",
     "Lookup": {
         "@odata.type": "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
-        "SchemaName": "new_accountid",
+        "SchemaName": "new_AccountId",
         "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
                         "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
                                               "Label": "Account", "LanguageCode": 1033}]},
@@ -164,6 +178,28 @@ relationship = {
 }
 # POST to /api/data/v9.2/RelationshipDefinitions
 ```
+
+**Lookup column + relationship (SDK alternative — simpler):**
+```python
+result = client.tables.create_lookup_field(
+    referencing_table="new_projectbudget",
+    lookup_field_name="new_AccountId",
+    referenced_table="account",
+    display_name="Account",
+    solution="MySolution",
+)
+```
+
+**After creating a lookup — the @odata.bind navigation property:**
+
+When you create records that set this lookup, you need the **navigation property name** for `@odata.bind`. The navigation property is the **SchemaName** (PascalCase) of the lookup field:
+
+| Lookup SchemaName | `@odata.bind` key | Entity set |
+|---|---|---|
+| `new_AccountId` | `new_AccountId@odata.bind` | `/accounts(<guid>)` |
+| `new_ParentTicketId` | `new_ParentTicketId@odata.bind` | `/new_tickets(<guid>)` |
+
+**Common mistake:** Using the logical name (lowercase) like `new_accountid@odata.bind` — this returns a 400 error. Always use PascalCase SchemaName.
 
 ---
 
@@ -336,10 +372,13 @@ If the form is already in the repo (pulled via `pac solution unpack`), targeted 
 | Subgrid | `{E7A81278-8635-4d9e-8D4D-59480B391C5B}` |
 | Multiline Text (memo) | `{E0DECE4B-6FC8-4a8f-A065-082708572369}` |
 
-All `id` attributes in form XML must be unique GUIDs. Generate one with:
+All `id` attributes in form XML must be unique GUIDs. Generate them inside your Python script:
+```python
+import uuid
+guid = str(uuid.uuid4()).upper()
 ```
-python -c "import uuid; print(str(uuid.uuid4()).upper())"
-```
+
+**Do not use `python -c` for GUID generation on Windows** — multiline `python -c` commands break in Git Bash due to quoting differences. Always write a `.py` script instead.
 
 ---
 

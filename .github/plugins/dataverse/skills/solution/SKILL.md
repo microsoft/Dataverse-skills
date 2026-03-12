@@ -215,7 +215,7 @@ pages = client.records.get(
 | --- | --- | --- |
 | Table not found after import | Component not in solution | Add via `pac solution add-solution-component` |
 | Form check fails immediately | Publishing is async | Wait 30 seconds and retry |
-| Role not assigned | User not provisioned | Run `/dataverse:security` flow first |
+| Role not assigned | User not provisioned | Assign the role via `pac admin assign-user` or the Power Platform Admin Center |
 | Import job at 0% | Import still running | Poll again in 60 seconds |
 
 ## Notes

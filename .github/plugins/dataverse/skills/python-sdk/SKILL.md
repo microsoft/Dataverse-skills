@@ -83,54 +83,125 @@ client = DataverseClient(
 
 ### Create a record
 ```python
-result = client.entity("new_projectbudget").create({
+guid = client.records.create("new_projectbudget", {
     "new_name": "Q1 Marketing Budget",
     "new_amount": 75000.00,
     "new_status": 100000000,
-    "new_accountid@odata.bind": "/accounts(<account-guid>)"
+    # Lookup binding — see "@odata.bind rules" section below
+    "new_AccountId@odata.bind": "/accounts(<account-guid>)",
 })
-# Returns the new record GUID
+print(f"Created: {guid}")
 ```
 
-### Query records
+### Query records (multi-record — returns page iterator)
 ```python
-records = client.entity("new_projectbudget").read(
+for page in client.records.get(
+    "new_projectbudget",
     select=["new_name", "new_amount", "new_status"],
     filter="new_status eq 100000000",
-    orderby="new_name asc",
-    top=50
-)
-for r in records:
-    print(r["new_name"], r["new_amount"])
+    orderby=["new_name asc"],
+    top=50,
+):
+    for r in page:
+        print(r["new_name"], r["new_amount"])
+```
+
+### Fetch a single record by ID
+```python
+record = client.records.get("new_projectbudget", "<record-guid>",
+    select=["new_name", "new_amount"])
+print(record["new_name"])
 ```
 
 ### Update a record
 ```python
-client.entity("new_projectbudget").update(
-    entity_id="<record-guid>",
-    data={"new_status": 100000001}
-)
+client.records.update("new_projectbudget", "<record-guid>",
+    {"new_status": 100000001})
 ```
 
 ### Delete a record
 ```python
-client.entity("new_projectbudget").delete(entity_id="<record-guid>")
+client.records.delete("new_projectbudget", "<record-guid>")
 ```
 
-### Bulk create
+### Bulk create (SDK uses CreateMultiple internally)
 ```python
 records = [{"new_name": f"Budget {i}"} for i in range(100)]
-client.entity("new_projectbudget").create(records)
+guids = client.records.create("new_projectbudget", records)
+print(f"Created {len(guids)} records")
+```
+
+### Bulk update (broadcast same change to multiple records)
+```python
+client.records.update("new_projectbudget",
+    [id1, id2, id3],
+    {"new_status": 100000001})
+```
+
+### Upsert (with alternate keys)
+```python
+from PowerPlatform.Dataverse.models.upsert import UpsertItem
+
+client.records.upsert("account", [
+    UpsertItem(
+        alternate_key={"accountnumber": "ACC-001"},
+        record={"name": "Contoso Ltd", "description": "Primary account"},
+    ),
+])
 ```
 
 ### Create a table
 ```python
-client.create_table(
-    schema_name="new_ProjectBudget",
-    display_name="Project Budget",
-    display_collection_name="Project Budgets",
-    primary_name_column_schema_name="new_name",
-    primary_name_column_display_name="Name",
+from enum import IntEnum
+
+class BudgetStatus(IntEnum):
+    DRAFT = 100000000
+    APPROVED = 100000001
+
+info = client.tables.create(
+    "new_ProjectBudget",
+    {
+        "new_Amount": "decimal",
+        "new_Status": BudgetStatus,
+    },
+    solution="MySolution",
+    primary_column="new_Name",
+)
+print(f"Created: {info['table_schema_name']}, entity set: {info['entity_set_name']}")
+```
+
+### Add columns to an existing table
+```python
+created = client.tables.add_columns("new_projectbudget", {
+    "new_Notes": "string",
+    "new_Active": "bool",
+})
+```
+
+### Create a lookup (1:N relationship)
+```python
+result = client.tables.create_lookup_field(
+    referencing_table="new_projectbudget",
+    lookup_field_name="new_AccountId",
+    referenced_table="account",
+    display_name="Account",
+    solution="MySolution",
+)
+print(f"Created lookup: {result['lookup_schema_name']}")
+# The nav property for @odata.bind is the lookup SchemaName in PascalCase
+```
+
+### Create a many-to-many relationship
+```python
+from PowerPlatform.Dataverse.models.relationship import ManyToManyRelationshipMetadata
+
+result = client.tables.create_many_to_many_relationship(
+    ManyToManyRelationshipMetadata(
+        schema_name="new_employee_project",
+        entity1_logical_name="new_employee",
+        entity2_logical_name="new_project",
+    ),
+    solution="MySolution",
 )
 ```
 
@@ -151,106 +222,244 @@ Post-import validation (table existence, form checks, role checks, import errors
 
 ---
 
-## Bulk Import via Web API $batch
+## @odata.bind Rules (Lookup Binding)
 
-For loading 50+ records (e.g., from a CSV file), use the Web API `$batch` endpoint instead of MCP `create_record` (which is one-at-a-time and impractical at scale).
+When creating or updating a record that sets a lookup field, you must use `@odata.bind` with the correct **navigation property name**. Getting this wrong is the #1 cause of 400 errors.
+
+### The rule
+
+```
+<NavigationPropertyName>@odata.bind = "/<EntitySetName>(<target-guid>)"
+```
+
+- **Navigation property name**: Use the **SchemaName** (PascalCase) of the lookup field, NOT the logical name (lowercase).
+- **Entity set name**: The plural collection name of the referenced table (e.g., `accounts`, `contacts`).
+
+### Examples
+
+| Lookup field | Correct `@odata.bind` key | Wrong |
+|---|---|---|
+| `new_AccountId` (custom) | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
+| `customerid` (system polymorphic) | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
+| `parentcustomerid` (system) | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
+
+### How to find the navigation property name
+
+1. **After creating a lookup via SDK**: The `result['lookup_schema_name']` is the navigation property name.
+2. **For system tables**: Query the relationship metadata:
+   ```
+   GET /api/data/v9.2/EntityDefinitions(LogicalName='<entity>')/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity
+   ```
+3. **Rule of thumb for custom lookups**: The navigation property name matches the lookup field's SchemaName (PascalCase with prefix, e.g., `new_AccountId`).
+
+---
+
+## $select with Lookup Columns
+
+When using `$select` to include a lookup column in query results, use the `_<logicalname>_value` format:
+
+```python
+# Correct — lookup value in $select uses underscore-wrapped format
+for page in client.records.get("opportunity",
+    select=["name", "estimatedvalue", "_parentaccountid_value"],
+    top=10,
+):
+    for r in page:
+        account_id = r.get("_parentaccountid_value")
+        account_name = r.get("_parentaccountid_value@OData.Community.Display.V1.FormattedValue")
+```
+
+To get the full related record instead, use `$expand`:
+
+```python
+for page in client.records.get("opportunity",
+    select=["name", "estimatedvalue"],
+    expand=["parentaccountid"],
+    top=10,
+):
+    for r in page:
+        account = r.get("parentaccountid")
+        if account:
+            print(account["name"])
+```
+
+---
+
+## Error Handling
+
+```python
+from PowerPlatform.Dataverse.core.errors import HttpError
+
+try:
+    guid = client.records.create("account", {"name": "Contoso"})
+except HttpError as e:
+    print(f"Status {e.status_code}: {e.message}")
+    if e.details:
+        print(f"Details: {e.details}")
+    if e.status_code == 400:
+        # Bad request — check field names, @odata.bind format, required fields
+        pass
+    elif e.status_code == 403:
+        # Permission denied — check security roles
+        pass
+    elif e.status_code == 404:
+        # Table or record not found
+        pass
+    elif e.status_code == 429:
+        # Rate limited — the SDK handles retry automatically,
+        # but if you hit this, reduce batch sizes or add delays
+        pass
+```
+
+---
+
+## Bulk Import from CSV
+
+For loading records from a CSV file, use the SDK directly — it handles batching via `CreateMultiple` internally.
 
 ### When to use which tool
 
 | Volume | Tool | Why |
 |--------|------|-----|
-| 1–50 records | MCP `create_record` | Simple, conversational |
-| 50–1000 records | Web API `$batch` | Fast, handles rate limits with retry |
-| 1000+ records | Python SDK `CreateMultiple` | Built-in batching |
+| 1–10 records | MCP `create_record` | Simple, conversational |
+| 10+ records | Python SDK `client.records.create(table, list)` | Built-in batching, error handling, retry |
 
-### $batch request pattern
+### CSV import pattern
 
 ```python
-import csv, json, uuid, time, requests
-from auth import get_token, load_env
+import csv, os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+from PowerPlatform.Dataverse.core.errors import HttpError
 
 load_env()
-DATAVERSE_URL = os.environ["DATAVERSE_URL"].rstrip("/")
-API = f"{DATAVERSE_URL}/api/data/v9.2"
+client = DataverseClient(
+    resource_url=os.environ["DATAVERSE_URL"],
+    credential=get_credential(),
+)
 
-def batch_create(token, entity_set, records, batch_size=20):
-    """Create records via $batch in chunks with rate-limit retry."""
-    created, failed = 0, 0
-    for i in range(0, len(records), batch_size):
-        chunk = records[i:i + batch_size]
-        for attempt in range(3):
-            batch_id = f"batch_{uuid.uuid4()}"
-            changeset_id = f"changeset_{uuid.uuid4()}"
-            parts = [f"--{batch_id}",
-                     f"Content-Type: multipart/mixed; boundary={changeset_id}", ""]
-            for idx, rec in enumerate(chunk):
-                parts += [f"--{changeset_id}", "Content-Type: application/http",
-                          "Content-Transfer-Encoding: binary", f"Content-ID: {idx+1}", "",
-                          f"POST {API}/{entity_set} HTTP/1.1",
-                          "Content-Type: application/json", "", json.dumps(rec)]
-            parts += [f"--{changeset_id}--", f"--{batch_id}--"]
-            resp = requests.post(f"{API}/$batch", data="\r\n".join(parts),
-                headers={"Authorization": f"Bearer {token}",
-                         "Content-Type": f"multipart/mixed; boundary={batch_id}",
-                         "OData-MaxVersion": "4.0", "OData-Version": "4.0"})
-            if resp.status_code == 429:
-                time.sleep(5 * (attempt + 1))  # backoff: 5s, 10s, 15s
-                continue
-            if resp.status_code == 200 and "HTTP/1.1 4" not in resp.text:
-                created += len(chunk)
-            else:
-                failed += len(chunk)
-            break
-        time.sleep(1)  # pause between batches to avoid rate limits
-    return created, failed
+# Read CSV
+with open("data/tickets.csv", newline="", encoding="utf-8") as f:
+    rows = list(csv.DictReader(f))
+
+# Map CSV columns to Dataverse fields
+records = []
+for row in rows:
+    records.append({
+        "new_name": row["Title"],
+        "new_description": row["Description"],
+        "new_priority": int(row["Priority"]),
+        # Lookup binding — use PascalCase nav property name
+        "new_CustomerId@odata.bind": f"/accounts({row['AccountGuid']})",
+    })
+
+# Bulk create — SDK uses CreateMultiple internally
+guids = client.records.create("new_ticket", records)
+print(f"Created {len(guids)} tickets")
 ```
-
-### Rate limits and batch sizing
-
-- **Batch size:** 20 records per changeset is safe. 50 can trigger 429s.
-- **Inter-batch delay:** 1 second between batches prevents rate limiting.
-- **429 retry:** Wait `5 * attempt` seconds, retry up to 3 times.
-- **Changeset atomicity:** If any record in a changeset fails, the entire changeset is rolled back. Keep batch sizes small so one bad record doesn't block 49 good ones.
 
 ### Required field discovery
 
-Before bulk-creating records in a **system table** (account, contact, opportunity, etc.), create a single test record first:
+Before bulk-creating records in a **system table** (account, contact, opportunity), create a single test record first:
 
 1. Build a minimal payload with only the fields you intend to populate
-2. POST it as a single record (not in a batch)
-3. If it returns 400, read the error — it will name the missing required field
-4. Some required fields are **plugin-enforced** (not visible in `describe_table` NOT NULL) and only triggered by certain field combinations
-5. Once the test record succeeds, delete it, then proceed with the batch
+2. Create it as a single record: `client.records.create("account", {...})`
+3. If it raises `HttpError` with status 400, the error message names the missing required field
+4. Some required fields are **plugin-enforced** (not visible in `describe_table`) and only triggered by certain field combinations
+5. Once the test record succeeds, delete it, then proceed with the bulk create
 
-This avoids discovering required fields mid-batch where the entire changeset gets rolled back.
+---
+
+## Aggregation Queries (Web API $apply)
+
+The SDK does not support OData `$apply` for aggregation. Use the Web API directly for GROUP BY, COUNT, SUM, AVG, etc.:
+
+```python
+import os, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env
+
+load_env()
+env = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
+
+# Example: count opportunities by status
+url = f"{env}/api/data/v9.2/opportunities?$apply=groupby((statuscode),aggregate($count as count))"
+req = urllib.request.Request(url, headers={
+    "Authorization": f"Bearer {token}",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+    "Accept": "application/json",
+})
+with urllib.request.urlopen(req) as resp:
+    data = json.loads(resp.read())
+    for row in data["value"]:
+        print(f"Status {row['statuscode']}: {row['count']}")
+```
+
+For complex analytics (duplicates, cross-table joins, filtered aggregates), pull data into pandas:
+
+```python
+import pandas as pd
+
+# Pull all records into a DataFrame
+all_records = []
+for page in client.records.get("opportunity",
+    select=["name", "estimatedvalue", "statuscode", "_parentaccountid_value"],
+):
+    all_records.extend(page)
+
+df = pd.DataFrame(all_records)
+# Now use pandas for analysis: groupby, pivot, merge, duplicates, etc.
+print(df.groupby("statuscode")["estimatedvalue"].sum())
+```
 
 ---
 
 ## Jupyter Notebook Setup
 
-For interactive analysis with visualizations, use a Jupyter notebook with the `query_dataverse()` helper above.
+For interactive analysis with visualizations.
 
 ### Prerequisites
 
 ```bash
-pip install pandas matplotlib seaborn requests azure-identity
+pip install PowerPlatform-Dataverse-Client pandas matplotlib seaborn azure-identity
 ```
 
 ### Notebook structure
 
 ```python
 # Cell 1: Setup
-import sys, os
-sys.path.insert(0, os.path.join(os.getcwd(), ".github", "plugins", "dataverse", "scripts"))
-from auth import get_token, load_env
-load_env()
-# ... paste query_dataverse() helper ...
+import os
+from azure.identity import InteractiveBrowserCredential
+from PowerPlatform.Dataverse.client import DataverseClient
 
-# Cell 2: Load data
-accounts = query_dataverse("accounts", select="accountid,name,industrycode,revenue,numberofemployees")
-contacts = query_dataverse("contacts", select="contactid,fullname,emailaddress1,_parentcustomerid_value")
+credential = InteractiveBrowserCredential()
+client = DataverseClient(
+    resource_url="https://<org>.crm.dynamics.com",  # replace with your URL
+    credential=credential,
+)
+
+# Cell 2: Load data into pandas
+import pandas as pd
+
+accounts = []
+for page in client.records.get("account",
+    select=["name", "industrycode", "revenue", "numberofemployees"],
+):
+    accounts.extend(page)
+df_accounts = pd.DataFrame(accounts)
 
 # Cell 3+: Analysis with pandas, matplotlib, seaborn
 ```
 
-The `auth.py` module handles token acquisition and caching automatically. In a notebook, tokens are refreshed silently within the same kernel session.
+---
+
+## Windows Scripting Notes
+
+When writing Python scripts on Windows (especially in Git Bash / Claude Code):
+
+- **Use only ASCII characters** in script files — no curly quotes, em dashes, or non-ASCII. These cause `SyntaxError` on Windows.
+- **Avoid `python -c`** for anything beyond trivial one-liners. Write a `.py` file instead — multiline `python -c` commands break on Windows due to quoting differences.
+- **Generate GUIDs in scripts**, not inline: use `str(uuid.uuid4())` inside the script rather than backtick-substitution in shell commands.
