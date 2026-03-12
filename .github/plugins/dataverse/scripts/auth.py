@@ -28,7 +28,7 @@ Usage:
     load_env()
     client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
 
-Reads from .env in the current working directory or from environment variables:
+Reads from .env in the repo root (parent of scripts/) or current working directory:
     DATAVERSE_URL      — required
     TENANT_ID          — required
     CLIENT_ID          — optional, enables service principal auth
@@ -44,9 +44,18 @@ _AUTH_RECORD_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".Iden
 
 
 def load_env():
-    """Load key=value pairs from .env into os.environ (does not overwrite existing vars)."""
-    env_path = Path(".env")
-    if env_path.exists():
+    """Load key=value pairs from .env into os.environ (does not overwrite existing vars).
+
+    Searches for .env in two locations (first match wins):
+      1. The repo root (parent of the directory containing this script)
+      2. The current working directory
+    This ensures ``cd scripts && python auth.py`` works the same as
+    ``python scripts/auth.py`` from the repo root.
+    """
+    script_dir = Path(__file__).resolve().parent
+    candidates = [script_dir.parent / ".env", Path(".env")]
+    env_path = next((p for p in candidates if p.exists()), None)
+    if env_path is not None:
         for line in env_path.read_text().splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:

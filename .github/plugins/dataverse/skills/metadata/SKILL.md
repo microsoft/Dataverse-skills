@@ -45,84 +45,71 @@ info = client.tables.create(
 print(f"Created: {info['table_schema_name']}")
 ```
 
-**Web API approach (needed for full control over metadata — OwnershipType, HasActivities, etc.):**
+**Web API approach (needed for full control — OwnershipType, HasActivities, etc.):**
 
 ```python
-# create_table.py — run via: python scripts/create_table.py
-import os, json, urllib.request
-from auth import get_token, load_env
-
-load_env()
-env = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
+# Helper for Label boilerplate
+def label(text):
+    return {"@odata.type": "Microsoft.Dynamics.CRM.Label",
+            "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+                                  "Label": text, "LanguageCode": 1033}]}
 
 entity = {
     "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
     "SchemaName": "new_ProjectBudget",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                         "Label": "Project Budget", "LanguageCode": 1033}]},
-    "DisplayCollectionName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                               "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                                    "Label": "Project Budgets", "LanguageCode": 1033}]},
-    "Description": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                         "Label": "", "LanguageCode": 1033}]},
+    "DisplayName": label("Project Budget"),
+    "DisplayCollectionName": label("Project Budgets"),
+    "Description": label(""),
     "OwnershipType": "UserOwned",
-    "HasActivities": False,
-    "HasNotes": False,
-    "IsActivity": False,
+    "HasActivities": False, "HasNotes": False, "IsActivity": False,
     "PrimaryNameAttribute": "new_name",
-    "Attributes": [
-        {
-            "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
-            "SchemaName": "new_name",
-            "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                            "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                                  "Label": "Name", "LanguageCode": 1033}]},
-            "RequiredLevel": {"Value": "ApplicationRequired"},
-            "MaxLength": 100,
-            "IsPrimaryName": True,
-        }
-    ]
+    "Attributes": [{
+        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+        "SchemaName": "new_name",
+        "DisplayName": label("Name"),
+        "RequiredLevel": {"Value": "ApplicationRequired"},
+        "MaxLength": 100, "IsPrimaryName": True,
+    }]
 }
-
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/EntityDefinitions",
-    data=json.dumps(entity).encode(),
-    headers={"Authorization": f"Bearer {token}",
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0",
-             "OData-Version": "4.0"},
-    method="POST"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Created. EntityId: {resp.headers.get('OData-EntityId')}")
+# POST to /api/data/v9.2/EntityDefinitions with MSCRM.SolutionUniqueName header
 ```
 
 ---
 
-## Adding a Column
+## Adding Columns
 
-**Text column:**
+**SDK approach (preferred):**
+
 ```python
-attribute = {
-    "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
-    "SchemaName": "new_description",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                          "Label": "Description", "LanguageCode": 1033}]},
-    "RequiredLevel": {"Value": "None"},
-    "MaxLength": 500,
-    "FormatName": {"Value": "Text"}   # Always use "Text" — see FormatName reference below
-}
-# POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
+created = client.tables.add_columns(
+    "new_ProjectBudget",
+    {"new_Description": "string", "new_Amount": "decimal", "new_Active": "bool"},
+)
+print(created)  # ['new_Description', 'new_Amount', 'new_Active']
 ```
 
-**Valid FormatName values for StringAttributeMetadata:** `Text`, `TextArea`, `Url`, `TickerSymbol`, `PhoneticGuide`, `VersionNumber`, `Phone`. Note: `Email` is **not** a valid FormatName despite being a common assumption — use `Text` for email columns.
+Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
 
-**Currency column:**
+**Choice (picklist) column via SDK:**
+
 ```python
+from enum import IntEnum
+
+class BudgetStatus(IntEnum):
+    DRAFT = 100000000
+    APPROVED = 100000001
+    REJECTED = 100000002
+
+created = client.tables.add_columns(
+    "new_ProjectBudget",
+    {"new_Status": BudgetStatus},
+)
+```
+
+**Web API approach (needed for column types the SDK doesn't support — e.g., currency with precision, memo with custom max length):**
+
+```python
+# Currency column
 attribute = {
     "@odata.type": "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
     "SchemaName": "new_amount",
@@ -135,39 +122,71 @@ attribute = {
     "Precision": 2,
     "PrecisionSource": 2
 }
+# POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
 ```
 
-**Choice (picklist) column:**
+---
+
+## Lookup Columns and Relationships
+
+**SDK approach — simple lookup (preferred):**
+
 ```python
-attribute = {
-    "@odata.type": "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
-    "SchemaName": "new_status",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                          "Label": "Status", "LanguageCode": 1033}]},
-    "RequiredLevel": {"Value": "None"},
-    "OptionSet": {
-        "@odata.type": "Microsoft.Dynamics.CRM.OptionSetMetadata",
-        "IsGlobal": False,
-        "OptionSetType": "Picklist",
-        "Options": [
-            {"Value": 100000000, "Label": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-             "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                   "Label": "Draft", "LanguageCode": 1033}]}},
-            {"Value": 100000001, "Label": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-             "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                   "Label": "Approved", "LanguageCode": 1033}]}},
-            {"Value": 100000002, "Label": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-             "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                   "Label": "Rejected", "LanguageCode": 1033}]}}
-        ]
-    }
-}
+result = client.tables.create_lookup_field(
+    referencing_table="new_projectbudget",
+    lookup_field_name="new_AccountId",
+    referenced_table="account",
+    display_name="Account",
+    solution="MySolution",
+)
+print(f"Created lookup: {result.lookup_schema_name}")
 ```
 
-**Lookup column + relationship (Web API):**
+**SDK approach — full control over 1:N relationship:**
 
-Lookups require creating a relationship, not just an attribute. Use the `OneToManyRelationships` endpoint:
+```python
+from PowerPlatform.Dataverse.models.relationship import (
+    LookupAttributeMetadata,
+    OneToManyRelationshipMetadata,
+    CascadeConfiguration,
+)
+from PowerPlatform.Dataverse.models.labels import Label, LocalizedLabel
+from PowerPlatform.Dataverse.common.constants import CASCADE_BEHAVIOR_REMOVE_LINK
+
+lookup = LookupAttributeMetadata(
+    schema_name="new_AccountId",
+    display_name=Label(localized_labels=[LocalizedLabel(label="Account", language_code=1033)]),
+)
+
+relationship = OneToManyRelationshipMetadata(
+    schema_name="account_new_projectbudget",
+    referenced_entity="account",
+    referencing_entity="new_projectbudget",
+    referenced_attribute="accountid",
+    cascade_configuration=CascadeConfiguration(delete=CASCADE_BEHAVIOR_REMOVE_LINK),
+)
+
+result = client.tables.create_one_to_many_relationship(lookup, relationship, solution="MySolution")
+print(f"Created: {result.relationship_schema_name}")
+```
+
+**SDK approach — many-to-many relationship:**
+
+```python
+from PowerPlatform.Dataverse.models.relationship import ManyToManyRelationshipMetadata
+
+relationship = ManyToManyRelationshipMetadata(
+    schema_name="new_ticket_knowledgebase",
+    entity1_logical_name="new_ticket",
+    entity2_logical_name="new_knowledgebase",
+)
+
+result = client.tables.create_many_to_many_relationship(relationship, solution="MySolution")
+print(f"Created: {result.relationship_schema_name}")
+```
+
+**Web API approach (fallback when SDK patterns don't suffice):**
+
 ```python
 relationship = {
     "@odata.type": "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata",
@@ -186,27 +205,16 @@ relationship = {
 # POST to /api/data/v9.2/RelationshipDefinitions
 ```
 
-**Lookup column + relationship (SDK alternative — simpler):**
-```python
-result = client.tables.create_lookup_field(
-    referencing_table="new_projectbudget",
-    lookup_field_name="new_AccountId",
-    referenced_table="account",
-    display_name="Account",
-    solution="MySolution",
-)
-```
-
 **After creating a lookup — the @odata.bind navigation property:**
 
-When you create records that set this lookup, you need the **navigation property name** for `@odata.bind`. The navigation property is the **SchemaName** (PascalCase) of the lookup field:
+When you create records that set this lookup, you need the **navigation property name** for `@odata.bind`. The navigation property name is case-sensitive and must match the entity's `$metadata` (usually the SchemaName of the lookup field, e.g., `new_AccountId`):
 
-| Lookup SchemaName | `@odata.bind` key | Entity set |
+| Navigation Property Name | `@odata.bind` key | Entity set |
 |---|---|---|
 | `new_AccountId` | `new_AccountId@odata.bind` | `/accounts(<guid>)` |
 | `new_ParentTicketId` | `new_ParentTicketId@odata.bind` | `/new_tickets(<guid>)` |
 
-**Common mistake:** Using the logical name (lowercase) like `new_accountid@odata.bind` — this returns a 400 error. Always use PascalCase SchemaName.
+**Common mistake:** Using the logical name (lowercase) like `new_accountid@odata.bind` returns a 400 error. Navigation property names are case-sensitive and must match the entity's `$metadata`.
 
 ---
 
@@ -395,20 +403,6 @@ Create business rules in the Power Apps maker portal. They are too complex to wr
 
 ---
 
-## After Any API Change: Pull to Repo
-
-Always end with a pull to sync the environment's state back to the repo:
-```
-pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
-pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
-rm ./solutions/<SOLUTION_NAME>.zip
-git add ./solutions/<SOLUTION_NAME>
-git commit -m "feat: add <description of change>"
-git push
-```
-
----
-
 ## Publisher Prefix
 
 All custom schema names must use your solution's publisher prefix (e.g., `new_`, `contoso_`). Find yours:
@@ -421,15 +415,13 @@ Or check `solutions/<SOLUTION_NAME>/Other/Solution.xml` after the first pull —
 
 ## FormXml Pitfalls
 
-When creating forms via the Web API (`POST /api/data/v9.2/systemforms`), FormXml schema validation is strict:
-
 - **All `id` attributes must be valid GUIDs** in `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` format. Do not use strings like `"general"`.
 - **`labelid` is also a GUID** — not a human-readable string.
-- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first, then reference it in the form.
+- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first.
 - **Cell, section, tab, and control IDs must all be unique** across the entire form.
-- **Control `classid` values** are fixed per control type (e.g., `{4273EDBD-AC1D-40d3-9FB2-095C621B552D}` for text, `{270BD3DB-D9AF-4782-9025-509E298DEC0A}` for lookup, `{3EF39988-22BB-4f0b-BBBE-64B5A3748AEE}` for picklist/choice).
+- **Control `classid` values** — see the classid table above.
 
-**Tip:** To avoid FormXml issues, create forms through the Dynamics maker portal and pull via `pac solution export` — then use the pulled XML as a template for programmatic creation.
+**Tip:** Create forms in the maker portal and pull via `pac solution export` — use the pulled XML as a template for programmatic creation.
 
 ---
 

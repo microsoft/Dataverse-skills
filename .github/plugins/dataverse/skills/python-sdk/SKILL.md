@@ -6,7 +6,7 @@ description: >
   "Python script for Dataverse", "read data", "write data", "upload file",
   "bulk import", "CSV import", "load data", "data profiling", "data quality",
   "analyze data", "Jupyter notebook", "pandas", "notebook".
-  DO NOT USE WHEN: creating forms/views/relationships (use dataverse-metadata with Web API),
+  DO NOT USE WHEN: creating forms/views (use dataverse-metadata with Web API),
   exporting solutions (use dataverse-solution with PAC CLI).
 ---
 
@@ -44,40 +44,55 @@ pip install PowerPlatform-Dataverse-Client
 - **Forms** (FormXml) — use the Web API directly (see `dataverse-metadata`)
 - **Views** (SavedQueries) — use the Web API directly
 - **Option sets** — use the Web API directly
-- **Record association** ($ref linking for N:N data, e.g., role assignments) — use the Web API directly
+- **N:N record association** ($ref linking for N:N data, e.g., role assignments) — use the Web API directly
 - DeleteMultiple, general OData batching
 
 For anything not in the "supports" list above, write a Web API script using `scripts/auth.py` for token acquisition.
+
+### SDK-First Rule
+
+**If an operation is in the "supports" list, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.** This applies to:
+- **All record CRUD** (create, read, update, delete) — use `client.records.create()`, `.get()`, `.update()`, `.delete()`
+- **All queries** with `$select`, `$filter`, `$orderby`, `$expand` on 1:N lookups — use `client.records.get()` with `select=`, `filter=`, `expand=`, `orderby=`
+- **Bulk operations** — pass a list to `client.records.create(table, [list])` instead of looping with individual HTTP POSTs
+- **Publisher and solution records** — these are standard Dataverse tables; use `client.records.create("publisher", {...})` and `client.records.create("solution", {...})`
+
+Raw HTTP is only acceptable for: forms, views, option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
+
+### Field Name Casing Rule
+
+Dataverse uses two different naming conventions for properties. Getting this wrong causes 400 errors.
+
+| Property type | Name convention | Example | When used |
+|---|---|---|---|
+| **Structural** (columns) | LogicalName (always lowercase) | `new_name`, `new_priority` | `$select`, `$filter`, `$orderby`, record payload keys |
+| **Navigation** (relationships / lookups) | Navigation Property Name (case-sensitive, must match `$metadata`) | `new_AccountId`, `new_DepartmentId` | `$expand`, `@odata.bind` annotation keys |
+
+- **`$select`, `$filter`, `$orderby`**: always lowercase logical names (`new_name`, `new_priority`)
+- **`$expand` navigation properties**: Navigation Property Name, case-sensitive (`new_AccountId`, `new_DepartmentId`)
+- **`@odata.bind` keys**: Navigation Property Name, case-sensitive (`new_AccountId@odata.bind`)
+- **Record payloads** (create/update data): lowercase logical names for regular fields; `@odata.bind` keys preserve the navigation property casing
+
+The SDK handles this correctly: it lowercases structural property keys but preserves `@odata.bind` key casing.
 
 ---
 
 ## Setup
 
 ```python
-from azure.identity import InteractiveBrowserCredential
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 
-credential = InteractiveBrowserCredential()
+load_env()
 client = DataverseClient(
-    resource_url=os.environ["DATAVERSE_URL"],
-    credential=credential,
+    base_url=os.environ["DATAVERSE_URL"],
+    credential=get_credential(),
 )
 ```
 
-For non-interactive (service principal) auth — preferred for dev tenants:
-```python
-from azure.identity import ClientSecretCredential
-
-credential = ClientSecretCredential(
-    tenant_id=os.environ["TENANT_ID"],
-    client_id=os.environ["CLIENT_ID"],
-    client_secret=os.environ["CLIENT_SECRET"],
-)
-client = DataverseClient(
-    resource_url=os.environ["DATAVERSE_URL"],
-    credential=credential,
-)
-```
+`get_credential()` returns `ClientSecretCredential` (if CLIENT_ID + CLIENT_SECRET are in `.env`) or `DeviceCodeCredential` (interactive fallback). See `scripts/auth.py`.
 
 ---
 
@@ -194,8 +209,8 @@ result = client.tables.create_lookup_field(
     display_name="Account",
     solution="MySolution",
 )
-print(f"Created lookup: {result['lookup_schema_name']}")
-# The nav property for @odata.bind is the lookup SchemaName in PascalCase
+print(f"Created lookup: {result.lookup_schema_name}")
+# The nav property for @odata.bind is the lookup's Navigation Property Name (case-sensitive)
 ```
 
 ### Create a many-to-many relationship
@@ -214,21 +229,6 @@ result = client.tables.create_many_to_many_relationship(
 
 ---
 
-## Where SDK Scripts Live
-
-Scripts using the SDK go in `/scripts/`. Keep them small and single-purpose:
-
-```text
-scripts/
-  auth.py              — Azure Identity token acquisition (used by all scripts)
-```
-
-Both the SDK and Web API scripts use Azure Identity for auth via `auth.py`. For Web API scripts (forms, views, relationships), use `get_token()`. For data scripts using this SDK, use `get_credential()` to get a `TokenCredential` directly.
-
-Post-import validation (table existence, form checks, role checks, import errors) is done inline using the SDK — see `/dataverse:solution` for patterns.
-
----
-
 ## @odata.bind Rules (Lookup Binding)
 
 When creating or updating a record that sets a lookup field, you must use `@odata.bind` with the correct **navigation property name**. Getting this wrong is the #1 cause of 400 errors.
@@ -239,7 +239,7 @@ When creating or updating a record that sets a lookup field, you must use `@odat
 <NavigationPropertyName>@odata.bind = "/<EntitySetName>(<target-guid>)"
 ```
 
-- **Navigation property name**: Use the **SchemaName** (PascalCase) of the lookup field, NOT the logical name (lowercase).
+- **Navigation property name**: Case-sensitive, must match the entity's `$metadata`. For custom lookups this is typically the SchemaName (e.g., `new_AccountId`). Do NOT use the lowercase logical name.
 - **Entity set name**: The plural collection name of the referenced table (e.g., `accounts`, `contacts`).
 
 ### Examples
@@ -252,12 +252,12 @@ When creating or updating a record that sets a lookup field, you must use `@odat
 
 ### How to find the navigation property name
 
-1. **After creating a lookup via SDK**: The `result['lookup_schema_name']` is the navigation property name.
+1. **After creating a lookup via SDK**: `result.lookup_schema_name` is the navigation property name.
 2. **For system tables**: Query the relationship metadata:
    ```
    GET /api/data/v9.2/EntityDefinitions(LogicalName='<entity>')/ManyToOneRelationships?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity
    ```
-3. **Rule of thumb for custom lookups**: The navigation property name matches the lookup field's SchemaName (PascalCase with prefix, e.g., `new_AccountId`).
+3. **Rule of thumb for custom lookups**: The navigation property name matches the lookup field's SchemaName (e.g., `new_AccountId`). Always verify against `$metadata` if unsure.
 
 ---
 
@@ -281,7 +281,7 @@ To get the full related record instead, use `$expand`:
 ```python
 for page in client.records.get("opportunity",
     select=["name", "estimatedvalue"],
-    expand=["parentaccountid"],
+    expand=["parentaccountid"],  # system nav props are lowercase
     top=10,
 ):
     for r in page:
@@ -289,6 +289,50 @@ for page in client.records.get("opportunity",
         if account:
             print(account["name"])
 ```
+
+> **Note:** System table navigation properties (e.g., `parentaccountid`, `ownerid`) are lowercase. Custom lookup navigation properties are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). When in doubt, query the entity's `ManyToOneRelationships` metadata.
+
+### $expand with multiple custom lookups
+
+Use the correct navigation property names (case-sensitive, must match `$metadata`):
+
+```python
+# Expand multiple lookups — e.g., project budgets with account and department details
+for page in client.records.get(
+    "new_projectbudget",
+    select=["new_name", "new_amount", "new_status"],
+    filter="new_status eq 100000001",
+    expand=["new_AccountId", "new_DepartmentId"],
+    orderby=["new_amount desc"],
+):
+    for budget in page:
+        acct = budget.get("new_AccountId") or {}
+        dept = budget.get("new_DepartmentId") or {}
+        print(f"{budget['new_name']}: {acct.get('name', '')} / {dept.get('new_name', '')}")
+```
+
+> **Important:** `expand` uses the navigation property name (case-sensitive, e.g., `new_AccountId`), not the lowercase logical name (`new_accountid`). Using lowercase causes a 400 error.
+
+### $expand on N:N relationships
+
+N:N expand uses the relationship navigation property name (found in the ManyToManyRelationships metadata). The SDK does **not** support `$expand` on N:N collection-valued navigation properties in multi-record queries. For N:N traversal, use the Web API directly:
+
+```python
+# Fall back to Web API for N:N expand
+import urllib.request, json
+from auth import get_token
+
+token = get_token()
+url = f"{env}/api/data/v9.2/new_projectdocuments?$select=new_title&$expand=new_ProjectBudget_Documents($select=new_name)"
+req = urllib.request.Request(url, headers={
+    "Authorization": f"Bearer {token}",
+    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+})
+with urllib.request.urlopen(req) as resp:
+    articles = json.loads(resp.read())["value"]
+```
+
+> **Use the SDK for all queries except N:N expand.** Do not fall back to `requests` or `urllib` for standard queries, lookups, or 1:N expand — the SDK handles these correctly.
 
 ---
 
@@ -342,7 +386,7 @@ from PowerPlatform.Dataverse.core.errors import HttpError
 
 load_env()
 client = DataverseClient(
-    resource_url=os.environ["DATAVERSE_URL"],
+    base_url=os.environ["DATAVERSE_URL"],
     credential=get_credential(),
 )
 
@@ -357,8 +401,8 @@ for row in rows:
         "new_name": row["Title"],
         "new_description": row["Description"],
         "new_priority": int(row["Priority"]),
-        # Lookup binding — use PascalCase nav property name
-        "new_CustomerId@odata.bind": f"/accounts({row['AccountGuid']})",
+        # Lookup binding — use navigation property name (case-sensitive)
+        "new_AccountId@odata.bind": f"/accounts({row['AccountGuid']})",
     })
 
 # Bulk create — SDK uses CreateMultiple internally
@@ -444,7 +488,7 @@ from PowerPlatform.Dataverse.client import DataverseClient
 
 credential = InteractiveBrowserCredential()
 client = DataverseClient(
-    resource_url="https://<org>.crm.dynamics.com",  # replace with your URL
+    base_url="https://<org>.crm.dynamics.com",  # replace with your URL
     credential=credential,
 )
 

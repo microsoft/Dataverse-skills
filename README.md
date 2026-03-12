@@ -36,10 +36,22 @@ copilot plugin install dataverse@awesome-copilot
 Test the plugin locally without installing from a marketplace:
 
 ```bash
-# Claude Code
-claude --plugin-dir ./.github/plugins/dataverse
+# 1. Create and cd into a fresh test folder
+mkdir my-test-project
+cd my-test-project
 
-# GitHub Copilot
+# 2. Launch Claude Code with the plugin loaded from your local clone
+claude --plugin-dir "c:/repos/Dataverse-Skills/.github/plugins/dataverse"
+
+# 3. Start with a natural language prompt, e.g.:
+#    "Create a support ticket table with customer and agent lookups"
+```
+
+The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
+
+For GitHub Copilot:
+
+```bash
 copilot plugin install ./.github/plugins/dataverse
 ```
 

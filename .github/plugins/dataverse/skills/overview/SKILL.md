@@ -54,7 +54,15 @@ If you find yourself about to run `npm` or create a `package.json`, STOP. You ar
 
 ### 2. Use the SDK, Not Raw HTTP
 
-For data operations (CRUD, bulk, queries) and schema operations (table/column/relationship creation), use the Python Dataverse SDK — not raw `requests`/`urllib` calls. The SDK handles auth, pagination, retries, and batching. See the python-sdk skill for correct patterns. Only fall back to raw Web API for things the SDK doesn't support (forms, views, global option sets).
+For data operations (CRUD, bulk, queries) and schema operations (table/column/relationship creation), use the Python Dataverse SDK — not raw `requests`/`urllib` calls. The SDK handles auth, URL encoding, pagination, retries, and batching. See the python-sdk skill for correct patterns.
+
+**This includes publisher and solution records** — they are standard Dataverse tables. Use `client.records.create("publisher", {...})` and `client.records.create("solution", {...})`, not raw HTTP.
+
+Only fall back to raw Web API for: forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
+
+**Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. The SDK handles this correctly for `@odata.bind` keys.
+
+**Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
 
 ### 3. Use Documented Auth Patterns
 

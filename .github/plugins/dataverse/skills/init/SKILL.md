@@ -12,7 +12,12 @@ description: >
 
 > **Environment-First Rule** — All metadata (solutions, columns, tables, forms, views) and plugin registrations are created **in the Dynamics environment** via API or scripts, then pulled into the repo. Never write or edit solution XML by hand to create new components. This rule applies to every step in both scenarios below.
 
-**Execute every numbered step in order.** Do not skip ahead to a later step, even if it appears more relevant to the user's immediate goal. Steps that seem unrelated to the current task (e.g., MCP setup when the user asked about tables) are still required — they enable the user's workflow in future sessions.
+**Execute every numbered step in order.** Do not skip ahead to a later step, even if it appears more relevant to the user's immediate goal.
+
+**MCP setup exception:** MCP configuration (step 5 in Scenario A, step 3's MCP part in Scenario B) requires a Claude Code restart, which loses all session context. Therefore:
+- **Skip MCP setup entirely** if an MCP server is already configured (`.mcp.json` exists with a Dataverse server entry, or `claude mcp list` shows one).
+- **Defer MCP setup to the very last step** — after all scripts have been created and run, all metadata is live, and commits are done. This way the restart only loses the "done" state, not in-progress work.
+- Before triggering the restart, **write a brief status summary to `CLAUDE.md`** (or append to existing) so the next session knows what was completed.
 
 Two scenarios — handle both.
 
@@ -50,6 +55,7 @@ Ask the user for each value, then write the file:
 DATAVERSE_URL=https://<org>.crm.dynamics.com
 TENANT_ID=<guid>
 SOLUTION_NAME=<UniqueName>
+PUBLISHER_PREFIX=<prefix>
 PAC_AUTH_PROFILE=nonprod
 CLIENT_ID=<app-registration-client-id>
 CLIENT_SECRET=<app-registration-secret>
@@ -59,6 +65,7 @@ How to prompt the user:
 - `DATAVERSE_URL`: "What is your Dataverse environment URL?"
 - `TENANT_ID`: Auto-discover from the URL above before asking. Only ask if discovery fails.
 - `SOLUTION_NAME`: "What is the unique name of your solution?"
+- `PUBLISHER_PREFIX`: Do **not** ask yet — this is discovered in the solution creation step (step 7 in Scenario B). Leave it blank in `.env` for now; the `create_solution.py` script will query existing publishers and ask the user. Once confirmed, update `.env` with the chosen prefix.
 - `CLIENT_ID` / `CLIENT_SECRET`: Only needed for service principal auth. If the user authenticates via browser (interactive login), skip these. When omitted, auth.py uses interactive device code flow with AuthenticationRecord persistence (no browser re-prompt on subsequent runs).
 
 Write the file directly — do not instruct the user to create it:
@@ -69,6 +76,7 @@ with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
     f.write(f"TENANT_ID={tenant_id}\n")
     f.write(f"SOLUTION_NAME={solution_name}\n")
+    f.write(f"PUBLISHER_PREFIX=\n")  # filled in during solution creation step
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
     if client_id:
         f.write(f"CLIENT_ID={client_id}\n")
@@ -101,11 +109,7 @@ if missing:
         f.write("\n" + "\n".join(missing) + "\n")
 ```
 
-### 5. Configure MCP server
-
-Use the `dataverse-mcp-configure` skill to set up the MCP server for GitHub Copilot or Claude Code.
-
-### 6. Ensure PAC CLI is on PATH
+### 5. Ensure PAC CLI is on PATH
 
 Find the path (this may be slow, wait for it to finish):
 
@@ -121,7 +125,7 @@ echo 'export PATH="$PATH:/c/Users/$USER/.dotnet/tools"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 7. Connect to the environment
+### 6. Connect to the environment
 
 Ask the user which environment they are setting up for. Do not assume.
 
@@ -155,14 +159,30 @@ pac auth create --name <profile-name> \
 
 > **Multi-environment repos:** If the team deploys to multiple environments from the same repo, each developer's `.env` represents their current target. Consider `.env.dev`, `.env.staging`, etc., with a pattern like `cp .env.dev .env` to switch targets. Each developer manages their own local `.env`.
 
-### 8. Verify the connection
+### 7. Verify the connection
 
 ```
 pac org who
 python scripts/auth.py
 ```
 
-Both should succeed without error. Confirm the environment URL in the output matches the intended target. New machine setup is complete.
+Both should succeed without error. Confirm the environment URL in the output matches the intended target.
+
+### 8. Configure MCP server (if not already configured)
+
+**Skip this step entirely** if any of the following are true:
+- `.mcp.json` already exists and contains a Dataverse server entry
+- `claude mcp list` shows a `dataverse-*` server already registered
+- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP)
+
+If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
+
+Before triggering the MCP install command, inform the user:
+
+> MCP setup requires restarting Claude Code. All other setup steps are complete.
+> After restart, you can verify MCP works by asking: "List the tables in my Dataverse environment."
+
+New machine setup is complete.
 
 ---
 
@@ -190,11 +210,9 @@ curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
 
 Use the resulting GUID as `TENANT_ID` in `.env`. Only ask the user if this command fails.
 
-### 3. Create .env, MCP config, and .gitignore
+### 3. Create .env and .gitignore
 
 Follow steps 3–4 from Scenario A above. Ask the user for SOLUTION_NAME if not already known (but use the DATAVERSE_URL you obtained and confirmed in step 2).
-
-Set up MCP following step 5 from Scenario A.
 
 ### 4. Create the directory structure
 
@@ -214,6 +232,7 @@ cp .dataverse/scripts/enable-mcp-client.py scripts/
 Copy `templates/CLAUDE.md` from the plugin to the repo root. Replace placeholders:
 - `{{DATAVERSE_URL}}` → environment URL
 - `{{SOLUTION_NAME}}` → solution unique name
+- `{{PUBLISHER_PREFIX}}` → leave as `TBD` for now (filled in after step 7 when the publisher is confirmed)
 - `{{PAC_AUTH_PROFILE}}` → `nonprod`
 
 ### 6. Connect to the environment
@@ -245,16 +264,24 @@ Continue to the next steps.
 
 **This is where changes go into Dynamics first — never into the repo directly.**
 
-Write and run `scripts/create_solution.py` to create the publisher and solution in the environment via Web API. Follow the pattern in the `dataverse-solution` skill. Run it:
+Write and run `scripts/create_solution.py` to create the publisher and solution in the environment using the Python SDK. The script **must** follow the publisher discovery flow from the `dataverse-solution` skill:
+
+1. **Query existing publishers** in the environment (excluding Microsoft system publishers)
+2. **If a custom publisher exists**, show it to the user and ask: "Should I reuse this publisher (prefix: `<prefix>_`)?"
+3. **If no custom publisher exists**, ask the user: "What publisher prefix should I use? (e.g., `contoso`, `sa`, `lit` — 2-8 lowercase chars, not `new`)"
+4. **Never hardcode a prefix.** Never default to `new`. Always get user confirmation.
+5. After the publisher is confirmed/created, **update `.env`** with `PUBLISHER_PREFIX=<chosen_prefix>`
+
+Run it:
 
 ```
 python scripts/create_solution.py
 ```
 
-Then write and run any scripts needed to create columns, tables, or other metadata in the environment. Each script should POST to the Dataverse MetadataService API with `MSCRM.SolutionUniqueName` header so the changes are automatically included in the solution. Run them:
+Then write and run any scripts needed to create tables, columns, or other metadata. **All custom schema names must use the confirmed publisher prefix** (from `PUBLISHER_PREFIX` in `.env`). Each script should use the SDK with `solution=SOLUTION` so changes are automatically included in the solution. Run them:
 
 ```
-python scripts/add_<whatever>_column.py
+python scripts/create_tables.py
 ```
 
 ### 8. Pull the environment state to the repo
@@ -314,6 +341,21 @@ To remove demo data later, call `UninstallSampleData` the same way.
 git add .gitignore CLAUDE.md solutions/ plugins/ scripts/
 git commit -m "chore: initialize Dataverse workspace"
 ```
+
+### 11. Configure MCP server (if not already configured)
+
+**Skip this step entirely** if any of the following are true:
+
+- `.mcp.json` already exists and contains a Dataverse server entry
+- `claude mcp list` shows a `dataverse-*` server already registered
+- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP)
+
+If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
+
+Before triggering the MCP install command, inform the user:
+
+> MCP setup requires restarting Claude Code. All other setup steps are complete — your solution, tables, and scripts are committed.
+> After restart, you can verify MCP works by asking: "List the tables in my Dataverse environment."
 
 ---
 

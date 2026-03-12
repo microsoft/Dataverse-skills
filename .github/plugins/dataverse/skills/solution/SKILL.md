@@ -14,21 +14,73 @@ Create, export, unpack, pack, import, and validate Dataverse solutions via PAC C
 
 ## Create a New Solution
 
-Creating a solution is a two-step process: create the solution record in Dataverse, then add components to it.
+**Use the Python SDK for publisher and solution record creation — not raw HTTP.** Publishers and solutions are standard Dataverse tables. `client.records.create()` and `client.records.get()` handle auth, pagination, and error handling automatically, avoiding the URL encoding, header boilerplate, and GUID-parsing bugs that raw `urllib` calls introduce.
 
-### Step 1: Find the Publisher
+### Step 1: Find or Create the Publisher
 
-Every solution belongs to a publisher. Look up the publisher that matches your table prefix:
-```sql
-SELECT publisherid, uniquename, customizationprefix FROM publisher
-WHERE customizationprefix = '<prefix>'
+Every solution belongs to a publisher. The publisher's `customizationprefix` (e.g., `contoso`, `sa`, `lit`) is prepended to every custom table, column, and relationship schema name. **This prefix is effectively permanent** — existing components keep their prefix forever, even if you change the publisher later.
+
+**Never use the default `new` prefix.** It provides no organizational identity, risks naming collisions, and signals the developer did not follow best practices.
+
+**Discovery flow — always run this before creating a publisher:**
+
+```python
+# 1. Query for existing non-Microsoft publishers
+pages = client.records.get(
+    "publisher",
+    filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation' and uniquename ne 'Microsoftdynamic'",
+    select=["publisherid", "uniquename", "friendlyname", "customizationprefix"],
+    top=10,
+)
+publishers = [p for page in pages for p in page]
+
+if publishers:
+    # Show existing publishers and ask user which to use
+    print("Existing publishers in this environment:")
+    for p in publishers:
+        print(f"  {p['uniquename']} (prefix: {p['customizationprefix']}_)")
+    # ASK THE USER: "Which publisher should this solution use?"
+    # Or: "Should I reuse '<name>' (prefix: <prefix>_)?"
+    publisher_id = publishers[0]["publisherid"]  # after user confirms
+else:
+    # No custom publisher exists — ASK THE USER for prefix
+    # "What publisher prefix should I use? (e.g., 'contoso', 'sa', 'lit' — 2-8 lowercase chars)"
+    publisher_id = client.records.create("publisher", {
+        "uniquename": "<publisheruniquename>",
+        "friendlyname": "<Publisher Display Name>",
+        "customizationprefix": "<prefix>",   # from user input, NOT 'new'
+        "description": "<description>",
+    })
 ```
 
-If the publisher doesn't exist yet, create it first in make.powerapps.com or via Web API. The publisher prefix must match the prefix already used by your tables — you cannot mix prefixes within a solution.
+**Rules:**
+- **Always ask the user** before creating a new publisher or choosing a prefix. Never hardcode a prefix.
+- The prefix must match any tables already created in the solution — you cannot mix prefixes.
+- One publisher can own many solutions. Reuse an existing publisher when possible.
 
 ### Step 2: Create the Solution Record
 
-Create a record in the `solution` table via MCP, SDK, or Web API:
+Use the SDK to create the solution record (preferred over raw Web API):
+
+```python
+from PowerPlatform.Dataverse.client import DataverseClient
+from scripts.auth import get_credential, load_env
+import os
+
+load_env()
+client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
+# Create the solution record
+solution_id = client.records.create("solution", {
+    "uniquename": "<UniqueName>",
+    "friendlyname": "<Display Name>",
+    "version": "1.0.0.0",
+    "publisherid@odata.bind": "/publishers(<publisher_guid>)",
+})
+print(f"Created solution: {solution_id}")
+```
+
+The required fields:
 ```
 Table:  solution
 Fields: uniquename    = "<UniqueName>"
@@ -36,6 +88,8 @@ Fields: uniquename    = "<UniqueName>"
         version       = "1.0.0.0"
         publisherid   = <publisher GUID from step 1>
 ```
+
+> **Note:** There is no `pac solution create` command. PAC CLI handles export/import/pack/unpack, not solution record creation. Use the SDK or Web API to create the record.
 
 ### Step 3: Add Components
 
@@ -189,15 +243,21 @@ views = [v for page in pages for v in page]
 
 ### Check a user's role assignment
 
+N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. Use the Web API:
+
 ```python
-pages = client.records.get(
-    "systemuser",
-    filter="internalemailaddress eq '<email>'",
-    expand=["systemuserroles_association"],
-    select=["fullname", "internalemailaddress"],
-    top=1,
-)
-users = [u for page in pages for u in page]
+# Web API fallback for N:N expand
+import urllib.request, json
+from auth import get_token
+
+token = get_token()
+url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
+req = urllib.request.Request(url, headers={
+    "Authorization": f"Bearer {token}",
+    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+})
+with urllib.request.urlopen(req) as resp:
+    users = json.loads(resp.read()).get("value", [])
 if users:
     roles = [r["name"] for r in users[0].get("systemuserroles_association", [])]
     print(f"Roles: {', '.join(roles)}")

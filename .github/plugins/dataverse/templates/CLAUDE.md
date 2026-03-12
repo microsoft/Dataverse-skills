@@ -3,6 +3,7 @@
 ## Environment
 - **URL:** {{DATAVERSE_URL}}
 - **Solution:** {{SOLUTION_NAME}}
+- **Publisher Prefix:** {{PUBLISHER_PREFIX}}
 - **PAC Auth Profile:** {{PAC_AUTH_PROFILE}}
 
 ## Repo Layout
@@ -51,7 +52,7 @@ print(f"[{'FAIL' if errors else 'PASS'}] {len(errors)} failed import(s)")
 ```
 
 ## Metadata Conventions
-- Table prefix: `new_` (confirm publisher prefix in `solutions/{{SOLUTION_NAME}}/Other/Solution.xml`)
+- Table prefix: `{{PUBLISHER_PREFIX}}_` (from `.env`; also visible in `solutions/{{SOLUTION_NAME}}/Other/Solution.xml`)
 - All GUIDs in form and view XML must be unique — generate with `python -c "import uuid; print(str(uuid.uuid4()).upper())"`
 - Business rules are stored as JSON in `Entities/<table>/Workflows/`
 
