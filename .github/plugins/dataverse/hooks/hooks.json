@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'BLOCKED: Do not delegate Dataverse work to subagents. Subagents cannot read plugin skills and will use wrong patterns (PowerShell, raw HTTP, curl). Do all work directly in the main conversation using Python and the Dataverse SDK. See the python-sdk and metadata skills for correct patterns.' >&2 && exit 2"
+            "command": "echo 'BLOCKED: Subagents cannot read plugin skills. Do this work DIRECTLY — do not delegate. Step 1: Load the dataverse-overview skill to read the Hard Rules. Step 2: Check if .env and scripts/auth.py exist (if not, run init skill first). Step 3: Use Python with the Dataverse SDK (pip install PowerPlatform-Dataverse-Client) for all data and schema operations. NEVER use PowerShell, curl, raw HTTP, or non-Python tools.' >&2 && exit 2"
           }
         ]
       }
