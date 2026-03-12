@@ -27,6 +27,29 @@ Check all in parallel. Install any that are missing.
 
 After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal, then proceed.
 
+### PAC CLI on Windows Git Bash
+
+PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. Use the PowerShell wrapper:
+
+```bash
+powershell -Command "& 'C:\Users\$USER\AppData\Local\Microsoft\PowerAppsCLI\pac.cmd' --version"
+```
+
+Or, if installed via `dotnet tool install --global`:
+
+```bash
+powershell -Command "& pac --version"
+```
+
+To avoid repeating this, add an alias to `~/.bashrc`:
+
+```bash
+echo 'alias pac="powershell -Command \"& pac.cmd\""' >> ~/.bashrc
+source ~/.bashrc
+```
+
+If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
+
 After Python is confirmed available:
 ```
 pip install azure-identity requests PowerPlatform-Dataverse-Client
