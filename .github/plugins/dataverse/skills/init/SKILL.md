@@ -14,7 +14,7 @@ description: >
 
 Two scenarios — handle both.
 
-Do not skip steps unless explicitly noted, and follow through to the full sequence for the appropriate scenario. In particular, by the end of either scenario the user should have a working `.env`, be connected to their environment via PAC CLI, have the MCP server configured, and have the repository set up.
+Do not skip steps unless explicitly noted, and follow through to the full sequence for the appropriate scenario. In particular, by the end of either scenario the user should have a working `.env`, be connected to their environment via PAC CLI, have the MCP server configured, and have the git repository created if it does not already exist.
 
 ---
 
@@ -176,9 +176,11 @@ Verify you are at the repo root.
 
 ### 2. Discover TENANT_ID
 
-Always ask the user to confirm the Dataverse environment URL before proceeding, even if you can derive it from `pac auth list` or other sources. Do not assume.
+Always ask the user to confirm the Dataverse environment URL and pause to let the user respond even if you can derive it from `pac auth list` or other sources.
 
-Before writing `.env`, auto-discover `TENANT_ID` from the Dataverse URL:
+Do not perform any subsequent or parallel operations until the user answers. Do not assume.
+
+Before writing `.env`, auto-discover `TENANT_ID` from the Dataverse URL confirmed by the user:
 
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
