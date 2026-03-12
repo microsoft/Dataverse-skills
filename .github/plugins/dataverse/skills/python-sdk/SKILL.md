@@ -66,11 +66,11 @@ Dataverse uses two different naming conventions for properties. Getting this wro
 | Property type | Name convention | Example | When used |
 |---|---|---|---|
 | **Structural** (columns) | LogicalName (always lowercase) | `new_name`, `new_priority` | `$select`, `$filter`, `$orderby`, record payload keys |
-| **Navigation** (relationships / lookups) | Navigation Property Name (case-sensitive, must match `$metadata`) | `new_CustomerId`, `new_AgentId` | `$expand`, `@odata.bind` annotation keys |
+| **Navigation** (relationships / lookups) | Navigation Property Name (case-sensitive, must match `$metadata`) | `new_AccountId`, `new_DepartmentId` | `$expand`, `@odata.bind` annotation keys |
 
 - **`$select`, `$filter`, `$orderby`**: always lowercase logical names (`new_name`, `new_priority`)
-- **`$expand` navigation properties**: Navigation Property Name, case-sensitive (`new_CustomerId`, `new_AgentId`)
-- **`@odata.bind` keys**: Navigation Property Name, case-sensitive (`new_CustomerId@odata.bind`)
+- **`$expand` navigation properties**: Navigation Property Name, case-sensitive (`new_AccountId`, `new_DepartmentId`)
+- **`@odata.bind` keys**: Navigation Property Name, case-sensitive (`new_AccountId@odata.bind`)
 - **Record payloads** (create/update data): lowercase logical names for regular fields; `@odata.bind` keys preserve the navigation property casing
 
 The SDK handles this correctly: it lowercases structural property keys but preserves `@odata.bind` key casing.
@@ -290,28 +290,28 @@ for page in client.records.get("opportunity",
             print(account["name"])
 ```
 
-> **Note:** System table navigation properties (e.g., `parentaccountid`, `ownerid`) are lowercase. Custom lookup navigation properties are case-sensitive and must match `$metadata` (e.g., `new_CustomerId`). When in doubt, query the entity's `ManyToOneRelationships` metadata.
+> **Note:** System table navigation properties (e.g., `parentaccountid`, `ownerid`) are lowercase. Custom lookup navigation properties are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). When in doubt, query the entity's `ManyToOneRelationships` metadata.
 
 ### $expand with multiple custom lookups
 
 Use the correct navigation property names (case-sensitive, must match `$metadata`):
 
 ```python
-# Expand multiple lookups — e.g., tickets with customer and agent details
+# Expand multiple lookups — e.g., project budgets with account and department details
 for page in client.records.get(
-    "sa_ticket",
-    select=["sa_ticketnumber", "sa_priority", "sa_status"],
-    filter="sa_status eq 100000002",
-    expand=["sa_CustomerId", "sa_AgentId"],
-    orderby=["sa_priority desc"],
+    "new_projectbudget",
+    select=["new_name", "new_amount", "new_status"],
+    filter="new_status eq 100000001",
+    expand=["new_AccountId", "new_DepartmentId"],
+    orderby=["new_amount desc"],
 ):
-    for ticket in page:
-        cust = ticket.get("sa_CustomerId") or {}
-        agent = ticket.get("sa_AgentId") or {}
-        print(f"{ticket['sa_ticketnumber']}: {cust.get('sa_name', '')} -> {agent.get('sa_name', '')}")
+    for budget in page:
+        acct = budget.get("new_AccountId") or {}
+        dept = budget.get("new_DepartmentId") or {}
+        print(f"{budget['new_name']}: {acct.get('name', '')} / {dept.get('new_name', '')}")
 ```
 
-> **Important:** `expand` uses the navigation property name (case-sensitive, e.g., `sa_CustomerId`), not the lowercase logical name (`sa_customerid`). Using lowercase causes a 400 error.
+> **Important:** `expand` uses the navigation property name (case-sensitive, e.g., `new_AccountId`), not the lowercase logical name (`new_accountid`). Using lowercase causes a 400 error.
 
 ### $expand on N:N relationships
 
@@ -323,7 +323,7 @@ import urllib.request, json
 from auth import get_token
 
 token = get_token()
-url = f"{env}/api/data/v9.2/sa_knowledgearticles?$select=sa_title&$expand=sa_Ticket_KnowledgeArticle($select=sa_ticketnumber)"
+url = f"{env}/api/data/v9.2/new_projectdocuments?$select=new_title&$expand=new_ProjectBudget_Documents($select=new_name)"
 req = urllib.request.Request(url, headers={
     "Authorization": f"Bearer {token}",
     "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
@@ -401,8 +401,8 @@ for row in rows:
         "new_name": row["Title"],
         "new_description": row["Description"],
         "new_priority": int(row["Priority"]),
-        # Lookup binding — use PascalCase nav property name
-        "new_CustomerId@odata.bind": f"/accounts({row['AccountGuid']})",
+        # Lookup binding — use navigation property name (case-sensitive)
+        "new_AccountId@odata.bind": f"/accounts({row['AccountGuid']})",
     })
 
 # Bulk create — SDK uses CreateMultiple internally
