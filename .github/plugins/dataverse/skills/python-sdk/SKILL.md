@@ -95,6 +95,11 @@ guid = client.records.create("new_projectbudget", {
 print(f"Created: {guid}")
 ```
 
+**Lookup binding (`@odata.bind`) notes:**
+- If you just created lookup columns, wait 5-10 seconds before inserting records that reference them. Metadata propagation delays can cause "Invalid property" errors.
+- Choice (picklist) columns use integer values, not strings: `"new_status": 100000000` (not `"Draft"`).
+- If a record insert fails with "Invalid property", verify the lookup column's logical name and navigation property name by querying `EntityDefinitions(LogicalName='...')/Attributes`.
+
 ### Query records (multi-record — returns page iterator)
 ```python
 for page in client.records.get(

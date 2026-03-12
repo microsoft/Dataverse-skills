@@ -63,6 +63,24 @@ Common component type codes:
 
 Repeat the command for each component you need to add.
 
+### Alternative: Auto-add via MSCRM.SolutionName Header
+
+When creating metadata via the Web API, include the `MSCRM.SolutionName` header to auto-add components to the solution:
+```python
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Content-Type": "application/json",
+    "MSCRM.SolutionName": "<UniqueName>"
+}
+```
+
+**Important:** After using this approach, verify components were added by listing them:
+```bash
+pac solution list-components --solutionUniqueName <UniqueName> --environment <url>
+```
+
+If the header was misspelled or the solution doesn't exist, components will be created in the default solution instead — silently. Always verify.
+
 ## Find the Solution Name
 
 Before exporting, confirm the exact unique name:

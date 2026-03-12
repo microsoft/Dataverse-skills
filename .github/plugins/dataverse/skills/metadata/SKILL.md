@@ -11,6 +11,10 @@ description: >
 
 # Skill: Metadata — Making Changes
 
+**Before the first metadata change in a session, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
+
+---
+
 ## How Changes Are Made: Environment-First
 
 **Do not write solution XML by hand to create new tables, columns, forms, or views.**
@@ -109,10 +113,13 @@ attribute = {
                     "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
                                           "Label": "Description", "LanguageCode": 1033}]},
     "RequiredLevel": {"Value": "None"},
-    "MaxLength": 500
+    "MaxLength": 500,
+    "FormatName": {"Value": "Text"}   # Always use "Text" — see FormatName reference below
 }
 # POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
 ```
+
+**Valid FormatName values for StringAttributeMetadata:** `Text`, `TextArea`, `Url`, `TickerSymbol`, `PhoneticGuide`, `VersionNumber`, `Phone`. Note: `Email` is **not** a valid FormatName despite being a common assumption — use `Text` for email columns.
 
 **Currency column:**
 ```python
@@ -423,6 +430,65 @@ When creating forms via the Web API (`POST /api/data/v9.2/systemforms`), FormXml
 - **Control `classid` values** are fixed per control type (e.g., `{4273EDBD-AC1D-40d3-9FB2-095C621B552D}` for text, `{270BD3DB-D9AF-4782-9025-509E298DEC0A}` for lookup, `{3EF39988-22BB-4f0b-BBBE-64B5A3748AEE}` for picklist/choice).
 
 **Tip:** To avoid FormXml issues, create forms through the Dynamics maker portal and pull via `pac solution export` — then use the pulled XML as a template for programmatic creation.
+
+---
+
+## After Creating Columns: Report Logical Names
+
+After creating columns (via Web API or MCP), **always report the actual logical names** to the user. Column names may be normalized or prefixed in ways the user doesn't expect. Summarize in a table:
+
+| Display Name | Logical Name | Type |
+|---|---|---|
+| Email | cr9ac_email | String |
+| Tier | cr9ac_tier | Picklist |
+| Customer | cr9ac_customerid | Lookup |
+
+This prevents downstream failures when the user tries to insert data using incorrect column names.
+
+---
+
+## Common Web API Error Codes
+
+| Error Code | Meaning | Recovery |
+|---|---|---|
+| `0x80040216` | Transient metadata cache error. Column or table metadata not yet propagated. | Wait 3-5 seconds and retry. Usually succeeds on second attempt. |
+| `0x80048d19` | Invalid property in payload. A field name doesn't match any column on the table. | Check logical column names — use `EntityDefinitions(LogicalName='...')/Attributes` to verify. |
+| `0x80040237` | Schema name already exists. | Verify the column/table exists before creating a new one — it may have been created by a previous timed-out call. |
+| `0x8004431a` | Publisher prefix mismatch. | Ensure all schema names use the solution's publisher prefix. |
+| `0x80060891` | Metadata cache not ready after table creation. | Call `GET EntityDefinitions(LogicalName='...')` first to force cache refresh, then retry. |
+
+Always translate error codes to plain English before presenting them to the user.
+
+---
+
+## Metadata Propagation Delays
+
+After creating tables or columns via the Web API, metadata propagation can take 3-10 seconds. Common symptoms:
+
+- Picklist columns fail with `0x80040216` immediately after table creation
+- Lookup `@odata.bind` operations fail with "Invalid property" shortly after column creation
+- `update_table` (MCP) fails with "EntityId not found in MetadataCache"
+
+**Mitigation:** Add a 3-5 second delay after table creation before adding columns. After creating lookup columns, wait 5-10 seconds before inserting records that use `@odata.bind` on those lookups. If a column creation fails, verify it doesn't already exist, then retry once.
+
+---
+
+## Session Closing: Pull to Repo
+
+**After every metadata session, perform the pull-to-repo sequence.** This is not optional — work that exists only in the environment is lost if the environment is reset.
+
+```bash
+pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
+pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
+rm ./solutions/<SOLUTION_NAME>.zip
+git add ./solutions/<SOLUTION_NAME>
+git commit -m "feat: <description of change>"
+```
+
+If you used the `MSCRM.SolutionName` header during creation, verify components are in the solution before exporting:
+```bash
+pac solution list-components --solutionUniqueName <SOLUTION_NAME> --environment <url>
+```
 
 ---
 

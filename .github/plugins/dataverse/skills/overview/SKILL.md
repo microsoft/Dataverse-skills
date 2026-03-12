@@ -92,22 +92,21 @@ Skills exist as **Claude's knowledge**, not as user-facing commands. Each skill 
 
 ---
 
-## Multi-Environment Rule
+## Multi-Environment Rule (MANDATORY)
 
 Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
 
-**Before any operation that touches a specific environment** — deploying a plugin, pushing a solution, registering a step, running a script against the Web API — ask the user:
+**Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
 
-> "Which environment should I target for this? Please confirm the URL."
+1. Show the user the environment URL you intend to use
+2. Ask them to confirm it is correct
+3. Run `pac org who` to verify the active connection matches
 
-Then verify the active PAC profile matches:
+> "I'm about to make changes to `<URL>`. Is this the correct target environment?"
 
-```bash
-pac auth list
-pac org who
-```
+**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment.
 
-The more impactful the operation (plugin deploy, solution import, step registration), the more important this confirmation is. Do not proceed against an environment the user hasn't explicitly confirmed in the current session.
+Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
 
 ---
 
@@ -186,9 +185,22 @@ When running in Git Bash on Windows (the default for Claude Code on Windows):
 
 ---
 
-## After Any Change: Pull to Repo
+## Before Any Metadata Change: Confirm Solution
 
-Any time you make a metadata change (via MCP, Web API, or the maker portal), end the session by pulling:
+Before creating tables, columns, or other metadata, ensure a solution exists to contain the work:
+
+1. Ask the user: "What solution should these components go into?"
+2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
+3. If no solution exists yet, create one (see the `solution` skill)
+4. Use the `MSCRM.SolutionName` header on all Web API metadata calls to auto-add components
+
+Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.
+
+---
+
+## After Any Change: Pull to Repo (MANDATORY)
+
+Any time you make a metadata change (via MCP, Web API, or the maker portal), **you must** end the session by pulling:
 
 ```bash
 pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
