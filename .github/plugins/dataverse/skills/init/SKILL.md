@@ -14,6 +14,8 @@ description: >
 
 Two scenarios — handle both.
 
+Do not skip steps unless explicitly noted, and follow through to the full sequence for the appropriate scenario. In particular, by the end of either scenario the user should have a working `.env`, be connected to their environment via PAC CLI, have the MCP server configured, and have the repository set up.
+
 ---
 
 ## Scenario A: New Machine (repo already exists)
@@ -174,7 +176,9 @@ Verify you are at the repo root.
 
 ### 2. Discover TENANT_ID
 
-Before writing `.env`, auto-discover `TENANT_ID` from the Dataverse URL (the user must provide the URL first):
+Always ask the user to confirm the Dataverse environment URL before proceeding, even if you can derive it from `pac auth list` or other sources. Do not assume.
+
+Before writing `.env`, auto-discover `TENANT_ID` from the Dataverse URL:
 
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
@@ -186,7 +190,9 @@ Use the resulting GUID as `TENANT_ID` in `.env`. Only ask the user if this comma
 
 ### 3. Create .env, MCP config, and .gitignore
 
-Follow steps 3–4 from Scenario A above. Ask the user for DATAVERSE_URL and SOLUTION_NAME if not already known. Set up MCP following step 5 from Scenario A. Skip CLIENT_ID/CLIENT_SECRET if the user authenticates interactively. Device code tokens are cached automatically via AuthenticationRecord persistence.
+Follow steps 3–4 from Scenario A above. Ask the user for SOLUTION_NAME if not already known (but use the DATAVERSE_URL you obtained and confirmed in step 2).
+
+Set up MCP following step 5 from Scenario A. Skip CLIENT_ID/CLIENT_SECRET if the user authenticates interactively. Device code tokens are cached automatically via AuthenticationRecord persistence.
 
 ### 4. Create the directory structure
 
