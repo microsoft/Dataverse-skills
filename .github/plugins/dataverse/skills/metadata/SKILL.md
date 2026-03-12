@@ -11,13 +11,7 @@ description: >
 
 # Skill: Metadata — Making Changes
 
-## Before You Start: Environment Confirmation
-
-**Before any metadata change** (creating tables, columns, relationships, forms, or views), confirm the target environment with the user:
-
-> "I'm about to make schema changes to `<DATAVERSE_URL>`. Is this the correct environment?"
-
-Run `pac org who` to verify the active connection matches. Do not proceed until the user confirms. This prevents accidental changes to production or shared environments.
+**Before any metadata change, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
 
 ---
 
