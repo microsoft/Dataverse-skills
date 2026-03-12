@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "dataverse",
-      "description": "Official Dataverse plugin for agent-guided development with MCP, PAC CLI, and Python SDK",
+      "description": "Agent skills for building on, analyzing, and managing Microsoft Dataverse — with Dataverse MCP, PAC CLI, and Dataverse Python SDK.",
       "source": "./.github/plugins/dataverse",
       "homepage": "https://github.com/microsoft/Dataverse-skills"
     }
