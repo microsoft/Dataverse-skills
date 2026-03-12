@@ -11,7 +11,7 @@ description: >
 
 # Skill: Metadata — Making Changes
 
-**Before any metadata change, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
+**Before the first metadata change in a session, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
 
 ---
 
