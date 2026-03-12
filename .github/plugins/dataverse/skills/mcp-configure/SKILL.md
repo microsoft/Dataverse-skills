@@ -330,6 +330,8 @@ Offer to the user to install the Dataverse MCP server by running {CLAUDE_COMMAND
 > - Create, update, or delete records
 > - Explore your schema and relationships
 
+If you installed the MCP server, pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
+
 Otherwise provide the command with instructions:
 > To install the Dataverse MCP server, exit claude and run:
 >
