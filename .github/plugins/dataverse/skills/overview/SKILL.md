@@ -68,7 +68,13 @@ Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.p
 
 If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the setup skill.
 
-### 4. Follow Skill Instructions, Don't Improvise
+### 4. Do NOT Delegate to Subagents
+
+**NEVER use the Agent tool to delegate Dataverse work.** Subagents do not have access to these skill files. They will improvise with PowerShell, raw HTTP, or other wrong patterns because they cannot read the plugin's instructions.
+
+Do all Dataverse work (schema creation, data operations, queries, solution management) directly in the main conversation where these skills are loaded. The Agent tool is only acceptable for non-Dataverse tasks like file searches or general coding questions.
+
+### 5. Follow Skill Instructions, Don't Improvise
 
 Each skill documents a specific, tested sequence of steps. Follow them. If a skill says "use the Python SDK," use the Python SDK — do not substitute a raw HTTP call, a different library, or a different language. If a skill says "run this command," run that command — do not invent an alternative.
 
