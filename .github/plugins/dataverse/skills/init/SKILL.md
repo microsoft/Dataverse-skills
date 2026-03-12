@@ -98,6 +98,7 @@ from pathlib import Path
 
 GITIGNORE_ENTRIES = [
     ".env",
+    ".venv/",
     ".vscode/settings.json",
     ".claude/mcp_settings.json",
     ".token_cache.bin",
@@ -119,19 +120,23 @@ if missing:
 
 ### 5. Ensure PAC CLI is on PATH
 
-Find the path (this may be slow, wait for it to finish):
-
 ```bash
-find /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI -name "pac.exe" 2>/dev/null
-find /c/Users/$USER/.dotnet/tools -name "pac" 2>/dev/null
+pac --version 2>/dev/null && echo "PAC CLI found" || {
+  # Not in PATH — search common install locations (this may be slow, wait for it to finish)
+  PAC_DIR=$(find /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI -name "pac.exe" -printf '%h' -quit 2>/dev/null)
+  [ -z "$PAC_DIR" ] && PAC_DIR=$(find /c/Users/$USER/.dotnet/tools -name "pac" -printf '%h' -quit 2>/dev/null)
+  if [ -n "$PAC_DIR" ]; then
+    export PATH="$PATH:$PAC_DIR"
+    echo "Added PAC CLI to PATH: $PAC_DIR"
+    # Persist for future sessions
+    echo "export PATH=\"\$PATH:$PAC_DIR\"" >> ~/.bashrc
+  else
+    echo "PAC CLI not found — install via the setup skill"
+  fi
+}
 ```
 
-Add to `~/.bashrc` (for Git Bash / Claude Code):
-
-```bash
-echo 'export PATH="$PATH:/c/Users/$USER/.dotnet/tools"' >> ~/.bashrc
-source ~/.bashrc
-```
+If still not found, install via the setup skill.
 
 ### 6. Connect to the environment
 
@@ -224,9 +229,25 @@ Follow steps 3–4 from Scenario A above. Ask the user for SOLUTION_NAME if not 
 
 ### 4. Create the directory structure
 
-```
+```bash
+# Create directories (no-op if they exist)
 mkdir -p solutions plugins scripts
+
+# Set up Python virtual environment
+# Ensure venv module is available (no-op if already present)
+python -m ensurepip --default-pip 2>/dev/null || true
+python -m venv .venv
+# Activate:
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+# source .venv/bin/activate
+
+# Install packages (idempotent — skips already-installed)
+pip install azure-identity requests PowerPlatform-Dataverse-Client
 ```
+
+> **Idempotent:** Every command above is safe to re-run. `mkdir -p` is a no-op for existing dirs. `python -m venv` is a no-op if `.venv` exists. `pip install` skips already-installed packages.
 
 Copy plugin scripts into the repo so they're committed and available to teammates:
 
@@ -296,7 +317,7 @@ python scripts/create_tables.py
 
 **After all changes are live in the environment, pull them into the repo:**
 
-```
+```bash
 pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
 pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
 rm ./solutions/<SOLUTION_NAME>.zip

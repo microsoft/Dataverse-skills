@@ -50,10 +50,32 @@ source ~/.bashrc
 
 If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
-After Python is confirmed available:
-```
+### Python packages — install in a virtual environment (not globally)
+
+```bash
+# Ensure venv module is available (no-op if already present)
+# Windows (standard installer includes venv):
+python -m ensurepip --default-pip 2>nul
+# Linux/macOS (may need separate package):
+# sudo apt install python3-venv  # Debian/Ubuntu
+# brew install python             # macOS (includes venv)
+
+# Create venv (no-op if .venv already exists)
+python -m venv .venv
+
+# Activate
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+# source .venv/bin/activate
+
+# Install/upgrade packages (idempotent — already-installed packages are skipped)
 pip install azure-identity requests PowerPlatform-Dataverse-Client
 ```
+
+All generated Python scripts should run with this venv active. Never install Dataverse packages into the user's global Python — it causes version conflicts across projects.
+
+> **Idempotent setup:** Every command above is safe to re-run. `python -m venv .venv` is a no-op if the folder exists. `pip install` skips already-installed packages. The first run and every subsequent run produce the same result.
 
 If `winget` is unavailable:
 - PAC CLI: `dotnet tool install --global Microsoft.PowerApps.CLI.Tool`

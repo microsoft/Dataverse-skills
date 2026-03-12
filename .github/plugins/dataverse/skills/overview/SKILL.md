@@ -144,6 +144,28 @@ Before writing any path: build with `Path /` operator, verify parent exists (`Pa
 
 Scripts must not silently proceed when a required file or config is missing. Use a shared entry point (e.g., `load_env()` from `auth.py`) that raises a clear error immediately. This replaces per-script `if not exists` checks with a single structural guarantee.
 
+### Local tool isolation
+
+Install Python packages per-project, not globally:
+
+- **Python packages** → `python -m venv .venv` then `pip install` inside the venv. Never `pip install` into global Python.
+- **Generated scripts** → place in `scripts/` directory, not the working directory root.
+
+This prevents version conflicts across projects and ensures each workspace is self-contained. See the `setup` skill for details.
+
+### Workspace organization
+
+All agent-generated files must be organized into clear directories:
+
+| Directory | Purpose |
+|---|---|
+| `scripts/` | All generated Python helper scripts |
+| `solutions/` | Solution exports (zip files, unpacked folders) |
+| `.venv/` | Python virtual environment |
+| `.config/` | .NET local tool manifest |
+
+Never dump scripts at the working directory root. A user opening the folder should see a clean, organized layout.
+
 ---
 
 ## What This Plugin Covers
