@@ -73,7 +73,25 @@ Dataverse uses two different naming conventions for properties. Getting this wro
 - **`@odata.bind` keys**: Navigation Property Name, case-sensitive (`new_AccountId@odata.bind`)
 - **Record payloads** (create/update data): lowercase logical names for regular fields; `@odata.bind` keys preserve the navigation property casing
 
-The SDK handles this correctly: it lowercases structural property keys but preserves `@odata.bind` key casing.
+The SDK handles casing differently depending on the code path:
+- **Single-record create** (`client.records.create(table, dict)`): Correctly lowercases structural keys while preserving `@odata.bind` key casing. ✅
+- **Bulk create** (`client.records.create(table, list)`): **Lowercases ALL keys including `@odata.bind` keys.** This is a known SDK bug — `CreateMultiple` turns `new_AccountId@odata.bind` into `new_accountid@odata.bind`, causing 400 errors. ⚠️
+
+**Workaround for bulk creates with lookups:** Use a single-record loop instead of passing a list:
+
+```python
+# WRONG — bulk create lowercases @odata.bind keys
+guids = client.records.create("new_interview", [
+    {"new_name": "Interview 1", "new_CandidateId@odata.bind": "/contacts(...)"},
+    ...
+])
+
+# CORRECT — single-record creates preserve @odata.bind casing
+for record in records:
+    client.records.create("new_interview", record)
+```
+
+Bulk create without `@odata.bind` keys (no lookups) works fine.
 
 ---
 
@@ -152,6 +170,15 @@ records = [{"new_name": f"Budget {i}"} for i in range(100)]
 guids = client.records.create("new_projectbudget", records)
 print(f"Created {len(guids)} records")
 ```
+
+> **⚠️ Bulk create + `@odata.bind`:** `CreateMultiple` lowercases all keys, including `@odata.bind` navigation property names. This causes 400 errors for records with lookup bindings. If your records contain `@odata.bind` keys, use a single-record loop instead:
+>
+> ```python
+> for record in records:
+>     client.records.create("new_projectbudget", record)
+> ```
+>
+> Bulk create without `@odata.bind` keys works correctly.
 
 ### Bulk update (broadcast same change to multiple records)
 ```python
@@ -409,6 +436,13 @@ for row in rows:
 guids = client.records.create("new_ticket", records)
 print(f"Created {len(guids)} tickets")
 ```
+
+> **⚠️ `@odata.bind` in bulk creates:** The CSV example above includes `@odata.bind` keys. Due to the `CreateMultiple` casing bug, this will fail. Use a single-record loop instead:
+>
+> ```python
+> for record in records:
+>     client.records.create("new_ticket", record)
+> ```
 
 ### Required field discovery
 
