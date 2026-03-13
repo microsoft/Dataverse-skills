@@ -283,23 +283,46 @@ Store this command as `CLAUDE_COMMAND` for use in step 9.
 
 Proceed to step 7.
 
-### 7. Confirm admin consent is granted
+### 7. Enable the MCP client in the environment
+
+The MCP client must be whitelisted in the Dataverse environment. There are two ways to do this — the PPAC portal method does NOT require Azure AD admin permissions and is the recommended approach for most users.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot or claude) from step 0
-- Scope (list possible options based on tool) from step 1
+- Tool type (Copilot or Claude) from step 0
+- Scope from step 1
 - Environment URL from step 4
 - Endpoint (GA or Preview) from step 5
+- MCP Client ID from step 0
 
-Ask the user if their Azure tenant administrator has granted admin consent for the MCP client ID to access the environment (which is a one-time action). If not, provide instructions to grant consent and share the following URL with them, replacing `{TENANT_ID}` with their tenant ID from `.env` and `{MCP_CLIENT_ID}` with the client ID determined in step 0:
+Then present both options:
 
-```
-https://login.microsoftonline.com/{TENANT_ID}/adminconsent?client_id={MCP_CLIENT_ID}
-```
+> The MCP client needs to be allowed in your Dataverse environment. This is a one-time setup.
+>
+> **Option A: Power Platform Admin Center (recommended — no Azure AD admin needed)**
+>
+> 1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/)
+> 2. Select **Environments** in the left navigation
+> 3. Click on your environment (e.g., `{environment name from USER_URL}`)
+> 4. Click **Settings** in the top toolbar
+> 5. Expand **Product** and click **Features**
+> 6. Scroll down to the **MCP Server** section
+> 7. Toggle **Enable MCP Server** to **On** (if not already)
+> 8. Under **Allowed clients**, click **Add client**
+> 9. Paste the MCP Client ID: `{MCP_CLIENT_ID}`
+> 10. Click **Save**
+>
+> **Option B: Admin consent URL (requires Azure AD Global Admin or Privileged Role Admin)**
+>
+> If you have Azure AD admin permissions, open this URL in your browser and click Accept:
+> ```
+> https://login.microsoftonline.com/{TENANT_ID}/adminconsent?client_id={MCP_CLIENT_ID}
+> ```
 
-### 8. Add the client ID to the allowed clients list
+Ask the user to confirm once they have completed either option, then proceed.
 
-Run the `scripts/enable-mcp-client.py` script to add the MCP client ID (from step 0) to the Allowed Clients list for the environment (which will require a new app registration when using the VSCode extension for Claude Code but will work with standard client IDs for Copilot and Claude CLI). Do not ask for user confirmation.
+### 8. Add the client ID to the allowed clients list (programmatic)
+
+If the user completed step 7 via the PPAC portal, this step may already be done. Attempt to run `scripts/enable-mcp-client.py` to verify or add the MCP client ID programmatically. If it reports the client is already enabled, continue. Do not ask for user confirmation.
 
 ### 9. Confirm success and provide next steps
 
@@ -364,8 +387,11 @@ If something goes wrong, help the user check:
 - The URL format is correct (`https://<org>.<region>.dynamics.com`)
 - They have access to the Dataverse environment
 - The environment URL matches what's shown in the Power Platform Admin Center
-- Their Environment Admin has enabled "Dataverse CLI MCP" in the Allowed Clients list
-- Their Environment has Dataverse MCP enabled, and if they're trying to use the preview endpoint that is enabled
+- The MCP client ID has been added to the environment's allowed clients list. To check or fix this:
+  1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/) > Environments > your environment > Settings > Product > Features
+  2. Verify **MCP Server** is toggled **On**
+  3. Verify the MCP Client ID appears under **Allowed clients**
+- If using the Preview endpoint, verify that the Preview MCP endpoint is also enabled in the same Features page
 - **If TOOL_TYPE is `copilot`:**
   - For project-scoped configuration, ensure the `.mcp/copilot/mcp.json` file was created successfully
   - For global configuration, check permissions on the `~/.copilot/` directory

@@ -44,22 +44,24 @@ The output is the tenant GUID. Use it directly in `.env`.
 
 ### 3. Create .env if missing
 
-Ask the user for each value, then write the file:
+Ask the user for `DATAVERSE_URL` and `SOLUTION_NAME`, then present the authentication choice clearly:
 
-```
-DATAVERSE_URL=https://<org>.crm.dynamics.com
-TENANT_ID=<guid>
-SOLUTION_NAME=<UniqueName>
-PAC_AUTH_PROFILE=nonprod
-CLIENT_ID=<app-registration-client-id>
-CLIENT_SECRET=<app-registration-secret>
-```
+**Prompt for values:**
+- `DATAVERSE_URL`: "What is your Dataverse environment URL?" (e.g., `https://myorg.crm10.dynamics.com`)
+- `TENANT_ID`: Auto-discover from the URL above. Only ask if discovery fails.
+- `SOLUTION_NAME`: "What is the unique name of your solution?" (allow skipping for now)
 
-How to prompt the user:
-- `DATAVERSE_URL`: "What is your Dataverse environment URL?"
-- `TENANT_ID`: Auto-discover from the URL above before asking. Only ask if discovery fails.
-- `SOLUTION_NAME`: "What is the unique name of your solution?"
-- `CLIENT_ID` / `CLIENT_SECRET`: Only needed for service principal auth. If the user authenticates via browser (interactive login), skip these. When omitted, auth.py uses interactive device code flow with AuthenticationRecord persistence (no browser re-prompt on subsequent runs).
+**Present authentication options — always ask this explicitly:**
+
+> How would you like to authenticate with Dataverse?
+>
+> 1. **Interactive login (recommended for personal use)** — Sign in via your browser. No app registration needed. You'll authenticate once and it stays cached.
+> 2. **Service principal (for CI/CD or shared environments)** — Uses a CLIENT_ID and CLIENT_SECRET from an Azure app registration. Required for unattended/automated scenarios.
+
+- If **Interactive**: skip `CLIENT_ID` and `CLIENT_SECRET`. `auth.py` uses device code flow with persistent token caching — no re-prompt on subsequent runs.
+- If **Service principal**: ask for `CLIENT_ID` and `CLIENT_SECRET`.
+
+The `.env` file format:
 
 Write the file directly — do not instruct the user to create it:
 

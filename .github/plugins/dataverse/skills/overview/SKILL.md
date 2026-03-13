@@ -29,7 +29,7 @@ ls .env scripts/auth.py 2>/dev/null
 ```
 
 - If BOTH exist: workspace is initialized. Proceed to the relevant task.
-- If EITHER is missing: **STOP. Run the init flow first** (see the init skill). Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The init skill handles all of this.
+- If EITHER is missing: **Automatically run the init flow** (see the init skill). Do NOT ask the user whether to initialize — just do it. Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The init skill handles all of this.
 
 Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The init flow produces the correct file structure. Skipping init is the #1 cause of broken setups.
 
