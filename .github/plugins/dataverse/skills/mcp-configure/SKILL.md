@@ -103,21 +103,48 @@ Skip this step - Claude uses CLI commands to manage MCP servers, so we don't nee
 
 If the user provided a URL via command parameters it is: '$ARGUMENTS'. If the user mentioned the URL in the prompt, use it. Otherwise, take the URL from the `DATAVERSE_URL` variable in `.env`. If you have the URL, skip to step 4.
 
-If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Offer to do that first using the `dataverse-init` skill, which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and ask the user:
+If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Offer to do that first using the `dataverse-init` skill, which will set up the necessary environment variables. If they refuse, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
 
-> How would you like to provide your Dataverse environment URL?
-> 1. **Auto-discover** — List available environments from your Azure account (requires Azure CLI)
-> 2. **Manual entry** — Enter the URL directly
+**Auto-discovery priority order** — try each method in order, stop at the first that succeeds:
 
-Based on their choice:
-- If **Auto-discover**: Proceed to step 3a
-- If **Manual entry**: Skip to step 3b
+1. **PAC CLI** (preferred) → step 3a
+2. **Azure CLI** (fallback) → step 3b
+3. **Manual entry** (last resort) → step 3c
 
-### 3a. Auto-discover environments
+### 3a. Auto-discover via PAC CLI (preferred)
+
+Check if PAC CLI is available:
+
+```
+pac --version
+```
+
+If available, check auth and list environments:
+
+```
+pac auth list
+pac org who
+pac env list
+```
+
+If PAC CLI is authenticated and `pac env list` returns results, present the environments to the user:
+
+> I found the following Dataverse environments via PAC CLI. Which one would you like to configure MCP for?
+>
+> 1. My Dev Org — `https://orgfbb52bb7.crm.dynamics.com`
+> 2. Another Env — `https://orgabc123.crm.dynamics.com`
+>
+> Or type a URL manually.
+
+If the user wants to create a new environment, they can do so via `pac admin create` (see the `dataverse-init` skill's Environment Discovery flow).
+
+If PAC CLI is not installed or not authenticated, fall back to step 3b.
+
+### 3b. Auto-discover via Azure CLI (fallback)
 
 **Check prerequisites:**
 - Verify Azure CLI (`az`) is installed (check with `which az` or `where az` on Windows)
-- If not installed, inform the user and fall back to step 3b
+- If not installed, inform the user and fall back to step 3c
 
 **Make the API call:**
 
@@ -167,11 +194,11 @@ Based on their choice:
 
 If the user selects an already-configured environment, confirm that they want to re-register it (e.g. to change the endpoint type) before proceeding.
 
-If the user types "manual", fall back to step 3b.
+If the user types "manual", fall back to step 3c.
 
-**If the API call fails** (user not logged in, network error, no environments found, or any other error), tell the user what went wrong and fall back to step 3b.
+**If the API call fails** (user not logged in, network error, no environments found, or any other error), tell the user what went wrong and fall back to step 3c.
 
-### 3b. Manual entry — ask for the URL
+### 3c. Manual entry — ask for the URL
 
 Ask the user to provide their environment URL directly:
 
