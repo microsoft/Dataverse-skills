@@ -42,8 +42,8 @@ Choose the configuration scope based on the tool. Use the scope explicitly menti
 **If TOOL_TYPE is `copilot`:**
 
 The options are:
-1. **Globally** (available in all projects)
-2. **Project-only** (default, available only in this project)
+1. **Globally** (default, available in all projects)
+2. **Project-only** (available only in this project)
 
 Based on the scope, set the `CONFIG_PATH` variable:
 - **Global**: `~/.copilot/mcp-config.json` (use the user's home directory)

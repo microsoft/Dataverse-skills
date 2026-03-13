@@ -32,6 +32,7 @@ copilot plugin install dataverse@awesome-copilot
 - **Templates** for CLAUDE.md project files
 
 ## Local development
+### Claude Code
 
 Test the plugin locally without installing from a marketplace:
 
@@ -49,10 +50,36 @@ claude --plugin-dir "c:/repos/Dataverse-Skills/.github/plugins/dataverse"
 
 The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
 
-For GitHub Copilot:
+### GitHub Copilot CLI
+
+#### Registering the local marketplace
+
+To register the local plugin marketplace from the cloned repository and install the plugin:
 
 ```bash
-copilot plugin install ./.github/plugins/dataverse
+copilot plugin marketplace add <path/to/repo>/Dataverse-skills
+copilot plugin install dataverse@dataverse-skills
+```
+
+To reinstall the plugin after pulling or making local changes:
+
+```bash
+copilot plugin uninstall dataverse@dataverse-skills
+copilot plugin install dataverse@dataverse-skills
+```
+
+#### Installing the local plugin directly
+
+To install the local version of the plugin directly without marketplace registration:
+
+```bash
+copilot plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+To uninstall it later (for reinstalling an updated version):
+
+```bash
+copilot plugin uninstall dataverse
 ```
 
 ## Contributing
