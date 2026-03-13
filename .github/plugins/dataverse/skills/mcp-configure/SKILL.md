@@ -3,7 +3,8 @@ name: dataverse-mcp-configure
 description: >
   Configure an MCP server for GitHub Copilot or Claude with your Dataverse environment.
   USE WHEN: "configure MCP", "set up MCP server", "MCP not working", "connect MCP to Dataverse",
-      "add Dataverse to Copilot", "add Dataverse to Claude".
+      "add Dataverse to Copilot", "add Dataverse to Claude",
+      "connect via MCP", "use MCP", "MCP tools not available", "no MCP tools", "MCP not configured".
   DO NOT USE WHEN: workspace not initialized (use dataverse-init first), installing tools (use dataverse-setup).
 ---
 

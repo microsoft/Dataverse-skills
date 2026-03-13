@@ -144,11 +144,23 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**When in doubt:** MCP for conversational data work (single records, simple queries) → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for metadata the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle.
+**When in doubt:** MCP tools not in your tool list? → Load `dataverse-mcp-configure` to set them up (see below). MCP for conversational data work (single records, simple queries) → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for metadata the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle.
 
 **Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use Python SDK `client.records.create(table, list_of_dicts)` — it uses `CreateMultiple` internally and handles batching. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill). For aggregation queries (`$apply`), use the Web API directly.
 
 Note: The Python SDK is in **preview** — breaking changes possible.
+
+### MCP Availability Check
+
+If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `list_tables`, `describe_table`, `read_query`, `create_record`).
+
+**If MCP tools are NOT available:**
+1. **Do NOT silently fall back** to the Python SDK or Web API
+2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
+3. Load the `dataverse-mcp-configure` skill to set up the MCP server
+4. After MCP is configured, the session must be restarted for MCP tools to appear
+
+**If MCP tools ARE available**, proceed normally with the user's task.
 
 ---
 

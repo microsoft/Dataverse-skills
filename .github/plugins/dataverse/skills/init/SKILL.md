@@ -173,7 +173,7 @@ Both should succeed without error. Confirm the environment URL in the output mat
 **Skip this step entirely** if any of the following are true:
 - `.mcp.json` already exists and contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server already registered
-- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP)
+- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP) **and** the user has not explicitly mentioned MCP or asked to connect via MCP
 
 If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
 
@@ -348,7 +348,7 @@ git commit -m "chore: initialize Dataverse workspace"
 
 - `.mcp.json` already exists and contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server already registered
-- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP)
+- The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP) **and** the user has not explicitly mentioned MCP or asked to connect via MCP
 
 If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
 
