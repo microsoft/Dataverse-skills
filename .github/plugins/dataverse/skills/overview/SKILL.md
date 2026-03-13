@@ -158,7 +158,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
 3. Load the `dataverse-mcp-configure` skill to set up the MCP server
-4. After MCP is configured, the session must be restarted for MCP tools to appear
+4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Do not fall back to the SDK or proceed with other tools. Wait for the user to restart and come back.
 
 **If MCP tools ARE available**, proceed normally with the user's task.
 

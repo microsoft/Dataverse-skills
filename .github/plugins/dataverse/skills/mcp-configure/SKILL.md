@@ -320,6 +320,8 @@ Tell the user:
 > - Create, update, or delete records
 > - Explore your schema and relationships
 
+Pause and give the user a chance to restart their editor before proceeding. Do not perform any subsequent or parallel operations until the user responds — they need MCP tools to be active first.
+
 **If TOOL_TYPE is `claude`:**
 
 Offer to the user to install the Dataverse MCP server by running {CLAUDE_COMMAND} and, if they agree, run the command and provide the following instructions:
