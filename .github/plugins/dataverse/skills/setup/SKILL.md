@@ -25,7 +25,7 @@ Check all in parallel. Install any that are missing.
 | Python 3 | `python --version` | `winget install Python.Python.3.12` |
 | Git | `git --version` | `winget install Git.Git` |
 
-After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal, then proceed.
+After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
 
 ### PAC CLI on Windows Git Bash
 

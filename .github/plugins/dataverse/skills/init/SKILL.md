@@ -15,10 +15,7 @@ description: >
 
 **Execute every numbered step in order.** Do not skip ahead to a later step, even if it appears more relevant to the user's immediate goal.
 
-**MCP setup exception:** MCP configuration (step 8 in Scenario A, step 11 in Scenario B) requires a Claude Code restart, which loses all session context. Therefore:
-- **Skip MCP setup entirely** if an MCP server is already configured (`.mcp.json` exists with a Dataverse server entry, or `claude mcp list` shows one).
-- **Defer MCP setup to the very last step** — after all scripts have been created and run, all metadata is live, and commits are done. This way the restart only loses the "done" state, not in-progress work.
-- Before triggering the restart, **write a brief status summary to `CLAUDE.md`** (or append to existing) so the next session knows what was completed.
+Do not skip MCP configuration (step 8 in Scenario A, step 11 in Scenario B) unless an MCP server is already configured (`.mcp.json` exists with a Dataverse server entry, or `claude mcp list` shows one).
 
 Two scenarios — handle both. But first, both scenarios share an environment discovery flow.
 
@@ -269,6 +266,7 @@ If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill
 Before triggering the MCP install command, inform the user:
 
 > MCP setup requires restarting Claude Code. All other setup steps are complete.
+> Remember to **use `claude --continue` to resume the session** without losing context.
 > After restart, you can verify MCP works by asking: "List the tables in my Dataverse environment."
 
 New machine setup is complete.
@@ -424,11 +422,12 @@ git commit -m "chore: initialize Dataverse workspace"
 - `claude mcp list` shows a `dataverse-*` server already registered
 - The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP) **and** the user has not explicitly mentioned MCP or asked to connect via MCP
 
-If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
+If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill.
 
 Before triggering the MCP install command, inform the user:
 
 > MCP setup requires restarting Claude Code. All other setup steps are complete — your solution, tables, and scripts are committed.
+> Remember to **use `claude --continue` to resume the session** without losing context.
 > After restart, you can verify MCP works by asking: "List the tables in my Dataverse environment."
 
 ---

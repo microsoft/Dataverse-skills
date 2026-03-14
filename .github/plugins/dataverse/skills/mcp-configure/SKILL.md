@@ -12,7 +12,7 @@ description: >
 
 This skill configures the Dataverse MCP server for GitHub Copilot or Claude with your organization's environment URL. Each organization is registered with a unique server name based on the org identifier (e.g., `DataverseMcporgbc9a965c`). 
 
-If at any point during the MCP configuration process you discover that the user has not initialized the Dataverse workspace yet, offer to do that first using the `dataverse-init` skill, which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP.
+If at any point during the MCP configuration process you discover that the user has not initialized the Dataverse workspace yet, do that first using the `dataverse-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP.
 
 The parameters for the MCP server should be determined from context or environment variables where possible, and interactive prompts should only be used when it cannot be done.
 
@@ -103,7 +103,7 @@ Skip this step - Claude uses CLI commands to manage MCP servers, so we don't nee
 
 If the user provided a URL via command parameters it is: '$ARGUMENTS'. If the user mentioned the URL in the prompt, use it. Otherwise, take the URL from the `DATAVERSE_URL` variable in `.env`. If you have the URL, skip to step 4.
 
-If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Offer to do that first using the `dataverse-init` skill, which will set up the necessary environment variables. If they refuse, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
+If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Do that first using the `dataverse-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If the user refuses, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
 
 **Auto-discovery priority order** — try each method in order, stop at the first that succeeds:
 
@@ -382,8 +382,9 @@ Pause and give the user a chance to restart their editor before proceeding. Do n
 
 **If TOOL_TYPE is `claude`:**
 
-Offer to the user to install the Dataverse MCP server by running {CLAUDE_COMMAND} and, if they agree, run the command and provide the following instructions:
+Run {CLAUDE_COMMAND} to install the Dataverse MCP server, then tell the user:
 > To enable the MCP server, restart Claude Code.
+> Remember to **use `claude --continue` to resume the session** without losing context.
 >
 > After restarting, you will be able to:
 > - List all tables in your Dataverse environment
@@ -391,32 +392,7 @@ Offer to the user to install the Dataverse MCP server by running {CLAUDE_COMMAND
 > - Create, update, or delete records
 > - Explore your schema and relationships
 
-If you installed the MCP server, pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
-
-Otherwise provide the command with instructions:
-> To install the Dataverse MCP server, exit claude and run:
->
-> ```
-> {CLAUDE_COMMAND}
-> ```
->
-> **Optional: Validate your authentication setup first**
->
-> Before running the install command, you can optionally verify your Dataverse authentication is configured correctly by running:
->
-> ```
-> npx -y @microsoft/dataverse@latest mcp "{USER_URL}" --validate
-> ```
->
-> This command will check your authentication and print any error information if issues are found.
->
-> Then restart Claude Code.
->
-> After restarting, you will be able to:
-> - List all tables in your Dataverse environment
-> - Query records from any table
-> - Create, update, or delete records
-> - Explore your schema and relationships
+Pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
 
 ### 10. Troubleshooting
 
@@ -437,10 +413,15 @@ If something goes wrong, help the user check:
 - **If TOOL_TYPE is `claude`:**
   - Ensure the `claude` CLI is installed and available in their PATH
   - If the command fails, check that `npx` and `npm` are installed
-  - After running the command, they must restart Claude Code for the changes to take effect
+  - After running the command, they must restart Claude Code for the changes to take effect (remind them: "Remember to **use `claude --continue` to resume the session** without losing context")
   - They can verify the installation with `claude mcp list`
   - If the MCP proxy version seems outdated or behaves unexpectedly, clear the npx cache and retry:
     ```
     npx clear-npx-cache
     ```
+  - To validate authentication independently, run:
+    ```
+    npx -y @microsoft/dataverse@latest mcp "{USER_URL}" --validate
+    ```
+    This checks credentials and prints error details if issues are found.
 
