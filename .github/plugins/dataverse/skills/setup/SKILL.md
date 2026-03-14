@@ -52,7 +52,7 @@ If `pac` works directly in your shell, skip the PowerShell wrapper — it's only
 
 After Python is confirmed available:
 ```
-pip install azure-identity requests PowerPlatform-Dataverse-Client
+pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client
 ```
 
 If `winget` is unavailable:

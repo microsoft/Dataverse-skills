@@ -99,7 +99,7 @@ def get_credential():
             TokenCachePersistenceOptions,
         )
     except ImportError:
-        print("ERROR: azure-identity not installed. Run: pip install azure-identity", flush=True)
+        print("ERROR: azure-identity not installed. Run: pip install --upgrade azure-identity", flush=True)
         sys.exit(1)
 
     # Warn if only one of CLIENT_ID / CLIENT_SECRET is set

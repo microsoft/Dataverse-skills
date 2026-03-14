@@ -439,4 +439,8 @@ If something goes wrong, help the user check:
   - If the command fails, check that `npx` and `npm` are installed
   - After running the command, they must restart Claude Code for the changes to take effect
   - They can verify the installation with `claude mcp list`
+  - If the MCP proxy version seems outdated or behaves unexpectedly, clear the npx cache and retry:
+    ```
+    npx clear-npx-cache
+    ```
 

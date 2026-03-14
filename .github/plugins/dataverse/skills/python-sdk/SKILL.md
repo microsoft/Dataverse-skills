@@ -21,7 +21,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for data o
 **Status:** Preview — breaking changes are possible
 
 ```
-pip install PowerPlatform-Dataverse-Client
+pip install --upgrade PowerPlatform-Dataverse-Client
 ```
 
 ---
@@ -475,7 +475,7 @@ For interactive analysis with visualizations.
 ### Prerequisites
 
 ```bash
-pip install PowerPlatform-Dataverse-Client pandas matplotlib seaborn azure-identity
+pip install --upgrade PowerPlatform-Dataverse-Client pandas matplotlib seaborn azure-identity
 ```
 
 ### Notebook structure
