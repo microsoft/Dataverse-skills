@@ -52,11 +52,13 @@ All scripts, data operations, and automation MUST use **Python**. This plugin's 
 
 If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read the python-sdk skill.
 
-### 2. Use the SDK, Not Raw HTTP — MANDATORY
+### 2. MCP → SDK → Web API (in that order)
 
-**NEVER use `requests`, `urllib`, or raw HTTP calls when the Python SDK supports the operation.** This is the most common mistake agents make. Before writing ANY script, check the SDK-first checklist below.
+**Before writing ANY code, ask: can MCP handle this?** If MCP tools are available in your tool list (`list_tables`, `describe_table`, `read_query`, `create_record`, etc.) and the task is a simple read, query, or small CRUD operation (≤10 records), **use MCP — no script needed.** Examples: "how many accounts have 'jeff' in the name?", "show me the columns on the contact table", "create an account named Contoso."
 
-**SDK-first checklist — evaluate EVERY time you write a script:**
+**If MCP can't handle it** (bulk operations, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
+
+**SDK checklist — evaluate EVERY time you write a script:**
 - Creating/reading/updating/deleting records? → `client.records.create()`, `.get()`, `.update()`, `.delete()`
 - Creating tables or columns? → `client.tables.create()`
 - Creating relationships? → `client.tables.create_lookup_field()` or `client.tables.create_many_to_many_relationship()`
@@ -66,7 +68,7 @@ If you find yourself about to run `npm` or create a `package.json`, STOP. You ar
 
 **If you are about to write `import requests` or `from auth import get_token` in a script, STOP.** Ask yourself: does the SDK support this operation? If yes, use `from auth import get_credential` + `DataverseClient` instead. The `get_token()` function exists ONLY for the narrow set of operations the SDK does not support.
 
-**Raw Web API is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use the SDK.
+**Raw Web API is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. The SDK handles this correctly for `@odata.bind` keys.
 
@@ -152,7 +154,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**When in doubt:** MCP tools not in your tool list? → Load `dataverse-mcp-configure` to set them up (see below). MCP for conversational data work (single records, simple queries) → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for metadata the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle.
+**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dataverse-mcp-configure` to set them up (see below).
 
 **Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use Python SDK `client.records.create(table, list_of_dicts)` — it uses `CreateMultiple` internally and handles batching. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill). For aggregation queries (`$apply`), use the Web API directly.
 
@@ -162,13 +164,17 @@ Note: The Python SDK is in **preview** — breaking changes possible.
 
 If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `list_tables`, `describe_table`, `read_query`, `create_record`).
 
-**If MCP tools are NOT available:**
+**If MCP tools are NOT available and the user explicitly asked for MCP:**
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
 3. Load the `dataverse-mcp-configure` skill to set up the MCP server
 4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"). Do not fall back to the SDK or proceed with other tools. Wait for the user to restart and come back.
 
-**If MCP tools ARE available**, proceed normally with the user's task.
+**If MCP tools are NOT available and the user asked a simple data question** (e.g., "how many accounts with 'jeff'?"):
+1. Answer the question using the Python SDK (don't block the user)
+2. After answering, suggest: "This would be even simpler with MCP configured — want me to set that up?"
+
+**If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
 
 ---
 

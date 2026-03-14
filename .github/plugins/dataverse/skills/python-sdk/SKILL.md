@@ -26,16 +26,21 @@ pip install --upgrade PowerPlatform-Dataverse-Client
 
 ---
 
-## SDK-First Rule — Read This Before Writing ANY Script
+## Before Writing ANY Script — Check MCP First
+
+**If MCP tools are available** (`list_tables`, `describe_table`, `read_query`, `create_record`) and the task is a simple query, single-record read, or small CRUD (≤10 records), **use MCP directly — no script needed.** Only write a Python script when the task requires bulk operations, multi-step logic, schema creation, or analytics.
+
+## SDK-First Rule — When You DO Write a Script
 
 **If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.** This is non-negotiable.
 
-**Before writing any Dataverse script, use this decision flow:**
+**Decision flow:**
 
-1. Does the operation involve records (CRUD, queries, bulk)? → **Use the SDK**
-2. Does it involve tables, columns, or relationships? → **Use the SDK**
-3. Does it involve publishers or solutions? → **Use the SDK** (these are standard Dataverse tables)
-4. Does it involve forms, views, option sets, N:N `$ref`, or `$apply`? → **Use raw Web API** (SDK doesn't support these)
+1. Can MCP handle this without a script? → **Use MCP** (simple reads, queries, ≤10 record CRUD)
+2. Does the operation involve records (CRUD, queries, bulk)? → **Use the SDK**
+3. Does it involve tables, columns, or relationships? → **Use the SDK**
+4. Does it involve publishers or solutions? → **Use the SDK** (these are standard Dataverse tables)
+5. Does it involve forms, views, option sets, N:N `$ref`, or `$apply`? → **Use raw Web API** (SDK doesn't support these)
 
 **Correct imports for SDK scripts:**
 ```python
