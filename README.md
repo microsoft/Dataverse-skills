@@ -9,10 +9,7 @@ Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skill
 ## Prerequisites
 
 - **Microsoft Dataverse** environment (included with Power Apps, Dynamics 365, or Power Platform)
-- **System Administrator** or **System Customizer** security role
-- **Python 3.10+** with `pip`
-- **PAC CLI** ([Power Platform CLI](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction))
-- **Node.js 18+** (for the MCP proxy)
+- **Python 3.10+** and **Node.js 18+**
 
 ## Getting Started
 
