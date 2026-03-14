@@ -241,14 +241,14 @@ pages = client.records.get(
 views = [v for page in pages for v in page]
 ```
 
-### Check a user's role assignment
+### Check a user's role assignment (Web API only)
 
-N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. Use the Web API:
+N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. This is one of the few cases where raw Web API is required:
 
 ```python
-# Web API fallback for N:N expand
+# Web API required — SDK does not support N:N $expand
 import urllib.request, json
-from auth import get_token
+from auth import get_token  # get_token() is correct here — SDK can't do this
 
 token = get_token()
 url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"

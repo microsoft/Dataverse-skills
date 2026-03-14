@@ -383,14 +383,14 @@ rm ./solutions/<SOLUTION_NAME>.zip
 If the user wants sample data for testing (accounts, contacts, opportunities), use the built-in Dataverse sample data feature:
 
 ```python
+import os, urllib.request
 from PowerPlatform.Dataverse.client import DataverseClient
 from auth import get_credential, load_env
-import requests, os
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
 
-# Check if already installed
+# Check if already installed (SDK)
 client = DataverseClient(base_url=env_url, credential=get_credential())
 pages = client.records.get(
     "organization",
@@ -401,19 +401,21 @@ orgs = [o for page in pages for o in page]
 if orgs and orgs[0].get("sampledataimported"):
     print("Demo data is already installed.")
 else:
-    # Install via Web API action (SDK doesn't support unbound actions)
+    # Web API required — SDK does not support unbound actions
     from auth import get_token
     token = get_token()
-    resp = requests.post(
+    req = urllib.request.Request(
         f"{env_url}/api/data/v9.2/InstallSampleData",
+        data=b"{}",
         headers={
             "Authorization": f"Bearer {token}",
             "OData-MaxVersion": "4.0",
             "OData-Version": "4.0",
             "Content-Type": "application/json",
         },
+        method="POST",
     )
-    resp.raise_for_status()
+    urllib.request.urlopen(req)
     print("Demo data installation started. Takes 2-10 minutes.")
 ```
 

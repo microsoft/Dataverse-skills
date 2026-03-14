@@ -52,13 +52,21 @@ All scripts, data operations, and automation MUST use **Python**. This plugin's 
 
 If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read the python-sdk skill.
 
-### 2. Use the SDK, Not Raw HTTP
+### 2. Use the SDK, Not Raw HTTP — MANDATORY
 
-For data operations (CRUD, bulk, queries) and schema operations (table/column/relationship creation), use the Python Dataverse SDK — not raw `requests`/`urllib` calls. The SDK handles auth, URL encoding, pagination, retries, and batching. See the python-sdk skill for correct patterns.
+**NEVER use `requests`, `urllib`, or raw HTTP calls when the Python SDK supports the operation.** This is the most common mistake agents make. Before writing ANY script, check the SDK-first checklist below.
 
-**This includes publisher and solution records** — they are standard Dataverse tables. Use `client.records.create("publisher", {...})` and `client.records.create("solution", {...})`, not raw HTTP.
+**SDK-first checklist — evaluate EVERY time you write a script:**
+- Creating/reading/updating/deleting records? → `client.records.create()`, `.get()`, `.update()`, `.delete()`
+- Creating tables or columns? → `client.tables.create()`
+- Creating relationships? → `client.tables.create_lookup_field()` or `client.tables.create_many_to_many_relationship()`
+- Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})`
+- Bulk operations? → `client.records.create(table, [list_of_dicts])`
+- Querying with $select/$filter/$expand? → `client.records.get()` with `select=`, `filter=`, `expand=`
 
-Only fall back to raw Web API for: forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
+**If you are about to write `import requests` or `from auth import get_token` in a script, STOP.** Ask yourself: does the SDK support this operation? If yes, use `from auth import get_credential` + `DataverseClient` instead. The `get_token()` function exists ONLY for the narrow set of operations the SDK does not support.
+
+**Raw Web API is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use the SDK.
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. The SDK handles this correctly for `@odata.bind` keys.
 

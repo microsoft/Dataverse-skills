@@ -18,15 +18,15 @@ Functions:
   get_token(scope=None) — returns a raw access token string
 
 Usage:
-    # For Web API scripts that need a Bearer token:
-    from auth import get_token, load_env
-    token = get_token()
-
-    # For scripts using the Dataverse Python SDK:
+    # PREFERRED — use the Python SDK for all supported operations:
     from auth import get_credential, load_env
     from PowerPlatform.Dataverse.client import DataverseClient
     load_env()
     client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
+    # ONLY for operations the SDK does NOT support (forms, views, $ref, $apply):
+    from auth import get_token, load_env
+    token = get_token()
 
 Reads from .env in the repo root (parent of scripts/) or current working directory:
     DATAVERSE_URL      — required

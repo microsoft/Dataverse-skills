@@ -33,9 +33,18 @@ The only time you write files directly is when editing something that already ex
 
 ## Creating a Table
 
-**SDK approach (preferred for simple tables):**
+**ALWAYS use the SDK unless you need full control over OwnershipType, HasActivities, or other advanced properties.** Do NOT use `requests` or `urllib` for table creation when the SDK can handle it.
+
+**SDK approach (use this by default):**
 
 ```python
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+import os
+
+load_env()
+client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
 info = client.tables.create(
     "new_ProjectBudget",
     {"new_Amount": "decimal", "new_Description": "string"},
@@ -45,7 +54,7 @@ info = client.tables.create(
 print(f"Created: {info['table_schema_name']}")
 ```
 
-**Web API approach (needed for full control — OwnershipType, HasActivities, etc.):**
+**Web API fallback (ONLY when you need OwnershipType, HasActivities, or other properties the SDK doesn't expose):**
 
 ```python
 # Helper for Label boilerplate

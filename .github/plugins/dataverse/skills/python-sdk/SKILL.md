@@ -26,6 +26,33 @@ pip install --upgrade PowerPlatform-Dataverse-Client
 
 ---
 
+## SDK-First Rule — Read This Before Writing ANY Script
+
+**If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.** This is non-negotiable.
+
+**Before writing any Dataverse script, use this decision flow:**
+
+1. Does the operation involve records (CRUD, queries, bulk)? → **Use the SDK**
+2. Does it involve tables, columns, or relationships? → **Use the SDK**
+3. Does it involve publishers or solutions? → **Use the SDK** (these are standard Dataverse tables)
+4. Does it involve forms, views, option sets, N:N `$ref`, or `$apply`? → **Use raw Web API** (SDK doesn't support these)
+
+**Correct imports for SDK scripts:**
+```python
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+```
+
+**WRONG — do NOT use for SDK-supported operations:**
+```python
+from auth import get_token, load_env  # WRONG for SDK-supported ops
+import requests  # WRONG for SDK-supported ops
+```
+
+`get_token()` and `requests` exist ONLY for the narrow set of operations listed in "What This SDK Does NOT Support" below.
+
+---
+
 ## What This SDK Supports
 
 - Data CRUD: create, read, update, delete records
@@ -34,30 +61,26 @@ pip install --upgrade PowerPlatform-Dataverse-Client
 - OData queries: `select`, `filter`, `orderby`, `expand`, `top`, paging
 - SQL queries (read-only, via Web API `?sql=` parameter)
 - Table create, delete, and metadata (`tables.get()`, `tables.list()`)
-- Relationship metadata: create/delete 1:N and N:N relationship definitions
+- Relationship metadata: create/delete 1:N and N:N relationship **definitions** (schema-level)
 - Alternate key management
 - File column uploads (chunked for files >128MB)
 - Context manager support with HTTP connection pooling
 
 ## What This SDK Does NOT Support
 
+These are the ONLY operations where raw Web API (`get_token()` + `urllib`/`requests`) is acceptable:
+
 - **Forms** (FormXml) — use the Web API directly (see `dataverse-metadata`)
 - **Views** (SavedQueries) — use the Web API directly
-- **Option sets** — use the Web API directly
-- **N:N record association** ($ref linking for N:N data, e.g., role assignments) — use the Web API directly
+- **Global option sets** — use the Web API directly
+- **N:N record association** (linking two records at runtime via `$ref` POST — distinct from N:N relationship *creation*, which the SDK handles)
+- **N:N `$expand`** (collection-valued navigation) — use the Web API directly
+- **`$apply` aggregation** — use the Web API directly (or pull data with SDK + pandas)
+- **Memo columns** — use the Web API directly
+- **Unbound actions** (e.g., `InstallSampleData`) — use the Web API directly
 - DeleteMultiple, general OData batching
 
-For anything not in the "supports" list above, write a Web API script using `scripts/auth.py` for token acquisition.
-
-### SDK-First Rule
-
-**If an operation is in the "supports" list, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.** This applies to:
-- **All record CRUD** (create, read, update, delete) — use `client.records.create()`, `.get()`, `.update()`, `.delete()`
-- **All queries** with `$select`, `$filter`, `$orderby`, `$expand` on 1:N lookups — use `client.records.get()` with `select=`, `filter=`, `expand=`, `orderby=`
-- **Bulk operations** — pass a list to `client.records.create(table, [list])` instead of looping with individual HTTP POSTs
-- **Publisher and solution records** — these are standard Dataverse tables; use `client.records.create("publisher", {...})` and `client.records.create("solution", {...})`
-
-Raw HTTP is only acceptable for: forms, views, option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
+For anything not in this list, **use the SDK**. For anything in this list, use `scripts/auth.py` `get_token()` for token acquisition.
 
 ### Field Name Casing Rule
 
@@ -313,14 +336,14 @@ for page in client.records.get(
 
 > **Important:** `expand` uses the navigation property name (case-sensitive, e.g., `new_AccountId`), not the lowercase logical name (`new_accountid`). Using lowercase causes a 400 error.
 
-### $expand on N:N relationships
+### $expand on N:N relationships (Web API only)
 
-N:N expand uses the relationship navigation property name (found in the ManyToManyRelationships metadata). The SDK does **not** support `$expand` on N:N collection-valued navigation properties in multi-record queries. For N:N traversal, use the Web API directly:
+The SDK does **not** support `$expand` on N:N collection-valued navigation properties. This is one of the few cases where raw Web API is required:
 
 ```python
-# Fall back to Web API for N:N expand
+# Web API required — SDK does not support N:N $expand
 import urllib.request, json
-from auth import get_token
+from auth import get_token  # get_token() is correct here — SDK can't do this
 
 token = get_token()
 url = f"{env}/api/data/v9.2/new_projectdocuments?$select=new_title&$expand=new_ProjectBudget_Documents($select=new_name)"
@@ -422,14 +445,15 @@ Before bulk-creating records in a **system table** (account, contact, opportunit
 
 ---
 
-## Aggregation Queries (Web API $apply)
+## Aggregation Queries
 
-The SDK does not support OData `$apply` for aggregation. Use the Web API directly for GROUP BY, COUNT, SUM, AVG, etc.:
+For simple aggregation, pull data with the SDK and use pandas (preferred). For server-side `$apply` aggregation, the SDK does not support it — use the Web API:
 
 ```python
+# Web API required — SDK does not support $apply
 import os, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env
+from auth import get_token, load_env  # get_token() is correct here — SDK can't do this
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
