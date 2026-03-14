@@ -23,6 +23,13 @@ Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skill
 ### GitHub Copilot
 
 ```bash
+copilot plugin marketplace add microsoft/Dataverse-skills
+copilot plugin install dataverse@dataverse-skills
+```
+
+Or via [awesome-copilot](https://github.com/github/awesome-copilot):
+
+```bash
 copilot plugin install dataverse@awesome-copilot
 ```
 
@@ -34,6 +41,12 @@ copilot plugin install dataverse@awesome-copilot
 - **Templates** for CLAUDE.md project files
 
 ## Local Development
+
+Clone the repository first:
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+```
 
 ### Testing with Claude Code
 
