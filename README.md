@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Agent skills and MCP configuration for [Microsoft Dataverse](https://aka.ms/DVinWorkIQLearnMore) — works with Claude Code and GitHub Copilot. These skills teach AI agents how to create tables, columns, relationships, solutions, and queries in Dataverse using the Python SDK and PAC CLI.
+Agent skills and MCP configuration for [Microsoft Dataverse](https://aka.ms/DVinWorkIQLearnMore) — works with Claude Code and GitHub Copilot. These skills teach AI agents how to build and manage Dataverse solutions using natural language.
 
 Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) folder for the full catalog.
 
