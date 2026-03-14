@@ -1,0 +1,8 @@
+# CODEOWNERS for Dataverse Skills
+# This file defines who gets automatically requested for review when PRs are opened.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global ownership - fallback for any files not covered by more specific rules
+* @microsoft/dataverse-skills-maintainers
+#   Team is found here:
+#   https://github.com/orgs/microsoft/teams/dataverse-skills-maintainers
