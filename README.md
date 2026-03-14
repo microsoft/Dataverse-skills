@@ -1,37 +1,57 @@
-# Dataverse-skills
+# Dataverse Skills
 
-Agent skills and MCP configuration for Microsoft Dataverse — works with Claude Code and GitHub Copilot.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Install
+Agent skills and MCP configuration for [Microsoft Dataverse](https://aka.ms/DVinWorkIQLearnMore) — works with Claude Code and GitHub Copilot. These skills teach AI agents how to create tables, columns, relationships, solutions, and queries in Dataverse using the Python SDK and PAC CLI.
 
-### Claude Code
+Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) folder for the full catalog.
 
+## Prerequisites
+
+- **Microsoft Dataverse** environment (included with Power Apps, Dynamics 365, or Power Platform)
+- **System Administrator** or **System Customizer** security role
+- **Python 3.10+** with `pip`
+- **PAC CLI** ([Power Platform CLI](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction))
+- **Node.js 18+** (for the MCP proxy)
+
+## Getting Started
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+cd Dataverse-skills
 ```
+
+### Install with Claude Code
+
+```bash
 /plugin marketplace add microsoft/Dataverse-skills
 /plugin install dataverse@dataverse-skills
 ```
 
-### GitHub Copilot
+### Install with GitHub Copilot
 
-```
+```bash
 copilot plugin marketplace add microsoft/Dataverse-skills
 copilot plugin install dataverse@microsoft/Dataverse-skills
 ```
 
 Once the repo is publicly listed in [awesome-copilot](https://github.com/github/awesome-copilot), install simplifies to:
 
-```
+```bash
 copilot plugin install dataverse@awesome-copilot
 ```
 
-## What's included
+## What's Included
 
 - **7 skills** covering machine setup, workspace init, metadata authoring, solution management, Python SDK, MCP configuration, and demo data
 - **MCP server** configuration for Dataverse Web API access
 - **Scripts** for authentication and MCP client enablement
 - **Templates** for CLAUDE.md project files
 
-## Local development
+## Local Development
+
 ### Claude Code
 
 Test the plugin locally without installing from a marketplace:
@@ -42,7 +62,7 @@ mkdir my-test-project
 cd my-test-project
 
 # 2. Launch Claude Code with the plugin loaded from your local clone
-claude --plugin-dir "c:/repos/Dataverse-Skills/.github/plugins/dataverse"
+claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 
 # 3. Start with a natural language prompt, e.g.:
 #    "Create a support ticket table with customer and agent lookups"
@@ -51,8 +71,6 @@ claude --plugin-dir "c:/repos/Dataverse-Skills/.github/plugins/dataverse"
 The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
 
 ### GitHub Copilot CLI
-
-#### Registering the local marketplace
 
 To register the local plugin marketplace from the cloned repository and install the plugin:
 
@@ -68,28 +86,29 @@ copilot plugin uninstall dataverse@dataverse-skills
 copilot plugin install dataverse@dataverse-skills
 ```
 
-#### Installing the local plugin directly
-
-To install the local version of the plugin directly without marketplace registration:
+To install the local version directly without marketplace registration:
 
 ```bash
 copilot plugin install <path/to/repo>/.github/plugins/dataverse
 ```
 
-To uninstall it later (for reinstalling an updated version):
-
-```bash
-copilot plugin uninstall dataverse
-```
-
 ## Contributing
 
-This project welcomes contributions and suggestions. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+We welcome contributions — new skills, improvements to existing ones, and bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE).
 
-## Security
+## Code of Conduct
 
-See [SECURITY.md](SECURITY.md) for reporting security vulnerabilities.
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
