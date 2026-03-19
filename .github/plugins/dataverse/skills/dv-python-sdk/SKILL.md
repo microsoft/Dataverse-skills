@@ -1,13 +1,13 @@
 ---
-name: dataverse-python-sdk
+name: dv-python-sdk
 description: >
   Use the official Microsoft Dataverse Python SDK for data operations.
   USE WHEN: "use the SDK", "query records", "create records", "bulk operations", "upsert",
   "Python script for Dataverse", "read data", "write data", "upload file",
   "bulk import", "CSV import", "load data", "data profiling", "data quality",
   "analyze data", "Jupyter notebook", "pandas", "notebook".
-  DO NOT USE WHEN: creating forms/views (use dataverse-metadata with Web API),
-  exporting solutions (use dataverse-solution with PAC CLI).
+  DO NOT USE WHEN: creating forms/views (use dv-metadata with Web API),
+  exporting solutions (use dv-solution with PAC CLI).
 ---
 
 # Skill: Python SDK
@@ -75,7 +75,7 @@ import requests  # WRONG for SDK-supported ops
 
 These are the ONLY operations where raw Web API (`get_token()` + `urllib`/`requests`) is acceptable:
 
-- **Forms** (FormXml) — use the Web API directly (see `dataverse-metadata`)
+- **Forms** (FormXml) — use the Web API directly (see `dv-metadata`)
 - **Views** (SavedQueries) — use the Web API directly
 - **Global option sets** — use the Web API directly
 - **N:N record association** (linking two records at runtime via `$ref` POST — distinct from N:N relationship *creation*, which the SDK handles)

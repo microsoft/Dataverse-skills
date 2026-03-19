@@ -1,5 +1,5 @@
 ---
-name: dataverse-overview
+name: dv-overview
 description: >
   ALWAYS LOAD THIS SKILL FIRST for any Dataverse task. Contains hard rules that override all other skills.
   USE WHEN: ANY request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions,
@@ -154,7 +154,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dataverse-mcp-configure` to set them up (see below).
+**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-mcp-configure` to set them up (see below).
 
 **Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use Python SDK `client.records.create(table, list_of_dicts)` — it uses `CreateMultiple` internally and handles batching. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill). For aggregation queries (`$apply`), use the Web API directly.
 
@@ -167,7 +167,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 **If MCP tools are NOT available and the user explicitly asked for MCP:**
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
-3. Load the `dataverse-mcp-configure` skill to set up the MCP server
+3. Load the `dv-mcp-configure` skill to set up the MCP server
 4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"). Do not fall back to the SDK or proceed with other tools. Wait for the user to restart and come back.
 
 **If MCP tools are NOT available and the user asked a simple data question** (e.g., "how many accounts with 'jeff'?"):
