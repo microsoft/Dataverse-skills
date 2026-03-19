@@ -1,16 +1,4 @@
----
-name: dv-setup
-description: >
-  Set up a machine for Dataverse development — install tools and authenticate.
-  USE WHEN: "install PAC CLI", "install tools", "command not found", "authenticate",
-  "pac auth", "az login", "gh auth", "winget install", "setup machine",
-  "missing tools", "new machine setup".
-  DO NOT USE WHEN: initializing a workspace/repo (use dv-init).
----
-
-# Skill: Setup
-
-Detect and install required tools on a new machine, then authenticate. Always run this check at the start of a fresh session or when a tool call fails with "command not found."
+# Tool Installation & Authentication Reference
 
 ## Required Tools
 
@@ -50,12 +38,15 @@ source ~/.bashrc
 
 If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
+### Python SDK
+
 After Python is confirmed available:
 ```
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client
 ```
 
-If `winget` is unavailable:
+### If winget is unavailable
+
 - PAC CLI: `dotnet tool install --global Microsoft.PowerApps.CLI.Tool`
 - GitHub CLI: download from https://cli.github.com
 - Azure CLI: download from https://aka.ms/installazurecliwindows
@@ -110,14 +101,12 @@ pac auth list
 pac org who
 ```
 
-`pac org who` shows the environment URL and tenant ID the active profile is connected to. Confirm this matches your dev tenant.
-
 To switch between profiles:
 ```
 pac auth activate --name <profile-name>
 ```
 
-Name profiles to reflect the environment they target (e.g., `dev`, `staging`, `prod`, `contoso-dev`) — not generic names like `nonprod`. This makes it unambiguous which environment is active when running `pac auth list`.
+Name profiles to reflect the environment they target (e.g., `dev`, `staging`, `prod`, `contoso-dev`).
 
 **When starting any deployment task:** run `pac auth list` and `pac org who`, show the output to the user, and confirm this is the environment they want to target before proceeding.
 
@@ -141,9 +130,9 @@ gh api user --jq .login
 
 ---
 
-### Azure CLI (needed for CI/CD setup only — skip until Step 8)
+### Azure CLI (needed for CI/CD setup only — skip until needed)
 
-For a non-prod or separate tenant, always specify the tenant explicitly to avoid defaulting to your corporate tenant:
+For a non-prod or separate tenant, always specify the tenant explicitly:
 
 ```
 az login --tenant <TENANT_ID>
@@ -154,12 +143,18 @@ Confirm the tenant ID in the output matches your dev tenant before proceeding.
 
 ---
 
-## GitHub Copilot CLI vs Claude Code CLI
+## PAC CLI PATH setup
 
-This plugin's skill files are natively loaded by **Claude Code CLI** (installed as a plugin).
+Find the path (this may be slow, wait for it to finish):
 
-For **GitHub Copilot CLI** (`gh copilot suggest`), the skill files are not auto-loaded. To use them as context:
-- In VS Code with Copilot agent mode: open the relevant skill file and use `#` to attach it as context
-- In `gh copilot suggest`: paste the relevant section of the skill into your prompt, or reference the file path
+```bash
+find /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI -name "pac.exe" 2>/dev/null
+find /c/Users/$USER/.dotnet/tools -name "pac" 2>/dev/null
+```
 
-The PAC CLI commands, Python scripts, and XML templates work identically in both environments — only the context-loading mechanism differs.
+Add to `~/.bashrc` (for Git Bash / Claude Code):
+
+```bash
+echo 'export PATH="$PATH:/c/Users/$USER/.dotnet/tools"' >> ~/.bashrc
+source ~/.bashrc
+```
