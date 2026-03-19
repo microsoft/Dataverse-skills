@@ -33,7 +33,7 @@ Check all tools in parallel. Install any that are missing. See [tools-setup.md](
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
-Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
+.NET SDK is needed for PAC CLI but NOT for the MCP proxy (the npm package bundles its own runtime). Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
 
 If any tool is missing, install it (see [tools-setup.md](references/tools-setup.md)), then verify. If `winget` installs a tool but it's not in PATH, ask the user to restart the terminal.
 
@@ -201,8 +201,15 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 
 ## Step 7: Final verification
 
-After the editor/CLI restarts, verify MCP works:
+After the editor/CLI restarts, verify MCP works.
 
+**Programmatic check (preferred):**
+```
+npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
+```
+This tests both GA and Preview endpoints, verifies authentication, and reports detailed errors without starting the server. If it passes, MCP is correctly configured.
+
+**Agent check (alternative):**
 > "Try asking: 'List the tables in my Dataverse environment.'"
 
 If `list_tables` is called directly → MCP is connected. If the agent falls back to PAC CLI or Web API → see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting section.
