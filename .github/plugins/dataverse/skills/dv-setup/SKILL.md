@@ -1,11 +1,11 @@
 ---
-name: dataverse-setup
+name: dv-setup
 description: >
   Set up a machine for Dataverse development — install tools and authenticate.
   USE WHEN: "install PAC CLI", "install tools", "command not found", "authenticate",
   "pac auth", "az login", "gh auth", "winget install", "setup machine",
   "missing tools", "new machine setup".
-  DO NOT USE WHEN: initializing a workspace/repo (use dataverse-init).
+  DO NOT USE WHEN: initializing a workspace/repo (use dv-init).
 ---
 
 # Skill: Setup

@@ -1,12 +1,12 @@
 ---
-name: dataverse-init
+name: dv-init
 description: >
   Initialize a Dataverse workspace on a new machine or new repo.
   USE WHEN: ".env is missing", "setting up on a new machine", "starting a new project",
   "initialize workspace", "new repo", "first time setup", "configure MCP server",
   "MCP not connected", "load demo data", "sample data",
   "create a new environment", "select environment", "which environment".
-  DO NOT USE WHEN: installing tools (use dataverse-setup).
+  DO NOT USE WHEN: installing tools (use dv-setup).
 ---
 
 # Skill: Init
@@ -268,7 +268,7 @@ Both should succeed without error. Confirm the environment URL in the output mat
 
 **Defer (but don't skip)** if the user's immediate task can proceed without MCP (e.g., schema creation via SDK, solution import via PAC CLI). Complete the task first, then offer to configure MCP — it makes future conversational queries (reads, simple CRUD) much faster.
 
-If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
+If MCP is needed and not yet configured, use the `dv-mcp-configure` skill. **This is always the last step** because `claude mcp add` requires a Claude Code restart, which ends the current session.
 
 Before triggering the MCP install command, inform the user:
 
@@ -349,7 +349,7 @@ Continue to the next steps.
 
 **This is where changes go into Dynamics first — never into the repo directly.**
 
-Write and run `scripts/create_solution.py` to create the publisher and solution in the environment using the Python SDK. The script **must** follow the publisher discovery flow from the `dataverse-solution` skill:
+Write and run `scripts/create_solution.py` to create the publisher and solution in the environment using the Python SDK. The script **must** follow the publisher discovery flow from the `dv-solution` skill:
 
 1. **Query existing publishers** in the environment (excluding Microsoft system publishers)
 2. **If a custom publisher exists**, show it to the user and ask: "Should I reuse this publisher (prefix: `<prefix>_`)?"
@@ -437,7 +437,7 @@ git commit -m "chore: initialize Dataverse workspace"
 - `claude mcp list` shows a `dataverse-*` server already registered
 - The user's immediate task does not require MCP (e.g., they asked to create tables, import data, or build a solution — all of which use the SDK or PAC CLI, not MCP) **and** the user has not explicitly mentioned MCP or asked to connect via MCP
 
-If MCP is needed and not yet configured, use the `dataverse-mcp-configure` skill.
+If MCP is needed and not yet configured, use the `dv-mcp-configure` skill.
 
 Before triggering the MCP install command, inform the user:
 
@@ -464,9 +464,9 @@ If the agent calls `list_tables` directly, MCP is connected. If it falls back to
 | Create/read/update/delete data records | MCP server |
 | Create a new table | MCP server |
 | Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
-| Add a column to an existing table | Web API (see `dataverse-metadata`) |
-| Create a relationship / lookup | Web API (see `dataverse-metadata`) |
-| Create or modify a form | Web API (see `dataverse-metadata`) |
-| Create or modify a view | Web API (see `dataverse-metadata`) |
+| Add a column to an existing table | Web API (see `dv-metadata`) |
+| Create a relationship / lookup | Web API (see `dv-metadata`) |
+| Create or modify a form | Web API (see `dv-metadata`) |
+| Create or modify a view | Web API (see `dv-metadata`) |
 
 For anything beyond data CRUD and basic table operations, use the Web API directly.

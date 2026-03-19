@@ -1,12 +1,12 @@
 ---
-name: dataverse-metadata
+name: dv-metadata
 description: >
   Create or modify Dataverse tables, columns, relationships, forms, and views.
   USE WHEN: "add column", "create table", "add relationship", "lookup column", "create form",
   "create view", "modify form", "FormXml", "SavedQuery", "option set", "picklist",
   "MetadataService", "EntityDefinitions".
-  DO NOT USE WHEN: reading/writing data records (use dataverse-python-sdk),
-  exporting solutions (use dataverse-solution).
+  DO NOT USE WHEN: reading/writing data records (use dv-python-sdk),
+  exporting solutions (use dv-solution).
 ---
 
 # Skill: Metadata — Making Changes

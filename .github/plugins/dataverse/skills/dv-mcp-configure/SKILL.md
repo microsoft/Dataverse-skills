@@ -1,18 +1,18 @@
 ---
-name: dataverse-mcp-configure
+name: dv-mcp-configure
 description: >
   Configure an MCP server for GitHub Copilot or Claude with your Dataverse environment.
   USE WHEN: "configure MCP", "set up MCP server", "MCP not working", "connect MCP to Dataverse",
       "add Dataverse to Copilot", "add Dataverse to Claude",
       "connect via MCP", "use MCP", "MCP tools not available", "no MCP tools", "MCP not configured".
-  DO NOT USE WHEN: workspace not initialized (use dataverse-init first), installing tools (use dataverse-setup).
+  DO NOT USE WHEN: workspace not initialized (use dv-init first), installing tools (use dv-setup).
 ---
 
 # Configure Dataverse MCP for GitHub Copilot or Claude
 
 This skill configures the Dataverse MCP server for GitHub Copilot or Claude with your organization's environment URL. Each organization is registered with a unique server name based on the org identifier (e.g., `DataverseMcporgbc9a965c`). 
 
-If at any point during the MCP configuration process you discover that the user has not initialized the Dataverse workspace yet, do that first using the `dataverse-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP.
+If at any point during the MCP configuration process you discover that the user has not initialized the Dataverse workspace yet, do that first using the `dv-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP.
 
 The parameters for the MCP server should be determined from context or environment variables where possible, and interactive prompts should only be used when it cannot be done.
 
@@ -34,7 +34,7 @@ Based on the result, set the `TOOL_TYPE` variable to either `copilot` or `claude
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
 - If `claude`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457`
-- If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following Scenario A, step 7 in the `dataverse-init` skill.
+- If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following Scenario A, step 7 in the `dv-init` skill.
 
 ### 1. Determine the MCP scope
 
@@ -103,7 +103,7 @@ Skip this step - Claude uses CLI commands to manage MCP servers, so we don't nee
 
 If the user provided a URL via command parameters it is: '$ARGUMENTS'. If the user mentioned the URL in the prompt, use it. Otherwise, take the URL from the `DATAVERSE_URL` variable in `.env`. If you have the URL, skip to step 4.
 
-If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Do that first using the `dataverse-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If the user refuses, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
+If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Do that first using the `dv-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If the user refuses, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
 
 **Auto-discovery priority order** — try each method in order, stop at the first that succeeds:
 
@@ -136,7 +136,7 @@ If PAC CLI is authenticated and `pac env list` returns results, present the envi
 >
 > Or type a URL manually.
 
-If the user wants to create a new environment, they can do so via `pac admin create` (see the `dataverse-init` skill's Environment Discovery flow).
+If the user wants to create a new environment, they can do so via `pac admin create` (see the `dv-init` skill's Environment Discovery flow).
 
 If PAC CLI is not installed or not authenticated, fall back to step 3b.
 
