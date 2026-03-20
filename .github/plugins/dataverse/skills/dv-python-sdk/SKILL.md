@@ -1,12 +1,12 @@
 ---
 name: dv-python-sdk
 description: >
-  Use the official Microsoft Dataverse Python SDK for data operations.
-  USE WHEN: "use the SDK", "query records", "create records", "bulk operations", "upsert",
+  Query, create, update, and bulk-import Dataverse records using the official Python SDK. Includes data profiling, CSV import, and Jupyter notebook patterns.
+  Use when: "use the SDK", "query records", "create records", "bulk operations", "upsert",
   "Python script for Dataverse", "read data", "write data", "upload file",
   "bulk import", "CSV import", "load data", "data profiling", "data quality",
   "analyze data", "Jupyter notebook", "pandas", "notebook".
-  DO NOT USE WHEN: creating forms/views (use dv-metadata with Web API),
+  Do not use when: creating forms/views (use dv-metadata with Web API),
   exporting solutions (use dv-solution with PAC CLI).
 ---
 

@@ -1,11 +1,11 @@
 ---
 name: dv-solution
 description: >
-  Create, export, unpack, pack, import, and validate Dataverse solutions.
-  USE WHEN: "export solution", "import solution", "pack solution", "unpack solution", "create solution",
+  Manage Dataverse solution lifecycle — create, export, import, promote across environments, and validate deployments.
+  Use when: "export solution", "import solution", "pack solution", "unpack solution", "create solution",
   "pull from environment", "push to environment", "validate import", "check import errors",
   "check if table exists", "check if form is published", "verify deployment".
-  DO NOT USE WHEN: creating tables/columns/forms/views (use dv-metadata).
+  Do not use when: creating tables/columns/forms/views (use dv-metadata).
 ---
 
 # Skill: Solution

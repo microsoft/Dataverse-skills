@@ -1,26 +1,16 @@
----
-name: dv-mcp-configure
-description: >
-  Configure an MCP server for GitHub Copilot or Claude with your Dataverse environment.
-  USE WHEN: "configure MCP", "set up MCP server", "MCP not working", "connect MCP to Dataverse",
-      "add Dataverse to Copilot", "add Dataverse to Claude",
-      "connect via MCP", "use MCP", "MCP tools not available", "no MCP tools", "MCP not configured".
-  DO NOT USE WHEN: workspace not initialized (use dv-init first), installing tools (use dv-setup).
----
+# MCP Server Configuration Reference
 
-# Configure Dataverse MCP for GitHub Copilot or Claude
+Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot or Claude Code.
 
-This skill configures the Dataverse MCP server for GitHub Copilot or Claude with your organization's environment URL. Each organization is registered with a unique server name based on the org identifier (e.g., `DataverseMcporgbc9a965c`). 
-
-If at any point during the MCP configuration process you discover that the user has not initialized the Dataverse workspace yet, do that first using the `dv-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If they refuse, remind them to do that later when then attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP.
+The environment URL should already be known from the `dv-connect` flow (stored in `DATAVERSE_URL` in `.env`). If it's not set, go back to Step 2 of the `dv-connect` skill to discover and select the environment first.
 
 The parameters for the MCP server should be determined from context or environment variables where possible, and interactive prompts should only be used when it cannot be done.
 
-## Instructions
+---
 
-### 0. Determine which tool to configure
+## 0. Determine which tool to configure
 
-Determine whether needs to configure MCP for GitHub Copilot or for Claude Code:
+Determine whether to configure MCP for GitHub Copilot or for Claude Code:
 - If explicitly mentioned in prompt, use that.
 - Otherwise, determine which tool the user is running from the context.
 - Only if choosing based on the context is impossible, ask the user:
@@ -34,9 +24,11 @@ Based on the result, set the `TOOL_TYPE` variable to either `copilot` or `claude
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
 - If `claude`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457`
-- If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following Scenario A, step 7 in the `dv-init` skill.
+- If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
-### 1. Determine the MCP scope
+---
+
+## 1. Determine the MCP scope
 
 Choose the configuration scope based on the tool. Use the scope explicitly mentioned by the user, or choose the default without asking to confirm it.
 
@@ -50,7 +42,7 @@ Based on the scope, set the `CONFIG_PATH` variable:
 - **Global**: `~/.copilot/mcp-config.json` (use the user's home directory)
 - **Project**: `.mcp/copilot/mcp.json` (relative to the current working directory)
 
-Store this path for use in steps 2 and 6.
+Store this path for use in steps 2 and 5.
 
 **If TOOL_TYPE is `claude`:**
 
@@ -64,9 +56,11 @@ Based on the scope, set the `CLAUDE_SCOPE` variable:
 - **Project**: `CLAUDE_SCOPE` = `project`
 - **Local**: `CLAUDE_SCOPE` = `local`
 
-Store this value for use in step 6.
+Store this value for use in step 5.
 
-### 2. Check already-configured MCP servers
+---
+
+## 2. Check already-configured MCP servers
 
 **If TOOL_TYPE is `copilot`:**
 
@@ -95,17 +89,19 @@ Extract all `url` values from the configured servers and store them as `CONFIGUR
 
 If the file doesn't exist or is empty, treat `CONFIGURED_URLS` as empty (`[]`). This step must never block the skill.
 
+If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it (e.g. to change the endpoint type) before proceeding. If not, skip to the end.
+
 **If TOOL_TYPE is `claude`:**
 
-Skip this step - Claude uses CLI commands to manage MCP servers, so we don't need to check existing configuration.
+Skip this step — Claude uses CLI commands to manage MCP servers, so we don't need to check existing configuration.
 
-### 3. Determine the environment URL
+---
+
+## 3. Determine the environment URL
 
 If the user provided a URL via command parameters it is: '$ARGUMENTS'. If the user mentioned the URL in the prompt, use it. Otherwise, take the URL from the `DATAVERSE_URL` variable in `.env`. If you have the URL, skip to step 4.
 
-If the file or the variable doesn't exist, the user has not initialized the Dataverse workspace yet. Do that first using the `dv-init` skill (do this by default when the user does not express a preference and just wants the MCP configured), which will set up the necessary environment variables. If the user refuses, remind them to do that later when they attempt any operations that require PAC CLI, Python SDK or OData Web API instead of MCP, and proceed to auto-discover the environment URL.
-
-**Auto-discovery priority order** — try each method in order, stop at the first that succeeds:
+If the file or the variable doesn't exist, the environment URL must be discovered. Try the `dv-connect` skill's Step 2 first. If that's not possible (e.g., this reference is being used standalone), use the auto-discovery priority order below — try each method in order, stop at the first that succeeds:
 
 1. **PAC CLI** (preferred) → step 3a
 2. **Azure CLI** (fallback) → step 3b
@@ -135,8 +131,6 @@ If PAC CLI is authenticated and `pac env list` returns results, present the envi
 > 2. Another Env — `https://orgabc123.crm.dynamics.com`
 >
 > Or type a URL manually.
-
-If the user wants to create a new environment, they can do so via `pac admin create` (see the `dv-init` skill's Environment Discovery flow).
 
 If PAC CLI is not installed or not authenticated, fall back to step 3b.
 
@@ -208,20 +202,22 @@ Ask the user to provide their environment URL directly:
 >
 > You can find this in the Power Platform Admin Center under Environments.
 
-Then proceed to step 4. 
+### 3d. Remember the selected URL
 
-### 4. Remember the selected URL
+Take the URL determined above (from context, `.env`, manual entry, or `instanceUrl` from discovery) and strip any trailing slash. This is `USER_URL` for the remainder of this reference.
 
-Take the URL determined in step 3 (from context, `.env`, manual entry or `instanceUrl` in list from API) and strip any trailing slash. This is `USER_URL` for the remainder of the skill.
+---
 
-### 5. Decide whether to use the "Preview" or "Generally Available (GA)" endpoint
+## 4. Decide whether to use the "Preview" or "Generally Available (GA)" endpoint
 
-Determine from the context which of these options the user wants to use. If they did not mention either, default to 1 (GA):
+Determine from the context which of these options the user wants to use. If they did not mention either, default to GA:
 
 - If **Generally Available (GA)**: set `MCP_URL` to `{USER_URL}/api/mcp`
 - If **Preview**: set `MCP_URL` to `{USER_URL}/api/mcp_preview`
 
-### 6. Register the MCP server
+---
+
+## 5. Register the MCP server
 
 **If TOOL_TYPE is `copilot`:**
 
@@ -272,7 +268,7 @@ This is the `SERVER_NAME`.
 
 **If TOOL_TYPE is `claude`:**
 
-Generate the CLI command for the user to run. Do NOT edit any configuration files.
+Generate the CLI command. Do NOT edit any configuration files.
 
 **Generate a unique server name** from the `USER_URL`:
 1. Extract the subdomain (organization identifier) from the URL
@@ -300,26 +296,26 @@ Where:
 - `{CLAUDE_SCOPE}` is `user`, `project`, or `local` (from step 1)
 - `{SERVER_NAME}` is the generated server name (e.g., `dataverse-orgbc9a965c`)
 - `{USER_URL}` is the base environment URL (e.g., `https://orgbc9a965c.crm10.dynamics.com`)
-- `{ENDPOINT_FLAG}` is `--preview` if the user chose Preview endpoint in step 5, otherwise omit this flag
+- `{ENDPOINT_FLAG}` is `--preview` if the user chose Preview endpoint in step 4, otherwise omit this flag
 
 **Example commands:**
 - GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
 - Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
 - GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
 
-Store this command as `CLAUDE_COMMAND` for use in step 9.
+Store this command as `CLAUDE_COMMAND` for use in step 8.
 
-Proceed to step 7.
+---
 
-### 7. Ensure tenant-level admin consent (one-time per tenant)
+## 6. Ensure tenant-level admin consent (one-time per tenant)
 
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
 - Tool type (Copilot or Claude) from step 0
 - Scope from step 1
-- Environment URL from step 4
-- Endpoint (GA or Preview) from step 5
+- Environment URL from step 3
+- Endpoint (GA or Preview) from step 4
 - MCP Client ID from step 0
 
 Ask the user if admin consent has already been granted for this tenant. If not, provide the consent URL:
@@ -335,7 +331,9 @@ Ask the user if admin consent has already been granted for this tenant. If not, 
 
 Wait for the user to confirm this is done (or was already done previously) before proceeding.
 
-### 8. Add the MCP client to the environment's allowed list (one-time per environment)
+---
+
+## 7. Add the MCP client to the environment's allowed list (one-time per environment)
 
 Separately from tenant-level consent, each Dataverse environment must explicitly allow the MCP client. This is a **one-time** action per environment and does **NOT** require Azure AD admin permissions — any user with Environment Admin or System Administrator role in the environment can do it.
 
@@ -360,7 +358,9 @@ Present the two methods (PPAC portal is recommended for non-developers):
 
 If the user completed Method A, attempt to run `scripts/enable-mcp-client.py` anyway to verify. If it reports the client is already enabled, continue. Do not ask for user confirmation.
 
-### 9. Confirm success and provide next steps
+---
+
+## 8. Confirm success and provide next steps
 
 **If TOOL_TYPE is `copilot`:**
 
@@ -394,14 +394,16 @@ Run {CLAUDE_COMMAND} to install the Dataverse MCP server, then tell the user:
 
 Pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
 
-### 10. Troubleshooting
+---
+
+## 9. Troubleshooting
 
 If something goes wrong, help the user check:
 
 - The URL format is correct (`https://<org>.<region>.dynamics.com`)
 - They have access to the Dataverse environment
 - The environment URL matches what's shown in the Power Platform Admin Center
-- **Tenant-level admin consent** has been granted for the MCP client app. This is a one-time per-tenant action requiring an Azure AD admin. Without it, authentication succeeds but the app is denied access. Use the admin consent URL from step 7.
+- **Tenant-level admin consent** has been granted for the MCP client app. This is a one-time per-tenant action requiring an Azure AD admin. Without it, authentication succeeds but the app is denied access. Use the admin consent URL from step 6.
 - **Org-level allowed clients** — the MCP client ID has been added to the environment's allowed list. To check or fix this:
   1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/) > Environments > your environment > Settings > Product > Features
   2. Verify **MCP Server** is toggled **On**
@@ -424,4 +426,3 @@ If something goes wrong, help the user check:
     npx -y @microsoft/dataverse@latest mcp "{USER_URL}" --validate
     ```
     This checks credentials and prints error details if issues are found.
-

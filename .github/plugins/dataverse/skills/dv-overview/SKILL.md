@@ -1,13 +1,13 @@
 ---
 name: dv-overview
 description: >
-  ALWAYS LOAD THIS SKILL FIRST for any Dataverse task. Contains hard rules that override all other skills.
-  USE WHEN: ANY request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions,
+  Core rules and tool routing for all Dataverse tasks. Loaded automatically before other skills.
+  Use when: any request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions,
   records, queries, CRM, metadata, plugins, SDK, Web API, PAC CLI, or environment operations.
   Also use for: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
   "create table", "create column", "build solution", "query data", "bulk import", "sample data",
   "support agent", "customer table", "ticket table".
-  This skill MUST be loaded before any other Dataverse skill. Read the Hard Rules section first.
+  This skill must be loaded before any other Dataverse skill.
 ---
 
 # Skill: Overview — What to Use and When
@@ -29,9 +29,9 @@ ls .env scripts/auth.py 2>/dev/null
 ```
 
 - If BOTH exist: workspace is initialized. Proceed to the relevant task.
-- If EITHER is missing: **Automatically run the init flow** (see the init skill). Do NOT ask the user whether to initialize — just do it. Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The init skill handles all of this.
+- If EITHER is missing: **Automatically run the connect flow** (see the `dv-connect` skill). Do NOT ask the user whether to initialize — just do it. Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The `dv-connect` skill handles all of this.
 
-Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The init flow produces the correct file structure. Skipping init is the #1 cause of broken setups.
+Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The connect flow produces the correct file structure. Skipping it is the #1 cause of broken setups.
 
 ### 1. Python Only — No Exceptions
 
@@ -84,7 +84,7 @@ Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.p
 - Hard-code tokens or credentials in scripts
 - Invent a new auth mechanism
 
-If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the setup skill.
+If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the `dv-connect` skill.
 
 ### 4. Follow Skill Instructions, Don't Improvise
 
@@ -154,7 +154,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-mcp-configure` to set them up (see below).
+**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
 
 **Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use Python SDK `client.records.create(table, list_of_dicts)` — it uses `CreateMultiple` internally and handles batching. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill). For aggregation queries (`$apply`), use the Web API directly.
 
@@ -167,7 +167,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 **If MCP tools are NOT available and the user explicitly asked for MCP:**
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
-3. Load the `dv-mcp-configure` skill to set up the MCP server
+3. Load the `dv-connect` skill to set up the MCP server
 4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"). Do not fall back to the SDK or proceed with other tools. Wait for the user to restart and come back.
 
 **If MCP tools are NOT available and the user asked a simple data question** (e.g., "how many accounts with 'jeff'?"):
@@ -184,12 +184,10 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 
 | Skill | What it covers |
 | --- | --- |
-| **init** | Workspace setup: `.env`, MCP config, directory structure, demo data |
-| **setup** | Machine setup: install tools (PAC CLI, .NET, Python), authenticate |
-| **metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
-| **python-sdk** | Data CRUD, bulk ops, OData queries, file uploads, bulk import, data profiling, notebook analysis via Python SDK |
-| **solution** | Solution create/export/import/pack/unpack, post-import validation |
-| **mcp-configure** | Configure Dataverse MCP server for GitHub Copilot or Claude Code as part of `init` |
+| **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
+| **dv-metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
+| **dv-python-sdk** | Data CRUD, bulk ops, OData queries, file uploads, bulk import, data profiling, notebook analysis via Python SDK |
+| **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 
 ---
 
@@ -202,7 +200,7 @@ The plugin ships utility scripts in `scripts/`:
 | `auth.py` | Azure Identity token/credential acquisition — used by all other scripts and the SDK |
 | `enable-mcp-client.py` | Add the MCP Client ID to the list of allowed MCP clients in Dataverse |
 
-For data operations and post-import validation, use the Python SDK directly (inline in your own scripts). See the `python-sdk` skill for SDK patterns and the `solution` skill for validation queries.
+For data operations and post-import validation, use the Python SDK directly (inline in your own scripts). See the `dv-python-sdk` skill for SDK patterns and the `dv-solution` skill for validation queries.
 
 Any Web API call that goes beyond a one-off query should be written as a Python script and committed to `/scripts/`. Use `scripts/auth.py` for token acquisition.
 
@@ -225,7 +223,7 @@ Before creating tables, columns, or other metadata, ensure a solution exists to 
 
 1. Ask the user: "What solution should these components go into?"
 2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, create one (see the `solution` skill)
+3. If no solution exists yet, create one (see the `dv-solution` skill)
 4. Use the `MSCRM.SolutionName` header on all Web API metadata calls to auto-add components
 
 Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.

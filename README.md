@@ -35,7 +35,7 @@ copilot plugin install dataverse@awesome-copilot
 
 ## What's Included
 
-- **7 skills** covering machine setup, workspace init, metadata authoring, solution management, Python SDK, MCP configuration, and demo data
+- **5 skills** covering connection setup, metadata authoring, solution management, Python SDK data operations, and tool routing
 - **MCP server** configuration for Dataverse Web API access
 - **Scripts** for authentication and MCP client enablement
 - **Templates** for CLAUDE.md project files
