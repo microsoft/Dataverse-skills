@@ -33,7 +33,7 @@ The plugin supports two authentication methods:
 
 ### Multi-layer MCP authorization
 
-Access to Dataverse through the plugin requires three independent authorization layers:
+Access to Dataverse through MCP specifically requires three independent authorization layers. Note: other tools used by the plugin (Python SDK, Web API, PAC CLI) authenticate directly and are not subject to these MCP-specific controls.
 
 | Layer | Who approves | When | What it controls |
 |---|---|---|---|
@@ -62,7 +62,7 @@ Safety is enforced at two levels: **platform-level** controls that are always on
 ### Platform-level (always enforced)
 
 - **Dataverse security roles** — every API call is authorized server-side by Dataverse (see [Least-Privilege](#least-privilege--security-role-enforcement) above).
-- **Multi-layer MCP authorization** — requires developer auth, tenant admin consent, and per-environment allowlisting before any operation is possible (see [Authentication](#authentication) above).
+- **Multi-layer MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting (see [Authentication](#authentication) above). Other plugin tools (SDK, Web API, PAC CLI) authenticate directly and are not subject to these controls.
 
 ### Agent-level (enforced via skill instructions)
 
@@ -100,29 +100,11 @@ Some operations require extra care because they are difficult or impossible to r
 
 ## Data Handling & Residency
 
-### Your data stays in your tenant
-
-- All operations call the Dataverse Web API directly within your Microsoft tenant
-- The MCP proxy is intentionally thin — no business logic executes outside the governed Dataverse perimeter
-- Tool execution, billing, and access control happen server-side within Dataverse
-- **No customer data is stored or transmitted outside your tenant**
-
 ### Token security
 
 - Interactive login tokens: stored in your OS native credential store
 - Service principal tokens: held in memory only, never persisted
 - Tokens are scoped to your Dataverse environment and are not passed to external services
-
-### External dependencies
-
-All dependencies execute locally on your machine:
-
-| Dependency | Source | Execution |
-|---|---|---|
-| MCP Proxy (.NET) | Self-contained npm package | Local |
-| Python SDK | Open source (MIT) | Local |
-| Azure Identity | Microsoft first-party library | Local, uses OS credential store |
-| PAC CLI | Microsoft first-party tool | Local |
 
 ## Logging & Auditability
 
@@ -157,15 +139,9 @@ If telemetry is introduced in the future, it will be:
 - Not in the authentication code path
 - Documented in the README before activation
 
-## Planned Guardrail Improvements
+## Areas Under Exploration
 
-This document describes the safety model as it exists today. We are actively working on additional hardening, including:
-
-- **Environment classification** — declare environment type (dev/test/staging/prod) at connect time, with restricted operations on production environments by default
-- **Destructive operation confirmation** — explicit confirmation with impact summary before deletes and bulk modifications
-- **Pre-flight impact analysis** — query affected data before schema changes (e.g., "this column has 12,340 non-null values")
-- **Throttle resilience** — graceful handling of Dataverse `429 Retry-After` responses when service protection limits are reached
-- **Dry-run mode** — preview API calls without executing them
+This document describes the safety model as it exists today. We are exploring ways to further harden the experience, such as environment-tier awareness and improved handling of Dataverse service protection limits. Because the plugin operates through AI agents that we do not fully control, some guardrails can only be influenced via skill instructions rather than enforced deterministically.
 
 If you have feedback on what guardrails matter most to you, [open an issue](https://github.com/microsoft/Dataverse-skills/issues).
 
