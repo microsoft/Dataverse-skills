@@ -6,10 +6,10 @@ Check all in parallel. Install any that are missing.
 
 | Tool | Check | Install |
 |---|---|---|
-| PAC CLI | `pac --version` | `winget install Microsoft.PowerAppsCLI` |
+| PAC CLI | `pac` (prints version banner; `pac --version` is not valid and returns non-zero) | `winget install Microsoft.PowerAppsCLI` |
 | GitHub CLI | `gh --version` | `winget install GitHub.cli` |
 | Azure CLI | `az --version` | `winget install Microsoft.AzureCLI` |
-| .NET SDK | `dotnet --version` | `winget install Microsoft.DotNet.SDK.8` |
+| .NET SDK | `dotnet --version` | `winget install Microsoft.DotNet.SDK.9` |
 | Python 3 | `python --version` | `winget install Python.Python.3.12` |
 | Git | `git --version` | `winget install Git.Git` |
 
@@ -20,13 +20,13 @@ After any `winget` install, the new tool may not be in PATH until the shell is r
 PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. Use the PowerShell wrapper:
 
 ```bash
-powershell -Command "& 'C:\Users\$USER\AppData\Local\Microsoft\PowerAppsCLI\pac.cmd' --version"
+powershell -Command "& 'C:\Users\$USER\AppData\Local\Microsoft\PowerAppsCLI\pac.cmd' help"
 ```
 
 Or, if installed via `dotnet tool install --global`:
 
 ```bash
-powershell -Command "& pac --version"
+powershell -Command "& pac help"
 ```
 
 To avoid repeating this, add an alias to `~/.bashrc`:
@@ -145,16 +145,25 @@ Confirm the tenant ID in the output matches your dev tenant before proceeding.
 
 ## PAC CLI PATH setup
 
-Find the path (this may be slow, wait for it to finish):
+If `pac` is not in PATH, check these common Windows install locations in order (fastest first):
 
 ```bash
-find /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI -name "pac.exe" 2>/dev/null
-find /c/Users/$USER/.dotnet/tools -name "pac" 2>/dev/null
+# 1. winget install location (most common)
+ls "/c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI/pac.exe" 2>/dev/null
+
+# 2. dotnet tool install location
+ls "/c/Users/$USER/.dotnet/tools/pac.exe" 2>/dev/null
+
+# 3. nuget global packages (if installed via Microsoft.PowerApps.CLI nuget package)
+ls /c/Users/$USER/.nuget/packages/microsoft.powerapps.cli/*/tools/pac.exe 2>/dev/null
 ```
 
-Add to `~/.bashrc` (for Git Bash / Claude Code):
+Do NOT use `find` or recursive search — it's slow and unnecessary when the install locations are known.
+
+Once found, add to `~/.bashrc` (for Git Bash / Claude Code):
 
 ```bash
-echo 'export PATH="$PATH:/c/Users/$USER/.dotnet/tools"' >> ~/.bashrc
+# Use the directory where pac.exe was found, e.g.:
+echo 'export PATH="$PATH:/c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI"' >> ~/.bashrc
 source ~/.bashrc
 ```
