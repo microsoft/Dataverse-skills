@@ -23,13 +23,13 @@ One-step connection to Dataverse. Handles tool installation, authentication, env
 
 ## Step 1: Ensure tools are installed
 
-Check all tools in parallel. Install any that are missing. See [tools-setup.md](references/tools-setup.md) for installation commands and platform-specific notes.
+Check each tool independently — **do not use fail-fast parallel execution.** If one tool check fails, continue checking the others so you can report all missing tools at once. See [tools-setup.md](references/tools-setup.md) for installation commands and platform-specific notes.
 
 | Tool | Check |
 |---|---|
-| PAC CLI | `pac --version` |
 | Python 3 | `python --version` |
 | Git | `git --version` |
+| PAC CLI | `pac` (prints version banner; note: `pac --version` is not a valid command and returns a non-zero exit code) (see [tools-setup.md](references/tools-setup.md) for Windows path discovery if not in PATH) |
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
@@ -62,13 +62,15 @@ pac org who
 **If PAC CLI is not authenticated:**
 - Ask: "Do you want to connect to an existing environment or create a new one?"
 
-**To select an existing environment:**
-```
-pac auth select --name <profile-name>
-```
-Or create a new profile:
+**Before selecting, check for tenant/region mismatch.** If the target environment URL uses a different region (e.g., `crm10.dynamics.com` = APAC) than the currently authenticated account's environments, the current auth profile likely belongs to a different tenant. In that case, create a new auth profile for the correct tenant rather than trying `pac org select` (which will fail with "no organization found"):
+
 ```
 pac auth create --name <profile-name> --environment <url>
+```
+
+**To select from existing profiles:**
+```
+pac auth select --name <profile-name>
 ```
 
 **To create a new environment** (requires admin permissions):
@@ -104,10 +106,15 @@ Present authentication options:
 
 Write `.env` directly — do not instruct the user to create it:
 
+Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID` automatically:
+- Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
+- GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
+
 ```python
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
     f.write(f"TENANT_ID={tenant_id}\n")
+    f.write(f"MCP_CLIENT_ID={mcp_client_id}\n")
     f.write(f"SOLUTION_NAME={solution_name}\n")
     f.write(f"PUBLISHER_PREFIX=\n")  # filled in when solution is created
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
@@ -193,9 +200,11 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 **For Copilot:** Write the JSON config, then:
 > ✅ Dataverse MCP server configured. **Restart your editor** for changes to take effect.
 
-**For Claude:** Run the `claude mcp add` command, then:
-> Restart Claude Code to enable MCP.
+**For Claude:** Run the `claude mcp add` command, then warn the user about the auth popup that will appear on next launch:
+> ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
 > Remember to **use `claude --continue` to resume the session** without losing context.
+>
+> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for PAC CLI (e.g., `{username}`). This only happens once; the token is cached for future sessions.
 
 ---
 

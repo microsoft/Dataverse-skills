@@ -270,6 +270,8 @@ This is the `SERVER_NAME`.
 
 Generate the CLI command. Do NOT edit any configuration files.
 
+**IMPORTANT: Always use `-t stdio` transport with the npx proxy.** Never use `--transport http` or `--transport sse` for Claude — the Dataverse MCP endpoint requires authentication that only the npx proxy handles. Using HTTP transport directly will fail with connection errors.
+
 **Generate a unique server name** from the `USER_URL`:
 1. Extract the subdomain (organization identifier) from the URL
    - Example: `https://orgbc9a965c.crm10.dynamics.com` → `orgbc9a965c`
@@ -383,10 +385,12 @@ Pause and give the user a chance to restart their editor before proceeding. Do n
 **If TOOL_TYPE is `claude`:**
 
 Run {CLAUDE_COMMAND} to install the Dataverse MCP server, then tell the user:
-> To enable the MCP server, restart Claude Code.
+> ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
 > Remember to **use `claude --continue` to resume the session** without losing context.
 >
-> After restarting, you will be able to:
+> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy (`@microsoft/dataverse`) authenticating on your behalf. Sign in with the same account you used earlier. This only happens once — the token is cached for future sessions.
+>
+> After signing in, you will be able to:
 > - List all tables in your Dataverse environment
 > - Query records from any table
 > - Create, update, or delete records
