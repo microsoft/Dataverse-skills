@@ -20,10 +20,6 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 **PyPI package:** `PowerPlatform-Dataverse-Client` (this is the only official one — do not use `dataverse-api` or other unofficial packages)
 **Status:** Preview — breaking changes are possible
 
-```
-pip install --upgrade PowerPlatform-Dataverse-Client
-```
-
 ## Skill boundaries
 
 | Need | Use instead |
