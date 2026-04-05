@@ -89,15 +89,6 @@ from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 
 load_env()
-
-# Recommended for scripts — context manager handles connection cleanup
-with DataverseClient(
-    base_url=os.environ["DATAVERSE_URL"],
-    credential=get_credential(),
-) as client:
-    pass  # your code here
-
-# For notebooks / interactive sessions — explicit client
 client = DataverseClient(
     base_url=os.environ["DATAVERSE_URL"],
     credential=get_credential(),
@@ -105,6 +96,8 @@ client = DataverseClient(
 ```
 
 `get_credential()` returns `ClientSecretCredential` (if CLIENT_ID + CLIENT_SECRET are in `.env`) or `DeviceCodeCredential` (interactive fallback). See `scripts/auth.py`.
+
+For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
 
 ---
 

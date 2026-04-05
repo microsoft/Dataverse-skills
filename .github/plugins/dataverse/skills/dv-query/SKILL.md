@@ -49,20 +49,13 @@ from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 
 load_env()
-
-# Recommended for scripts — context manager handles connection cleanup
-with DataverseClient(
-    base_url=os.environ["DATAVERSE_URL"],
-    credential=get_credential(),
-) as client:
-    pass  # your code here
-
-# For notebooks / interactive sessions — explicit client
 client = DataverseClient(
     base_url=os.environ["DATAVERSE_URL"],
     credential=get_credential(),
 )
 ```
+
+For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
 
 ---
 
@@ -73,7 +66,7 @@ Getting this wrong causes 400 errors.
 | Property type | Convention | Example | When used |
 |---|---|---|---|
 | **Structural** (columns) | LogicalName — always lowercase | `new_name`, `new_priority` | `$select`, `$filter`, `$orderby` |
-| **Navigation** (lookups) | Navigation Property Name — case-sensitive, matches `$metadata` | `new_AccountId` | `$expand`, `@odata.bind` |
+| **Navigation** (lookups) | Navigation Property Name — case-sensitive, matches `$metadata` | `new_AccountId` | `$expand` |
 
 - System table navigation properties (e.g., `parentaccountid`, `ownerid`): lowercase
 - Custom lookup navigation properties: case-sensitive, match `$metadata` SchemaName (e.g., `new_AccountId`)
@@ -81,6 +74,8 @@ Getting this wrong causes 400 errors.
 ---
 
 ## Query Records (multi-page)
+
+For new code, prefer **QueryBuilder** (see below) — it offers composable filters, OR/AND logic, and `.to_dataframe()`. Use `client.records.get()` directly when you need a raw OData filter string not covered by QueryBuilder's filter methods, or for single-record-by-GUID fetch.
 
 ```python
 for page in client.records.get(
@@ -211,16 +206,14 @@ with urllib.request.urlopen(req) as resp:
 
 ## QueryBuilder — Fluent Query API
 
-For composable, readable queries without constructing OData strings manually:
+Prefer QueryBuilder for multi-record queries — type-safe filter methods, OR/AND composition, and `.to_dataframe()` in one chain. Use `client.records.get()` directly only for **single-record fetch by GUID** (QueryBuilder has no `.by_id()` equivalent). QueryBuilder calls `client.records.get()` internally — it is a convenience layer, not a replacement.
 
 ```python
-from PowerPlatform.Dataverse.models.query_builder import QueryBuilder
-
 # Basic — flat record iteration
 for record in client.query.builder("opportunity") \
         .select("name", "estimatedvalue", "statuscode") \
         .filter_eq("statuscode", 1) \
-        .order_by("estimatedvalue desc") \
+        .order_by("estimatedvalue", descending=True) \
         .top(100) \
         .execute():
     print(record["name"], record["estimatedvalue"])
@@ -244,7 +237,7 @@ active_or_pending = (eq("statecode", 0) | eq("statecode", 1)) & gt("estimatedval
 
 df = client.query.builder("opportunity") \
     .select("name", "estimatedvalue") \
-    .filter(active_or_pending) \
+    .where(active_or_pending) \
     .to_dataframe()
 ```
 
