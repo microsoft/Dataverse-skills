@@ -42,14 +42,14 @@ pip install --upgrade PowerPlatform-Dataverse-Client
 
 **If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.**
 
-**Correct imports:**
-```python
+**Correct imports** (always preceded by `sys.path.insert` in a full script — see Setup below):
+```
 from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 ```
 
 **WRONG for SDK-supported operations:**
-```python
+```
 from auth import get_token, load_env  # WRONG for SDK-supported ops
 import requests                        # WRONG for SDK-supported ops
 ```

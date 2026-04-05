@@ -12,6 +12,17 @@ description: >
 
 Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Create tables, columns, relationships, forms, views | **dv-metadata** |
+| Create, update, or delete data records | **dv-data** |
+| Query or read records | **dv-query** |
+| Connect to Dataverse / set up MCP | **dv-connect** |
+
+---
+
 ## Create a New Solution
 
 **Use the Python SDK for publisher and solution record creation — not raw HTTP.** Publishers and solutions are standard Dataverse tables. `client.records.create()` and `client.records.get()` handle auth, pagination, and error handling automatically, avoiding the URL encoding, header boilerplate, and GUID-parsing bugs that raw `urllib` calls introduce.
