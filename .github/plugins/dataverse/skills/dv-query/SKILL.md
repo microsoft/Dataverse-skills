@@ -23,7 +23,8 @@ description: >
 |---|---|
 | Simple filter ("show open tickets") | **MCP** `read_query` |
 | Single record read | **MCP** `read_query` |
-| Count records | **MCP** `read_query` |
+| Count records (simple) | **MCP** `read_query` |
+| Count with HAVING or filtered aggregates | **dv-query** Web API (`$apply`) |
 | Multi-page iteration (thousands of records) | **dv-query** SDK |
 | `$expand` to resolve lookup display names | **dv-query** SDK |
 | `$apply` aggregation (GROUP BY, HAVING) | **dv-query** Web API |

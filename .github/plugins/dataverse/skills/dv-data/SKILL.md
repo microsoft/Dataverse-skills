@@ -60,7 +60,8 @@ import requests                        # WRONG for SDK-supported ops
 
 ## What This SDK Supports (Data Operations)
 
-- Record CRUD: create, read, update, delete
+- Record writes: create, update, delete
+- Record reads within write workflows (e.g., lookup resolution) — for standalone queries see **dv-query**
 - Upsert (with alternate key support)
 - Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
 - File column uploads (chunked for files >128MB)
@@ -72,7 +73,7 @@ Use raw Web API (`get_token()`) for:
 - Forms (FormXml) — see **dv-metadata**
 - Views (SavedQueries) — see **dv-metadata**
 - Global option sets — see **dv-metadata**
-- N:N record association (`$ref` POST) — see **dv-query**
+- N:N record association (`$ref` POST) — use raw Web API (`POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`)
 - N:N `$expand` — see **dv-query**
 - `$apply` aggregation — see **dv-query**
 - Unbound actions (e.g., `InstallSampleData`)

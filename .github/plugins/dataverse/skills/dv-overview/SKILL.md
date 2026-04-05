@@ -164,7 +164,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Volume guidance — writes:** MCP `create_record` for 1–10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally and handles batching.
 
-**Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (single page). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
+**Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (no paging needed). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
 
 Note: The Python SDK is in **preview** — breaking changes possible.
 

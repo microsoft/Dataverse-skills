@@ -49,9 +49,10 @@ The only time you write files directly is when editing something that already ex
 **SDK approach (use this by default):**
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
-import os
 
 load_env()
 client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
@@ -242,11 +243,13 @@ When you create records that set this lookup, you need the **navigation property
 
 After creating a table via API, add it to your solution so it gets pulled on export:
 ```
-pac solution add-reference \
-  --environment <url> \
-  --solution-unique-name <SOLUTION_NAME> \
-  --entity <logical_name>
+pac solution add-solution-component \
+  --solutionUniqueName <SOLUTION_NAME> \
+  --component <logical_name> \
+  --componentType 1 \
+  --environment <url>
 ```
+Component type `1` = Entity (Table). See dv-solution for the full type code list.
 
 Or via Web API:
 ```python
@@ -269,7 +272,8 @@ Neither the MCP server nor the Python SDK supports forms. Use the Web API direct
 
 ```python
 # POST /api/data/v9.2/systemforms
-import os, json, urllib.request
+import os, sys, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_token, load_env
 
 load_env()
@@ -327,18 +331,49 @@ with urllib.request.urlopen(req) as resp:
 ### Retrieve and modify an existing form
 
 ```python
-# GET the form first, modify the XML, then PATCH it back
-url = f"{env}/api/data/v9.2/systemforms?$filter=objecttypecode eq 'new_projectbudget' and type eq 2&$select=formid,name,formxml"
-# ... parse response, modify formxml string, then:
-# PATCH /api/data/v9.2/systemforms(<formid>)
-# body: {"formxml": "<modified xml>"}
+# env and token must be initialized (see form creation setup above)
+import json, urllib.request
+
+# Step 1: GET the form
+url = (f"{env}/api/data/v9.2/systemforms"
+       f"?$filter=objecttypecode eq 'new_projectbudget' and type eq 2"
+       f"&$select=formid,name,formxml")
+req = urllib.request.Request(url, headers={
+    "Authorization": f"Bearer {token}",
+    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+})
+with urllib.request.urlopen(req) as resp:
+    forms = json.loads(resp.read()).get("value", [])
+
+if not forms:
+    raise ValueError("Form not found")
+
+form_id = forms[0]["formid"]
+form_xml = forms[0]["formxml"]
+
+# Step 2: Modify form_xml string as needed (e.g., add a control, reorder fields)
+# form_xml = form_xml.replace(...)
+
+# Step 3: PATCH the form back
+patch_body = json.dumps({"formxml": form_xml}).encode()
+req = urllib.request.Request(
+    f"{env}/api/data/v9.2/systemforms({form_id})",
+    data=patch_body,
+    headers={"Authorization": f"Bearer {token}",
+             "Content-Type": "application/json",
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+    method="PATCH"
+)
+with urllib.request.urlopen(req) as resp:
+    print(f"Updated. Status: {resp.status}")
+# Then publish (see Publish section below)
 ```
 
 ### Publish forms after create/modify
 
-Forms must be published to take effect. Do this immediately after creating or modifying a form:
+Forms must be published to take effect. Do this immediately after creating or modifying a form. `env` and `token` come from the form creation setup block above — if publishing standalone, re-initialize them:
 ```python
-import json, urllib.request
+# env and token must be initialized (see form creation setup above)
 body = json.dumps({
     "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"
 }).encode()
