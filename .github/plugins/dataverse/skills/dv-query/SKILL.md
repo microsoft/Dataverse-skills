@@ -15,7 +15,7 @@ description: >
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. See the overview skill's Hard Rules.
 
-> **Check MCP first.** If MCP tools are available and the task is a simple filter, single-record read, or small result set (single page), use MCP — no script needed. Use this skill for bulk reads (multi-page), DataFrame loading, `$expand`, aggregation, and queries hitting MCP SQL limits (DISTINCT, HAVING, subqueries).
+> **Check MCP first.** If MCP tools are available and the task is a simple filter, single-record read, or small result set (no paging needed), use MCP — no script needed. Use this skill for bulk reads (multi-page iteration), DataFrame loading, `$expand`, aggregation, and queries hitting MCP SQL limits (DISTINCT, HAVING, subqueries).
 
 ## When to use this skill vs. MCP
 

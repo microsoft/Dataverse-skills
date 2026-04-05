@@ -63,9 +63,10 @@ else:
 Use the SDK to create the solution record (preferred over raw Web API):
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
-from scripts.auth import get_credential, load_env
-import os
 
 load_env()
 client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
