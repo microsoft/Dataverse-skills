@@ -2,7 +2,7 @@
   "name": "dataverse-skills",
   "metadata": {
     "description": "Official Dataverse plugin marketplace for agent-guided development",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "owner": {
     "name": "Microsoft",
@@ -11,9 +11,9 @@
   "plugins": [
     {
       "name": "dataverse",
-      "description": "Agent skills for building on, analyzing, and managing Microsoft Dataverse — with Dataverse MCP, PAC CLI, and Dataverse Python SDK.",
+      "description": "Agent skills for building on, analyzing, and managing Microsoft Dataverse — with Dataverse MCP, PAC CLI, and Python SDK.",
       "source": "./.github/plugins/dataverse",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "homepage": "https://github.com/microsoft/Dataverse-skills"
     }
   ]
