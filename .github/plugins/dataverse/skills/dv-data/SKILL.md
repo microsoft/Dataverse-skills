@@ -89,6 +89,15 @@ from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 
 load_env()
+
+# Recommended for scripts — context manager handles connection cleanup
+with DataverseClient(
+    base_url=os.environ["DATAVERSE_URL"],
+    credential=get_credential(),
+) as client:
+    pass  # your code here
+
+# For notebooks / interactive sessions — explicit client
 client = DataverseClient(
     base_url=os.environ["DATAVERSE_URL"],
     credential=get_credential(),
@@ -124,7 +133,7 @@ print(f"Created: {guid}")
 ```
 
 **`@odata.bind` notes:**
-- Key is the Navigation Property Name (case-sensitive): `new_AccountId@odata.bind`, not `new_accountid@odata.bind`
+- Key is the Navigation Property Name: `new_AccountId@odata.bind` (the SDK preserves casing automatically as of b6, but matching the schema name is still the correct form)
 - Value is `"/<EntitySetName>(<guid>)"` — e.g., `"/accounts(<guid>)"`
 - If you just created the lookup column, wait 5–10 seconds before inserting. Metadata propagation delays cause "Invalid property" errors.
 - Choice columns use integer values, not strings: `"new_priority": 100000002` (not `"High"`)

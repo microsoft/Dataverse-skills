@@ -39,7 +39,7 @@ If any tool is missing, install it (see [tools-setup.md](references/tools-setup.
 
 After Python is confirmed:
 ```
-pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client
+pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
 ```
 
 **Skip condition:** All tools present and Python SDK installed.

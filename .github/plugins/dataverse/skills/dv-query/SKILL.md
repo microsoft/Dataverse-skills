@@ -27,7 +27,8 @@ description: >
 | `$expand` to resolve lookup display names | **dv-query** SDK |
 | `$apply` aggregation (GROUP BY, HAVING) | **dv-query** Web API |
 | N:N `$expand` (collection-valued navigation) | **dv-query** Web API |
-| Pandas DataFrame / Jupyter notebook handoff | **dv-query** SDK + pandas |
+| Pandas DataFrame / Jupyter notebook handoff | **dv-query** `client.dataframe.get()` |
+| Fluent composable query with OR/AND filters | **dv-query** `client.query.builder()` |
 
 ## Skill boundaries
 
@@ -48,6 +49,15 @@ from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
 
 load_env()
+
+# Recommended for scripts — context manager handles connection cleanup
+with DataverseClient(
+    base_url=os.environ["DATAVERSE_URL"],
+    credential=get_credential(),
+) as client:
+    pass  # your code here
+
+# For notebooks / interactive sessions — explicit client
 client = DataverseClient(
     base_url=os.environ["DATAVERSE_URL"],
     credential=get_credential(),
@@ -199,21 +209,88 @@ with urllib.request.urlopen(req) as resp:
 
 ---
 
+## QueryBuilder — Fluent Query API
+
+For composable, readable queries without constructing OData strings manually:
+
+```python
+from PowerPlatform.Dataverse.models.query_builder import QueryBuilder
+
+# Basic — flat record iteration
+for record in client.query.builder("opportunity") \
+        .select("name", "estimatedvalue", "statuscode") \
+        .filter_eq("statuscode", 1) \
+        .order_by("estimatedvalue desc") \
+        .top(100) \
+        .execute():
+    print(record["name"], record["estimatedvalue"])
+```
+
+**Direct DataFrame result** — combines query + pandas handoff in one call:
+
+```python
+df = client.query.builder("opportunity") \
+    .select("name", "estimatedvalue", "statuscode") \
+    .filter_eq("statuscode", 1) \
+    .to_dataframe()
+```
+
+**Composable filter expressions** — for OR/AND logic:
+
+```python
+from PowerPlatform.Dataverse.models.filters import eq, gt
+
+active_or_pending = (eq("statecode", 0) | eq("statecode", 1)) & gt("estimatedvalue", 10000)
+
+df = client.query.builder("opportunity") \
+    .select("name", "estimatedvalue") \
+    .filter(active_or_pending) \
+    .to_dataframe()
+```
+
+**Paged execution** — when you need per-page control:
+
+```python
+for page in client.query.builder("opportunity").select("name").execute(by_page=True):
+    for record in page:
+        print(record["name"])
+```
+
+---
+
 ## Pandas DataFrame Handoff
 
-For analytics beyond what Dataverse queries support — pull data with SDK, analyze with pandas:
+Use `client.dataframe.get()` to pull Dataverse records directly into a pandas DataFrame — no manual page iteration needed:
 
 ```python
 import pandas as pd
 
+# Returns a fully consolidated DataFrame (all pages)
+df = client.dataframe.get("opportunity",
+    select=["name", "estimatedvalue", "statuscode", "_parentaccountid_value"],
+)
+print(df.groupby("statuscode")["estimatedvalue"].agg(["count", "sum", "mean"]))
+```
+
+**DataFrame write-back** — update or create records from a DataFrame:
+
+```python
+# Update records — DataFrame must include the primary key column
+client.dataframe.update("opportunity", df_updates, id_column="opportunityid")
+
+# Create records — returns a Series of new GUIDs
+guids = client.dataframe.create("opportunity", df_new_records)
+```
+
+**Fallback (manual page iteration)** — use when you need per-page processing:
+
+```python
 all_records = []
 for page in client.records.get("opportunity",
-    select=["name", "estimatedvalue", "statuscode", "_parentaccountid_value"],
+    select=["name", "estimatedvalue", "statuscode"],
 ):
     all_records.extend(page)
-
 df = pd.DataFrame(all_records)
-print(df.groupby("statuscode")["estimatedvalue"].agg(["count", "sum", "mean"]))
 ```
 
 ---
@@ -232,15 +309,10 @@ client = DataverseClient(
     credential=credential,
 )
 
-# Cell 2: Load data into pandas
-import pandas as pd
-
-records = []
-for page in client.records.get("account",
+# Cell 2: Load data into pandas (direct DataFrame, no manual iteration)
+df = client.dataframe.get("account",
     select=["name", "industrycode", "revenue", "numberofemployees"],
-):
-    records.extend(page)
-df = pd.DataFrame(records)
+)
 df.head()
 ```
 
@@ -248,6 +320,8 @@ df.head()
 ```bash
 pip install --upgrade PowerPlatform-Dataverse-Client pandas matplotlib seaborn azure-identity
 ```
+
+`pandas>=2.0.0` is a required dependency of the SDK (since b7) and is installed automatically with `--upgrade`.
 
 ---
 
