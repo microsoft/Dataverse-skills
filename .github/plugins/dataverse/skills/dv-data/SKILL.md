@@ -285,6 +285,90 @@ Before bulk-creating in a system table (account, contact, opportunity):
 
 ---
 
+## Multi-Table Import with FK Dependencies
+
+When importing data across multiple tables with foreign key relationships, use an **in-memory lookup map** pattern: import in dependency order (lookup tables first, then tables that reference them), and keep a source-id-to-GUID dict in memory to resolve `@odata.bind` values without re-querying.
+
+```python
+import os, sys, csv
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+
+def bind(logical_name, guid):
+    """Build an @odata.bind value for a lookup field."""
+    # entity set name is usually the logical name + 's' — verify via EntityDefinitions if unsure
+    entity_set = logical_name + "s"
+    return f"/{entity_set}({guid})"
+
+def bulk_import(logical_name, records, chunk_size=1000):
+    """Import a list of record dicts in chunks; returns list of created GUIDs."""
+    all_guids = []
+    for i in range(0, len(records), chunk_size):
+        chunk = records[i:i + chunk_size]
+        guids = client.records.create(logical_name, chunk)
+        all_guids.extend(guids)
+        print(f"  {logical_name}: {i + len(chunk)}/{len(records)}")
+    return all_guids
+
+# --- Phase 1: Import lookup/reference tables first (no FKs) ---
+country_map = {}  # source_int_id -> Dataverse GUID
+with open("data/countries.csv", newline="", encoding="utf-8") as f:
+    rows = list(csv.DictReader(f))
+records = [{"prefix_name": r["name"], "prefix_country_id": int(r["id"])} for r in rows]
+guids = bulk_import("prefix_country", records)
+for row, guid in zip(rows, guids):
+    country_map[int(row["id"])] = guid
+
+# --- Phase 2: Import tables that reference Phase 1 ---
+city_map = {}
+with open("data/cities.csv", newline="", encoding="utf-8") as f:
+    rows = list(csv.DictReader(f))
+records = []
+for r in rows:
+    rec = {"prefix_name": r["name"], "prefix_city_id": int(r["id"])}
+    country_guid = country_map.get(int(r["country_id"]))
+    if country_guid:
+        rec["prefix_CountryId@odata.bind"] = bind("prefix_country", country_guid)
+    records.append(rec)
+guids = bulk_import("prefix_city", records)
+for row, guid in zip(rows, guids):
+    city_map[int(row["id"])] = guid
+```
+
+**Key rules for multi-table imports:**
+- Always import in dependency order: referenced tables before referencing tables.
+- Keep source-int-id → GUID maps in memory — do not re-query Dataverse for each row.
+- Use `bind(logical_name, guid)` to build `@odata.bind` strings consistently.
+- Use `chunk_size=1000` (SDK's max per `CreateMultiple` batch); log progress per chunk.
+- If a source row references a lookup that wasn't imported (lookup ID missing from map), skip the row and log it rather than failing the entire import.
+
+### Idempotent Re-Runs
+
+To make a multi-table import safe to re-run, either:
+
+1. **Delete and recreate**: Wipe the target tables before each run (risky if data has downstream references).
+2. **Upsert with alternate keys**: Define a unique alternate key on each table (e.g., the source system's integer ID), then use `UpsertItem` instead of `create()`:
+
+```python
+from PowerPlatform.Dataverse.models.upsert import UpsertItem
+
+client.records.upsert("prefix_country", [
+    UpsertItem(
+        alternate_key={"prefix_country_id": int(r["id"])},
+        record={"prefix_name": r["name"]},
+    )
+    for r in rows
+])
+```
+
+The alternate key (`prefix_country_id`) must be configured as a key on the table in Dataverse before upsert will work — see **dv-metadata**. Once defined, re-running the import is fully idempotent.
+
+---
+
 ## Error Handling
 
 ```python

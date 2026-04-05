@@ -225,6 +225,7 @@ When running in Git Bash on Windows (the default for Claude Code on Windows):
 - **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
 - **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
 - **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
+- **Background job output may be empty on Windows.** Claude Code's background task runner ("Running in the background") can silently produce no output on Windows. For long-running scripts, run them in the foreground with unbuffered output and redirect to a log file: `python -u scripts/import_data.py > /tmp/out.txt 2>&1 &` then poll with `tail -f /tmp/out.txt` or `cat /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
 
 ---
 

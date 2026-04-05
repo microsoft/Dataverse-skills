@@ -552,6 +552,53 @@ pac solution list-components --solutionUniqueName <SOLUTION_NAME> --environment 
 
 ---
 
+## Idempotent Table Creation
+
+When creating tables programmatically (e.g., a schema setup script that may be re-run), catch `0x80040237` to skip tables that already exist:
+
+```python
+try:
+    info = client.tables.create(schema_name, columns, solution=SOLUTION, primary_column="prefix_name")
+    print(f"Created: {info['table_schema_name']}")
+except Exception as e:
+    err = str(e)
+    if "already exists" in err.lower() or "0x80040237" in err:
+        print("Already exists, skipping")
+    else:
+        raise
+```
+
+To pre-check without creating, query `EntityDefinitions` directly:
+```python
+# Returns 404 if the table does not exist
+GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName
+```
+
+---
+
+## EntityDefinitions Filter Limitation
+
+**`startswith()` is NOT supported as a filter on `EntityDefinitions`.** This query will return a 400 error:
+
+```
+GET /api/data/v9.2/EntityDefinitions?$filter=startswith(LogicalName,'new_')  # BROKEN
+```
+
+To retrieve metadata for multiple custom tables, query each table individually:
+```python
+GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName,EntitySetName
+```
+
+Or query all entities and filter in Python:
+```python
+GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
+# Then filter: [e for e in result["value"] if e["LogicalName"].startswith("new_")]
+```
+
+This matters for import scripts that need to discover entity set names (e.g., `new_projectbudgets`) before writing records with `@odata.bind`.
+
+---
+
 ## MCP Table Creation Notes
 
 When using MCP `create_table` or `update_table`:
