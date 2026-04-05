@@ -4,9 +4,10 @@ description: >
   Create, update, delete, bulk-import, and upsert Dataverse records using the official Python SDK.
   Use when: "create records", "insert data", "bulk create", "bulk update", "bulk import",
   "import CSV", "load data", "upsert", "upsert records", "write data", "upload file",
-  "add records", "Python script for Dataverse", "CreateMultiple", "UpdateMultiple", "UpsertMultiple".
-  Do not use when: querying, filtering, or reading records (use dv-query),
-  creating forms/views (use dv-metadata), exporting solutions (use dv-solution).
+  "add records", "CreateMultiple", "UpdateMultiple", "UpsertMultiple".
+  Do not use when: querying or reading records (use dv-query),
+  creating tables, columns, or relationships (use dv-metadata),
+  exporting solutions (use dv-solution).
 ---
 
 # Skill: Data — Create, Update, Delete, and Bulk Import
@@ -22,6 +23,14 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 ```
 pip install --upgrade PowerPlatform-Dataverse-Client
 ```
+
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Query or read records | **dv-query** |
+| Create tables, columns, relationships, forms, views | **dv-metadata** |
+| Export or deploy solutions | **dv-solution** |
 
 ---
 
@@ -45,7 +54,7 @@ from auth import get_token, load_env  # WRONG for SDK-supported ops
 import requests                        # WRONG for SDK-supported ops
 ```
 
-`get_token()` and `requests` exist ONLY for operations the SDK does not support (forms, views, `$apply`, N:N `$expand`, unbound actions).
+`get_token()` and `requests` exist ONLY for operations the SDK does not support (forms, views, `$apply`, N:N `$expand`, unbound actions) — see **dv-query** and **dv-metadata**.
 
 ---
 
@@ -55,10 +64,19 @@ import requests                        # WRONG for SDK-supported ops
 - Upsert (with alternate key support)
 - Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
 - File column uploads (chunked for files >128MB)
-- Table create/delete/metadata
-- Relationship metadata create/delete (1:N and N:N schema-level)
-- Alternate key management
 - Context manager with HTTP connection pooling
+
+## What This SDK Does NOT Support
+
+Use raw Web API (`get_token()`) for:
+- Forms (FormXml) — see **dv-metadata**
+- Views (SavedQueries) — see **dv-metadata**
+- Global option sets — see **dv-metadata**
+- N:N record association (`$ref` POST) — see **dv-query**
+- N:N `$expand` — see **dv-query**
+- `$apply` aggregation — see **dv-query**
+- Unbound actions (e.g., `InstallSampleData`)
+- DeleteMultiple, general OData batching
 
 ---
 
@@ -87,10 +105,10 @@ Getting this wrong causes 400 errors.
 
 | Property type | Convention | Example | When used |
 |---|---|---|---|
-| **Structural** (columns) | LogicalName — always lowercase | `new_name`, `new_priority` | Record payload keys, `$select`, `$filter` |
-| **Navigation** (lookups) | Navigation Property Name — case-sensitive, matches `$metadata` | `new_AccountId` | `@odata.bind` keys, `$expand` |
+| **Structural** (columns) | LogicalName — always lowercase | `new_name`, `new_priority` | Record payload keys |
+| **Navigation** (lookups) | Navigation Property Name — case-sensitive, matches `$metadata` | `new_AccountId` | `@odata.bind` keys |
 
-The SDK lowercases structural keys automatically but preserves `@odata.bind` key casing. Always use the exact Navigation Property Name for `@odata.bind`.
+The SDK lowercases structural keys automatically but preserves `@odata.bind` key casing.
 
 ---
 
@@ -100,7 +118,7 @@ The SDK lowercases structural keys automatically but preserves `@odata.bind` key
 guid = client.records.create("new_ticket", {
     "new_name": "Ticket 001",
     "new_priority": 100000002,          # choice column — integer value, not string
-    "new_AccountId@odata.bind": "/accounts(<account-guid>)",  # lookup binding
+    "new_AccountId@odata.bind": "/accounts(<account-guid>)",
 })
 print(f"Created: {guid}")
 ```
@@ -109,24 +127,25 @@ print(f"Created: {guid}")
 - Key is the Navigation Property Name (case-sensitive): `new_AccountId@odata.bind`, not `new_accountid@odata.bind`
 - Value is `"/<EntitySetName>(<guid>)"` — e.g., `"/accounts(<guid>)"`
 - If you just created the lookup column, wait 5–10 seconds before inserting. Metadata propagation delays cause "Invalid property" errors.
+- Choice columns use integer values, not strings: `"new_priority": 100000002` (not `"High"`)
+
+### Common `@odata.bind` patterns
+
+| Lookup | Correct key | Wrong |
+|---|---|---|
+| Custom: `new_AccountId` | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
+| System polymorphic: `customerid` | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
+| System: `parentcustomerid` | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
 
 ### Find the Navigation Property Name
 
 After creating a lookup via SDK: `result.lookup_schema_name` is the navigation property name.
 
-For system tables, query relationship metadata:
+For existing system tables, query:
 ```
 GET /api/data/v9.2/EntityDefinitions(LogicalName='<entity>')/ManyToOneRelationships
   ?$select=ReferencingEntityNavigationPropertyName,ReferencedEntity
 ```
-
-### Common `@odata.bind` patterns
-
-| Lookup field | Correct key | Wrong |
-|---|---|---|
-| Custom: `new_AccountId` | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
-| System polymorphic: `customerid` | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
-| System: `parentcustomerid` | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
 
 ---
 
@@ -172,7 +191,7 @@ client.records.update("new_ticket",
 
 ## Upsert (Alternate Keys)
 
-Idempotent — re-running the same import does not create duplicates.
+Idempotent — re-running the same import does not create duplicates. The alternate key must be defined on the table first — see **dv-metadata**.
 
 ```python
 from PowerPlatform.Dataverse.models.upsert import UpsertItem
@@ -188,8 +207,6 @@ client.records.upsert("account", [
     ),
 ])
 ```
-
-The alternate key must be defined on the table first (see `dv-metadata`). Alternate keys on `email` or any unique column are the correct default for CSV imports.
 
 ---
 
@@ -212,24 +229,17 @@ client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_cr
 with open("data/customers.csv", newline="", encoding="utf-8") as f:
     rows = list(csv.DictReader(f))
 
-records = []
-for row in rows:
-    records.append({
-        "new_name":  row["name"],
-        "new_email": row["email"],
-        "new_tier":  int(row["tier_code"]),
-    })
-
+records = [{"new_name": row["name"], "new_email": row["email"]} for row in rows]
 guids = client.records.create("new_customer", records)
 print(f"Imported {len(guids)} customers")
 ```
 
 ### Lookup resolution during import
 
-If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs a GUID, pre-resolve in a lookup dict:
+If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs a GUID, pre-resolve with a lookup dict:
 
 ```python
-# Build email -> GUID lookup
+# Build email -> GUID map first
 email_to_guid = {}
 for page in client.records.get("new_customer", select=["new_customerid", "new_email"]):
     for r in page:
@@ -260,71 +270,6 @@ Before bulk-creating in a system table (account, contact, opportunity):
 
 ---
 
-## Schema Operations
-
-### Create a table
-
-```python
-from enum import IntEnum
-
-class TicketStatus(IntEnum):
-    OPEN = 100000000
-    IN_PROGRESS = 100000001
-    RESOLVED = 100000002
-
-info = client.tables.create(
-    "new_Ticket",
-    {
-        "new_Description": "string",
-        "new_Priority":    int,
-        "new_Status":      TicketStatus,
-    },
-    solution="SupportAgent",
-    primary_column="new_Name",
-)
-print(f"Created: {info['table_schema_name']}")
-```
-
-### Add columns to an existing table
-
-```python
-client.tables.add_columns("new_ticket", {
-    "new_ResolutionNote": "string",
-    "new_IsEscalated":    "bool",
-})
-```
-
-### Create a lookup (1:N relationship)
-
-```python
-result = client.tables.create_lookup_field(
-    referencing_table="new_ticket",
-    lookup_field_name="new_CustomerId",
-    referenced_table="new_customer",
-    display_name="Customer",
-    solution="SupportAgent",
-)
-print(f"Lookup created: {result.lookup_schema_name}")
-# result.lookup_schema_name is the Navigation Property Name for @odata.bind
-```
-
-### Create a many-to-many relationship
-
-```python
-from PowerPlatform.Dataverse.models.relationship import ManyToManyRelationshipMetadata
-
-client.tables.create_many_to_many_relationship(
-    ManyToManyRelationshipMetadata(
-        schema_name="new_ticket_kbarticle",
-        entity1_logical_name="new_ticket",
-        entity2_logical_name="new_kbarticle",
-    ),
-    solution="SupportAgent",
-)
-```
-
----
-
 ## Error Handling
 
 ```python
@@ -339,7 +284,7 @@ except HttpError as e:
     # 400 — bad field name, @odata.bind format, or missing required field
     # 403 — check security roles
     # 404 — table or record not found
-    # 429 — rate limited; SDK retries automatically, but reduce batch size if persistent
+    # 429 — rate limited; SDK retries automatically, reduce batch size if persistent
 ```
 
 ---

@@ -13,6 +13,14 @@ description: >
 
 **Before the first metadata change in a session, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
 
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Create, update, or delete data records | **dv-data** |
+| Query or read records | **dv-query** |
+| Export or deploy solutions | **dv-solution** |
+
 ---
 
 ## How Changes Are Made: Environment-First
