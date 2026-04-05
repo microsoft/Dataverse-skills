@@ -1,0 +1,22 @@
+name: Skill Evals
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/plugins/dataverse/skills/**'
+      - '.github/evals/**'
+
+jobs:
+  static-checks:
+    name: Static skill checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run static eval suite
+        run: python .github/evals/static_checks.py
