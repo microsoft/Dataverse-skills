@@ -241,7 +241,8 @@ After verifying MCP works, tell the user:
 >
 > You can now:
 > - Create tables, columns, and relationships (`dv-metadata`)
-> - Query and manage data (`dv-python-sdk`)
+> - Write and import data (`dv-data`)
+> - Query and analyze data (`dv-query`)
 > - Export and promote solutions (`dv-solution`)
 >
 > To create your first solution, see the `dv-solution` skill.

@@ -302,4 +302,4 @@ pages = client.records.get(
 - `--activate-plugins` ensures any registered plugins in the solution are activated on import.
 - If you see "solution already exists" errors, use `--import-mode ForceUpgrade` to overwrite.
 - Large solutions (Sales, Customer Service) can take 10–20 minutes to import. Be patient and poll rather than re-importing.
-- All validation queries above require auth. Use `scripts/auth.py` for credential/token acquisition. See `/dataverse:python-sdk` for SDK setup patterns.
+- All validation queries above require auth. Use `scripts/auth.py` for credential/token acquisition. See `dv-query` for SDK query patterns and `dv-data` for write patterns.

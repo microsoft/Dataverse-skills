@@ -5,7 +5,7 @@ description: >
   Use when: "add column", "create table", "add relationship", "lookup column", "create form",
   "create view", "modify form", "FormXml", "SavedQuery", "option set", "picklist",
   "MetadataService", "EntityDefinitions".
-  Do not use when: reading/writing data records (use dv-python-sdk),
+  Do not use when: writing data records (use dv-data), reading or querying records (use dv-query),
   exporting solutions (use dv-solution).
 ---
 
