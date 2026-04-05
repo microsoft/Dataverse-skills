@@ -11,7 +11,10 @@ description: >
 
 # Skill: Metadata — Making Changes
 
-**Before the first metadata change in a session, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
+**Before the first metadata change in a session:**
+1. **Confirm the target environment** with the user — see the Multi-Environment Rule in dv-overview.
+2. **Confirm the solution** — ask "What solution should these components go into?" If `SOLUTION_NAME` is in `.env`, confirm it. If no solution exists yet, create one first (see `dv-solution`). Never create tables or columns outside a solution.
+3. Pass `solution="<UniqueName>"` in every SDK call, or include `"MSCRM.SolutionName": "<UniqueName>"` on every raw Web API call.
 
 ## Skill boundaries
 
@@ -333,11 +336,24 @@ url = f"{env}/api/data/v9.2/systemforms?$filter=objecttypecode eq 'new_projectbu
 
 ### Publish forms after create/modify
 
-Forms must be published to take effect:
+Forms must be published to take effect. Do this immediately after creating or modifying a form:
 ```python
-body = {"ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"}
-# POST /api/data/v9.2/PublishXml
+import json, urllib.request
+body = json.dumps({
+    "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"
+}).encode()
+req = urllib.request.Request(
+    f"{env}/api/data/v9.2/PublishXml",
+    data=body,
+    headers={"Authorization": f"Bearer {token}",
+             "Content-Type": "application/json",
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+    method="POST"
+)
+with urllib.request.urlopen(req) as resp:
+    print(f"Published. Status: {resp.status}")
 ```
+Replace `new_projectbudget` with the logical name of the entity whose form you modified.
 
 ---
 

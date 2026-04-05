@@ -154,7 +154,8 @@ for page in client.records.get(
 ## $expand on N:N Relationships (Web API — SDK does not support)
 
 ```python
-import json, urllib.request
+import os, sys, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_token, load_env  # get_token() is correct here — SDK cannot do this
 
 load_env()
@@ -183,7 +184,8 @@ with urllib.request.urlopen(req) as resp:
 For GROUP BY, HAVING, and server-side aggregates:
 
 ```python
-import json, urllib.request
+import os, sys, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_token, load_env
 
 load_env()

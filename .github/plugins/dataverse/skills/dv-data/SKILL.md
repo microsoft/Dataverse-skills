@@ -36,7 +36,7 @@ pip install --upgrade PowerPlatform-Dataverse-Client
 
 ## Before Writing ANY Script — Check MCP First
 
-**If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires bulk operations or multi-step logic.
+**If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, or operations the SDK supports that MCP cannot (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
 
 ## SDK-First Rule
 

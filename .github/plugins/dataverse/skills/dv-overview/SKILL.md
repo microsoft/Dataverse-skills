@@ -71,11 +71,11 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
 
-**If you are about to write `import requests` or `from auth import get_token` in a script, STOP.** Ask yourself: does the SDK support this operation? If yes, use `from auth import get_credential` + `DataverseClient` instead. The `get_token()` function exists ONLY for the narrow set of operations the SDK does not support.
+**Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import get_credential` + `DataverseClient` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
 
-**Raw Web API is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
+**Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
 
-**Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** the SDK (b6+) auto-preserves `@odata.bind` casing — still use the correct SchemaName form. **Raw Web API calls** (forms, views, metadata): casing is fully manual — a lowercase `new_accountid@odata.bind` will 400.
+**Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
 **Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
 
@@ -172,15 +172,17 @@ Note: The Python SDK is in **preview** — breaking changes possible.
 
 If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `list_tables`, `describe_table`, `read_query`, `create_record`).
 
-**If MCP tools are NOT available and the user explicitly asked for MCP:**
+**If MCP tools are NOT available and the user explicitly asked for MCP** (e.g., "use MCP to query", "why isn't MCP working"):
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
 3. Load the `dv-connect` skill to set up the MCP server
-4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"). Do not fall back to the SDK or proceed with other tools. Wait for the user to restart and come back.
+4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind them: "Use `claude --continue` to resume without losing context." Do not proceed with SDK. Wait for the user to restart.
 
-**If MCP tools are NOT available and the user asked a simple data question** (e.g., "how many accounts with 'jeff'?"):
-1. Answer the question using the Python SDK (don't block the user)
-2. After answering, suggest: "This would be even simpler with MCP configured — want me to set that up?"
+**If MCP tools are NOT available and the user asked a data question without explicitly requesting MCP** (e.g., "how many accounts with 'jeff'?", "show me open tickets"):
+1. This is a SDK fallback case — use the Python SDK to answer the question. Do not block the user.
+2. After answering, offer: "MCP would handle this conversationally — want me to set it up?"
+
+The distinction matters: explicit MCP request → block and set up MCP. Implicit/conversational question → answer with SDK, offer MCP setup.
 
 **If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
 
