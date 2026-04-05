@@ -50,7 +50,7 @@ All scripts, data operations, and automation MUST use **Python**. This plugin's 
 - Use the Python Dataverse SDK (`PowerPlatform-Dataverse-Client`) for data and schema operations
 - Use `azure-identity` (Python) for Azure credential flows
 
-If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read the python-sdk skill.
+If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read the `dv-data` skill.
 
 ### 2. MCP → SDK → Web API (in that order)
 
@@ -147,16 +147,17 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 | Tool | Use for | Does NOT support |
 | --- | --- | --- |
-| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use Python with OData or pandas — see the python-sdk skill. **Bulk operations:** MCP `create_record` creates one record at a time. For 50+ records, use the Web API `$batch` endpoint or Python SDK `CreateMultiple` instead — see the python-sdk skill. |
-| **Python SDK** | **Preferred for all scripted data work and schema creation.** Data CRUD, upsert (alternate keys), bulk create/update/upsert/delete (uses CreateMultiple/UpdateMultiple internally), OData queries (select/filter/expand/orderby/top), read-only SQL, table create/delete/metadata, add/remove columns, relationship metadata CRUD (1:N, N:N, lookup fields), alternate key management, file column uploads (chunked >128MB), context manager with connection pooling | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, custom action invocation, generic `$batch` |
+| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use Python with OData or pandas — see `dv-query`. **Bulk operations:** MCP `create_record` creates one record at a time. For 10+ records, use the Python SDK `CreateMultiple` instead — see `dv-data`. |
+| **Python SDK (`dv-data`)** | **Preferred for all scripted data writes.** Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, continue-on-error batch, file column uploads (chunked >128MB), table/column/relationship schema creation | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, custom action invocation |
+| **Python SDK (`dv-query`)** | **Preferred for all scripted reads and analytics.** OData queries (select/filter/expand/orderby/top/paging), GUID-free display (formatted values), fuzzy record lookup, "my" scoping, change tracking / delta queries, data quality patterns (nulls, dupes, orphans), pandas DataFrame handoff, Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
 | **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
 | **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Data CRUD, metadata creation (tables/columns/forms) |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
+**Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
 
-**Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use Python SDK `client.records.create(table, list_of_dicts)` — it uses `CreateMultiple` internally and handles batching. For data profiling and analytics beyond simple GROUP BY, use Python with pandas (see python-sdk skill). For aggregation queries (`$apply`), use the Web API directly.
+**Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally and handles batching. For queries, filters, and analytics use `dv-query`. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
 
 Note: The Python SDK is in **preview** — breaking changes possible.
 
@@ -186,7 +187,8 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | --- | --- |
 | **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
 | **dv-metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
-| **dv-python-sdk** | Data CRUD, bulk ops, OData queries, file uploads, bulk import, data profiling, notebook analysis via Python SDK |
+| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, file uploads, alternate key upserts, continue-on-error batch |
+| **dv-query** | OData queries, `$expand`, `$apply` aggregation, GUID-free display, fuzzy lookup, "my" scoping, change tracking, data quality patterns, notebook/pandas handoff |
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 
 ---
@@ -200,7 +202,7 @@ The plugin ships utility scripts in `scripts/`:
 | `auth.py` | Azure Identity token/credential acquisition — used by all other scripts and the SDK |
 | `enable-mcp-client.py` | Add the MCP Client ID to the list of allowed MCP clients in Dataverse |
 
-For data operations and post-import validation, use the Python SDK directly (inline in your own scripts). See the `dv-python-sdk` skill for SDK patterns and the `dv-solution` skill for validation queries.
+For data write operations (create, update, bulk import), see `dv-data`. For queries, aggregation, and analytics, see `dv-query`. For post-import validation queries, see `dv-solution`.
 
 Any Web API call that goes beyond a one-off query should be written as a Python script and committed to `/scripts/`. Use `scripts/auth.py` for token acquisition.
 
