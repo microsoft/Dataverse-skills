@@ -25,6 +25,14 @@ Every solution belongs to a publisher. The publisher's `customizationprefix` (e.
 **Discovery flow — always run this before creating a publisher:**
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
 # 1. Query for existing non-Microsoft publishers
 pages = client.records.get(
     "publisher",
@@ -248,9 +256,12 @@ N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. 
 
 ```python
 # Web API required — SDK does not support N:N $expand
-import urllib.request, json
-from auth import get_token  # get_token() is correct here — SDK can't do this
+import os, sys, urllib.request, json
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env  # get_token() is correct here — SDK can't do this
 
+load_env()
+env = os.environ["DATAVERSE_URL"].rstrip("/")
 token = get_token()
 url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
 req = urllib.request.Request(url, headers={

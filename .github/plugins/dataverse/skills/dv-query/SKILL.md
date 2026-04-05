@@ -269,7 +269,7 @@ df = client.dataframe.get("opportunity",
 print(df.groupby("statuscode")["estimatedvalue"].agg(["count", "sum", "mean"]))
 ```
 
-**DataFrame write-back** — update or create records from a DataFrame:
+**DataFrame write-back** — update or create records from a DataFrame. These are write operations — agents consulting **dv-data** for writes should also check here for the DataFrame variant:
 
 ```python
 # Update records — DataFrame must include the primary key column
@@ -293,6 +293,8 @@ df = pd.DataFrame(all_records)
 ---
 
 ## Jupyter Notebook Setup
+
+> **Auth note:** Notebooks do not have a `scripts/` directory, so `scripts/auth.py` is not available. Use `InteractiveBrowserCredential` directly — this is the intended exception to the `scripts/auth.py` rule. For scripts (`.py` files), always use `scripts/auth.py`.
 
 ```python
 # Cell 1: Setup

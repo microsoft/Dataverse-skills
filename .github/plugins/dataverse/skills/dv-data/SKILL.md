@@ -192,6 +192,22 @@ client.records.update("new_ticket",
 
 ---
 
+## DataFrame Write-Back
+
+To create or update records from a pandas DataFrame, use the `client.dataframe` namespace. This is documented in **dv-query** (alongside `client.dataframe.get()`) but is a write operation — include it in your data write workflow:
+
+```python
+# Update records — DataFrame must include the primary key column
+client.dataframe.update("opportunity", df_updates, id_column="opportunityid")
+
+# Create records — returns a Series of new GUIDs
+guids = client.dataframe.create("opportunity", df_new_records)
+```
+
+See **dv-query** for the full `client.dataframe` reference including `client.dataframe.get()`.
+
+---
+
 ## Upsert (Alternate Keys)
 
 Idempotent — re-running the same import does not create duplicates. The alternate key must be defined on the table first — see **dv-metadata**.
