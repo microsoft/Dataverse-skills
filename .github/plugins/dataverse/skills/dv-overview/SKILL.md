@@ -162,7 +162,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
 
-**Volume guidance — writes:** MCP `create_record` for 1–10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally and handles batching.
+**Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for >1,000 records, chunk in your script (see `dv-data` for the pattern).
 
 **Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (no paging needed). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
 
@@ -195,8 +195,8 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | Skill | What it covers |
 | --- | --- |
 | **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
-| **dv-metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
-| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, file uploads, alternate key upserts, continue-on-error batch |
+| **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API) |
+| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts |
 | **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, `$apply` aggregation (Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 

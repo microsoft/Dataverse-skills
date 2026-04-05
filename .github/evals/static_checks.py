@@ -43,6 +43,7 @@ CAT-5  Cross-Skill Completeness
        EVAL-COMPLETE-02  Skill Boundaries cross-references point to real skill names
        EVAL-COMPLETE-03  dv-overview Available Skills table lists every skill directory
        EVAL-COMPLETE-04  No skill references the removed 'dv-python-sdk' skill
+       EVAL-COMPLETE-05  README.md skill count matches actual number of skill directories
 """
 
 import argparse
@@ -271,6 +272,30 @@ def check_overview_index(overview_path, all_skill_names):
     return failures
 
 
+def check_readme_skill_count(skills_dir, all_skill_names):
+    """EVAL-COMPLETE-05: README.md skill count matches actual skill directories."""
+    failures = []
+    readme_path = skills_dir.parent.parent.parent.parent / "README.md"
+    if not readme_path.exists():
+        # README is optional — skip silently if not found
+        return failures
+
+    text = readme_path.read_text(encoding="utf-8")
+    actual_count = len(all_skill_names)
+
+    # Look for "N skills" pattern in README (e.g., "**5 skills**" or "6 skills")
+    matches = re.findall(r"\*{0,2}(\d+)\s+skills\*{0,2}", text)
+    for m in matches:
+        claimed = int(m)
+        if claimed != actual_count:
+            failures.append(
+                f"EVAL-COMPLETE-05 [README.md] claims '{claimed} skills' but "
+                f"found {actual_count} skill directories"
+            )
+
+    return failures
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -309,9 +334,10 @@ def main():
         all_failures.extend(check_structure(name, text))
         all_failures.extend(check_completeness(name, text, all_skill_names))
 
-    # Cross-skill check — needs all files loaded
+    # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
     all_failures.extend(check_overview_index(overview_path, all_skill_names))
+    all_failures.extend(check_readme_skill_count(skills_dir, all_skill_names))
 
     if all_failures:
         # Group output by category prefix for readability

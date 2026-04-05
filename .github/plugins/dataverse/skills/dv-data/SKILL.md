@@ -4,7 +4,8 @@ description: >
   Create, update, delete, bulk-import, and upsert Dataverse records using the official Python SDK.
   Use when: "create records", "insert data", "bulk create", "bulk update", "bulk import",
   "import CSV", "load data", "upsert", "upsert records", "write data", "upload file",
-  "add records", "CreateMultiple", "UpdateMultiple", "UpsertMultiple".
+  "add records", "CreateMultiple", "UpdateMultiple", "UpsertMultiple",
+  "multi-table import", "FK dependencies", "dependency order", "parallel import", "large dataset".
   Do not use when: querying or reading records (use dv-query),
   creating tables, columns, or relationships (use dv-metadata),
   exporting solutions (use dv-solution).
@@ -173,7 +174,9 @@ guids = client.records.create("new_ticket", records)
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: MCP `create_record` for 1–10 records. SDK for 10+ — it handles batching (max 1,000 per batch) and retry automatically.
+Volume guidance: MCP `create_record` for 1-10 records. SDK for 10+ records.
+
+**Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse limits `CreateMultiple` to ~1,000 records per request. For larger datasets, you **must** chunk in your script (see the `bulk_import` helper in Multi-Table Import below, or the concurrent pattern in Large Dataset Imports).
 
 ---
 
@@ -230,7 +233,7 @@ client.records.upsert("account", [
 | Volume | Tool | Why |
 |---|---|---|
 | 1–10 records | MCP `create_record` | Simple, no script |
-| 10+ records | SDK `client.records.create(table, list)` | Built-in batching, retry |
+| 10+ records | SDK `client.records.create(table, list)` | Uses CreateMultiple; chunk >1K records yourself |
 
 ```python
 import csv, os, sys
@@ -343,7 +346,7 @@ for row, guid in zip(rows, guids):
 - Always import in dependency order: referenced tables before referencing tables.
 - Keep source-int-id → GUID maps in memory — do not re-query Dataverse for each row.
 - Use `bind(logical_name, guid)` to build `@odata.bind` strings consistently.
-- Use `chunk_size=1000` (SDK's max per `CreateMultiple` batch); log progress per chunk.
+- Use `chunk_size=1000` (Dataverse's limit per `CreateMultiple` request — the SDK does not chunk for you); log progress per chunk.
 - If a source row references a lookup that wasn't imported (lookup ID missing from map), skip the row and log it rather than failing the entire import.
 
 ### Idempotent Re-Runs
@@ -366,6 +369,47 @@ client.records.upsert("prefix_country", [
 ```
 
 The alternate key (`prefix_country_id`) must be configured as a key on the table in Dataverse before upsert will work — see **dv-metadata**. Once defined, re-running the import is fully idempotent.
+
+---
+
+## Large Dataset Imports (>5K records per table)
+
+For datasets with thousands of records per table, sequential 1,000-record chunks become a bottleneck. Use `concurrent.futures.ThreadPoolExecutor` to dispatch multiple chunks in parallel:
+
+```python
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+BATCH_SIZE = 1000
+MAX_WORKERS = 4  # 4 concurrent requests; increase if not hitting 429s
+
+def bulk_import_parallel(logical_name, records, chunk_size=BATCH_SIZE, max_workers=MAX_WORKERS):
+    """Import records in parallel chunks. Returns list of created GUIDs in order."""
+    if len(records) <= chunk_size:
+        return list(client.records.create(logical_name, records))
+
+    batches = [records[i:i + chunk_size] for i in range(0, len(records), chunk_size)]
+    results = [None] * len(batches)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(client.records.create, logical_name, batch): idx
+            for idx, batch in enumerate(batches)
+        }
+        for future in as_completed(futures):
+            idx = futures[future]
+            results[idx] = future.result()
+            print(f"  {logical_name}: batch {idx + 1}/{len(batches)} done")
+
+    return [guid for batch_guids in results for guid in batch_guids]
+```
+
+**Trade-offs to understand:**
+- **Atomicity**: Each batch is a separate `CreateMultiple` POST. If batch 3 of 5 fails, batches 1-2 are already committed. Callers needing all-or-nothing must stay sequential with <=1,000 records.
+- **Rate limiting**: Dataverse returns 429 when throttled. Start with `max_workers=4`; reduce if you see 429 errors. The SDK does not coordinate back-off across threads.
+- **Memory**: Each thread holds one batch payload in memory. At 1,000 records x 4 workers, this is typically <50MB.
+- **Slow machines**: Set `max_workers=1` to fall back to sequential behavior with zero thread overhead.
+
+This is a short-term pattern until the SDK adds native batching (tracked in PowerPlatform-DataverseClient-Python#156).
 
 ---
 
