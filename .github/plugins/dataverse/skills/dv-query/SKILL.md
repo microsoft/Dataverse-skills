@@ -1,11 +1,12 @@
 ---
 name: dv-query
 description: >
-  Read and analyze Dataverse records using the Python SDK and Web API — for operations MCP cannot handle.
-  Use when: "query records", "read data", "expand lookup", "cross-table query", "join tables",
+  Bulk reads, multi-page iteration, and analytics using the Python SDK and Web API.
+  Use when: "query records", "read data", "bulk read", "all records", "iterate records",
+  "expand lookup", "cross-table query", "join tables",
   "aggregate", "group by", "average", "sum", "count with HAVING", "$apply",
-  "N:N expand", "notebook", "pandas", "DataFrame", "analyze data".
-  Do not use when: MCP can handle the query (simple filters, single-record reads — use MCP first),
+  "N:N expand", "notebook", "pandas", "DataFrame", "analyze data", "load into dataframe".
+  Do not use when: MCP is sufficient (simple filter, single-record read, small result set — use MCP first),
   creating or modifying records (use dv-data),
   creating tables or columns (use dv-metadata).
 ---
@@ -14,7 +15,7 @@ description: >
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. See the overview skill's Hard Rules.
 
-> **Check MCP first.** This skill is for operations MCP cannot handle. If MCP tools are available and the task is a simple filter, single-record read, or small result set, use MCP — no script needed.
+> **Check MCP first.** If MCP tools are available and the task is a simple filter, single-record read, or small result set (single page), use MCP — no script needed. Use this skill for bulk reads (multi-page), DataFrame loading, `$expand`, aggregation, and queries hitting MCP SQL limits (DISTINCT, HAVING, subqueries).
 
 ## When to use this skill vs. MCP
 

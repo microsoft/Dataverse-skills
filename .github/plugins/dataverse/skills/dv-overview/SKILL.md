@@ -54,9 +54,14 @@ If you find yourself about to run `npm` or create a `package.json`, STOP. You ar
 
 ### 2. MCP → SDK → Web API (in that order)
 
-**Before writing ANY code, ask: can MCP handle this?** If MCP tools are available in your tool list (`list_tables`, `describe_table`, `read_query`, `create_record`, etc.) and the task is a simple read, query, or small CRUD operation (≤10 records), **use MCP — no script needed.** Examples: "how many accounts have 'jeff' in the name?", "show me the columns on the contact table", "create an account named Contoso."
+**Before writing ANY code, ask: can MCP handle this?** If MCP tools are available in your tool list (`list_tables`, `describe_table`, `read_query`, `create_record`, etc.):
 
-**If MCP can't handle it** (bulk operations, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
+- **Writes:** ≤10 records → use MCP directly. 10+ records → use Python SDK (`dv-data`).
+- **Reads:** Single query, simple filter, result fits on one page → use MCP. Multi-page result sets, DataFrame loading, aggregation, or queries hitting SQL limits (DISTINCT, HAVING, subqueries) → use Python SDK (`dv-query`).
+
+Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", "show me the columns on the contact table", "create an account named Contoso."
+
+**If MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
 
 **SDK checklist — evaluate EVERY time you write a script:**
 - Creating/reading/updating/deleting records? → `client.records.create()`, `.get()`, `.update()`, `.delete()`
@@ -64,7 +69,7 @@ If you find yourself about to run `npm` or create a `package.json`, STOP. You ar
 - Creating relationships? → `client.tables.create_lookup_field()` or `client.tables.create_many_to_many_relationship()`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})`
 - Bulk operations? → `client.records.create(table, [list_of_dicts])`
-- Querying with $select/$filter/$expand? → `client.records.get()` with `select=`, `filter=`, `expand=`
+- Querying with $select/$filter/$expand? → `client.query.builder(table).select(...).filter_eq(...).execute()` (or `client.records.get()` for single-record-by-GUID fetch)
 
 **If you are about to write `import requests` or `from auth import get_token` in a script, STOP.** Ask yourself: does the SDK support this operation? If yes, use `from auth import get_credential` + `DataverseClient` instead. The `get_token()` function exists ONLY for the narrow set of operations the SDK does not support.
 
@@ -149,7 +154,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | --- | --- | --- |
 | **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use Python with OData or pandas — see `dv-query`. **Bulk operations:** MCP `create_record` creates one record at a time. For 10+ records, use the Python SDK `CreateMultiple` instead — see `dv-data`. |
 | **Python SDK (`dv-data`)** | **Preferred for all scripted data writes.** Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, continue-on-error batch, file column uploads (chunked >128MB), table/column/relationship schema creation | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, custom action invocation |
-| **Python SDK (`dv-query`)** | **Preferred for all scripted reads and analytics.** OData queries (select/filter/expand/orderby/top/paging), GUID-free display (formatted values), fuzzy record lookup, "my" scoping, change tracking / delta queries, data quality patterns (nulls, dupes, orphans), pandas DataFrame handoff, Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
+| **Python SDK (`dv-query`)** | **Preferred for bulk reads and analytics.** Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API, GUID-free display (formatted values), `$expand` to resolve lookups, pandas DataFrame handoff (`client.dataframe.get()`), Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
 | **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
 | **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Data CRUD, metadata creation (tables/columns/forms) |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
@@ -157,7 +162,9 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Tool priority (always follow this order):** MCP (if available) for simple reads, queries, and ≤10 record CRUD → Python SDK for scripted data, bulk operations, schema creation, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
 
-**Volume guidance:** MCP `create_record` is fine for 1–10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally and handles batching. For queries, filters, and analytics use `dv-query`. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
+**Volume guidance — writes:** MCP `create_record` for 1–10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally and handles batching.
+
+**Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (single page). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
 
 Note: The Python SDK is in **preview** — breaking changes possible.
 
@@ -188,7 +195,7 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
 | **dv-metadata** | Create/modify tables, columns, relationships, forms, views via Web API |
 | **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, file uploads, alternate key upserts, continue-on-error batch |
-| **dv-query** | OData queries, `$expand`, `$apply` aggregation, GUID-free display, fuzzy lookup, "my" scoping, change tracking, data quality patterns, notebook/pandas handoff |
+| **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, `$apply` aggregation (Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 
 ---
