@@ -81,3 +81,14 @@ Then describe a task that exercises the changed skill in plain English. The agen
 - Prefix commits with `feat:`, `fix:`, `refactor:`, `add:`, or `docs:`
 - PR descriptions: lead with the theme of the change, not a per-line changelog
 - Run `python .github/evals/static_checks.py` and confirm it passes before opening a PR
+
+## Version Bumping
+
+When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all four files:
+
+1. `.github/plugin/marketplace.json` — top-level `metadata.version`
+2. `.github/plugin/marketplace.json` — plugin entry `version`
+3. `.github/plugins/dataverse/.claude-plugin/plugin.json` — `version`
+4. `.github/plugins/dataverse/.github/plugin/plugin.json` — `version`
+
+All four must match. Use semver: patch for fixes, minor for new patterns or skill changes, major for breaking changes (skill renames, removed sections).
