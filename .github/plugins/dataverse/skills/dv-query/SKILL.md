@@ -207,7 +207,7 @@ req = urllib.request.Request(url, headers={
     "Authorization": f"Bearer {token}",
     "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
 })
-with urllib.request.urlopen(req, timeout=30) as resp:
+with urllib.request.urlopen(req, timeout=120) as resp:
     data = json.loads(resp.read())
     for ticket in data["value"]:
         articles = [a["new_title"] for a in ticket.get("new_ticket_kbarticle", [])]
@@ -245,7 +245,7 @@ def apply_query(entity_set, apply_expr):
         "Authorization": f"Bearer {token}",
         "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
     })
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=120) as resp:
         return json.loads(resp.read()).get("value", [])
 
 # Example 1: Count and sum by status
