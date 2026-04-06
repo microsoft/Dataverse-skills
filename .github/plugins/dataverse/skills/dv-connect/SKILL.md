@@ -42,7 +42,7 @@ After Python is confirmed:
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
 ```
 
-**Skip condition:** All tools present and Python SDK installed.
+**Skip condition:** All tools present, Python SDK installed, and `pandas` importable (`python -c "import pandas"`).
 
 ---
 
