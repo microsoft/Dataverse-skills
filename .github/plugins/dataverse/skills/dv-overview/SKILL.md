@@ -66,7 +66,9 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 **SDK checklist — evaluate EVERY time you write a script:**
 - Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
 - Bulk record operations? → `client.records.create(table, [list_of_dicts])` — see `dv-data`
-- Querying records (multi-page, $expand, DataFrame)? → `client.query.builder(table).select(...).filter_eq(...).execute()` — see `dv-query`
+- Querying or filtering records? → `client.records.get(table, select=[...], filter="...")` — see `dv-query`
+- Aggregation (top-N, sum, count by group, "most/least")? → Single-table: `$apply` server-side aggregation (raw Web API). Cross-table: `client.dataframe.get()` with `$select` + `pd.merge()` — see `dv-query`. Do NOT load all records without `$select` and aggregate in Python.
+- Loading data into pandas? → `client.dataframe.get(table)` — see `dv-query`
 - Single record by GUID? → `client.records.get(table, guid)` — see `dv-query`
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
@@ -74,6 +76,14 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 **Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import get_credential` + `DataverseClient` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
 
 **Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
+
+**NEVER use raw Web API (`get_token()` / `urllib` / `requests`) for:**
+- Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
+- Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
+- Table, column, or relationship creation — use `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` (see `dv-metadata`)
+- Querying records — use `client.records.get()` or `client.query.builder()` (see `dv-query`)
+
+If an SDK method fails or a PAC CLI command doesn't exist, **consult the relevant skill** before falling back to raw HTTP. Improvising raw Web API calls is the #1 cause of off-rails behavior.
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
@@ -94,6 +104,8 @@ If auth is expired or missing, re-run `pac auth create` or check `.env` credenti
 ### 4. Follow Skill Instructions, Don't Improvise
 
 Each skill documents a specific, tested sequence of steps. Follow them. If a skill says "use the Python SDK," use the Python SDK — do not substitute a raw HTTP call, a different library, or a different language. If a skill says "run this command," run that command — do not invent an alternative.
+
+**Do NOT introspect the SDK** with `dir()`, `inspect.signature()`, or `help()` to discover APIs. The skills document the exact methods and parameters to use. If a method call fails with `AttributeError`, the installed SDK version may not have it — check the version note in the skill and fall back to the documented alternative. Introspecting the SDK wastes time and leads to using deprecated or internal APIs.
 
 If you hit a gap (something the skills don't cover), say so honestly and suggest a workaround. Do not hallucinate a path or improvise a solution using tools the skills don't mention.
 
@@ -152,9 +164,9 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 | Tool | Use for | Does NOT support |
 | --- | --- | --- |
-| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use Python with OData or pandas — see `dv-query`. **Bulk operations:** MCP `create_record` creates one record at a time. For 10+ records, use the Python SDK `CreateMultiple` instead — see `dv-data`. |
+| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use `$apply` (single-table aggregation) or `client.dataframe.get()` with pandas (cross-table) — see `dv-query`. **Bulk operations:** MCP `create_record` creates one record at a time. For 10+ records, use the Python SDK `CreateMultiple` instead — see `dv-data`. |
 | **Python SDK (`dv-data`)** | **Preferred for all scripted data writes.** Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, table/column/relationship creation (use `dv-metadata`), custom action invocation |
-| **Python SDK (`dv-query`)** | **Preferred for bulk reads and analytics.** Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API, GUID-free display (formatted values), `$expand` to resolve lookups, pandas DataFrame handoff (`client.dataframe.get()`), Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
+| **Python SDK (`dv-query`)** | **Preferred for bulk reads and analytics.** Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API (b8+), GUID-free display (formatted values), `$expand` to resolve lookups, pandas DataFrame handoff (`client.dataframe.get()`) for cross-table joins and exports, Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
 | **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
 | **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Data CRUD, metadata creation (tables/columns/forms) |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
@@ -162,7 +174,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
 
-**Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for >1,000 records, chunk in your script (see `dv-data` for the pattern).
+**Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for large datasets, chunk in your script starting at 1,000 and adapt up or down based on success (see `dv-data` for the adaptive pattern).
 
 **Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (no paging needed). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
 
@@ -225,7 +237,7 @@ When running in Git Bash on Windows (the default for Claude Code on Windows):
 - **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
 - **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
 - **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
-- **Background job output may be empty on Windows.** Claude Code's background task runner ("Running in the background") can silently produce no output on Windows. For long-running scripts, run them in the foreground with unbuffered output and redirect to a log file: `python -u scripts/import_data.py > /tmp/out.txt 2>&1 &` then poll with `tail -f /tmp/out.txt` or `cat /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
+- **Background job output may be empty on Windows.** Claude Code's background task runner ("Running in the background") can silently produce no output on Windows. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
 
 ---
 
@@ -235,8 +247,22 @@ Before creating tables, columns, or other metadata, ensure a solution exists to 
 
 1. Ask the user: "What solution should these components go into?"
 2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, create one (see the `dv-solution` skill)
-4. Use the `MSCRM.SolutionName` header on all Web API metadata calls to auto-add components
+3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
+
+```python
+# Quick reference — full pattern with publisher discovery is in dv-solution
+publisher_id = client.records.create("publisher", {
+    "uniquename": "<name>", "friendlyname": "<display>",
+    "customizationprefix": "<prefix>", "description": "<desc>",
+})
+solution_id = client.records.create("solution", {
+    "uniquename": "<Name>", "friendlyname": "<Display>",
+    "version": "1.0.0.0",
+    "publisherid@odata.bind": f"/publishers({publisher_id})",
+})
+```
+
+4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
 
 Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.
 

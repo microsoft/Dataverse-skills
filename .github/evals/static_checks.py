@@ -23,6 +23,7 @@ CAT-1  Python Code Block Validity
 CAT-2  Auth Pattern Compliance
        Checks that auth imports follow the documented pattern.
        EVAL-AUTH-01  No 'from scripts.auth import' pattern
+       EVAL-AUTH-02  Every get_token/urllib block must justify why SDK is not used
 
 CAT-3  PAC CLI Accuracy
        Checks for known-bad PAC CLI invocations.
@@ -137,6 +138,24 @@ def check_auth_patterns(name, text):
                 f"EVAL-AUTH-01 [{label}] 'from scripts.auth import' is wrong -- "
                 f"use sys.path.insert + 'from auth import'"
             )
+
+        # EVAL-AUTH-02: get_token/urllib blocks must justify why SDK cannot be used
+        uses_raw_http = ("get_token" in block or "urllib.request" in block)
+        if uses_raw_http:
+            has_justification = any(
+                marker in block
+                for marker in [
+                    "SDK cannot",
+                    "SDK can't",
+                    "SDK does not support",
+                    "WRONG",
+                ]
+            )
+            if not has_justification:
+                failures.append(
+                    f"EVAL-AUTH-02 [{label}] uses get_token/urllib without justification "
+                    f"comment -- add '# SDK cannot/does not support <reason>' to the import line"
+                )
 
     return failures
 

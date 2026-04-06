@@ -232,8 +232,8 @@ If `list_tables` is called directly → MCP is connected. If the agent falls bac
 | Create/read/update/delete data records | MCP server |
 | Create a new table | MCP server |
 | Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
-| Add a column to an existing table | MCP server (`update_table`) for basic columns; Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
-| Create a relationship / lookup | Web API (see `dv-metadata`) |
+| Add a column to an existing table | MCP server (`update_table`) for basic columns; SDK or Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
+| Create a relationship / lookup | SDK (see `dv-metadata`) |
 | Create or modify a form | Web API (see `dv-metadata`) |
 | Create or modify a view | Web API (see `dv-metadata`) |
 
