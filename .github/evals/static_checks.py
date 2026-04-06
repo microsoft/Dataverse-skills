@@ -61,7 +61,7 @@ NO_DO_NOT_USE_EXEMPT = {"dv-overview", "dv-connect"}
 
 def extract_fenced_blocks(text, lang="python"):
     """Return list of (index, content) for fenced blocks of the given language."""
-    pattern = rf"```{re.escape(lang)}\n(.*?)```" if lang else r"```\w*\n(.*?)```"
+    pattern = rf"```{re.escape(lang)}[^\n]*\n(.*?)```" if lang else r"```\w*[^\n]*\n(.*?)```"
     return list(enumerate(re.findall(pattern, text, re.DOTALL), start=1))
 
 
