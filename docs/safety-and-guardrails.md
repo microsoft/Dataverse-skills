@@ -11,7 +11,7 @@ How the Dataverse plugin protects your data, respects your permissions, and keep
 | **Read / Query** | Query records, describe tables and columns, list tables, keyword search, explore schema metadata | Always available to any authenticated user with read privileges |
 | **Create** | Create records, tables, columns, relationships, forms, views | Requires appropriate Dataverse security role |
 | **Update** | Update records, modify schema, edit forms and views | Requires appropriate Dataverse security role |
-| **Import / Export** | CSV import with lookup resolution, solution export and import, bulk data operations | Bulk operations batched automatically via SDK |
+| **Import / Export** | CSV import with lookup resolution, solution export and import, bulk data operations | Agent chunks large imports (SDK does not auto-batch); upsert with alternate keys recommended for idempotent re-runs |
 | **Delete** | Delete records, tables, columns, relationships | Requires appropriate Dataverse security role |
 
 ## Authentication
@@ -96,7 +96,8 @@ Some operations require extra care because they are difficult or impossible to r
 | Table deletion | Cascades to columns, forms, views, and plugins | Platform requires appropriate security role; no agent-level confirmation currently implemented |
 | Environment deletion | Permanent | Requires admin permissions via PAC CLI (platform-enforced) |
 | Solution import to production | Affects all users in the environment | Post-import validation queries provided by skill to verify components are live (skill-enforced) |
-| Bulk operations | Affects many records at once | SDK uses `CreateMultiple`/`UpdateMultiple` internally with automatic batching (code-enforced) |
+| Bulk operations | Affects many records at once | Skills instruct agent to use upsert with alternate keys (idempotent — safe to re-run); agent chunks into batches with adaptive sizing (skill-enforced) |
+| Publisher prefix creation | Prefix is permanent on all components | Agent must ask user before creating; skills enforce mandatory confirmation (skill-enforced) |
 
 ## Data Handling & Residency
 
