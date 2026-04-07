@@ -12,6 +12,17 @@ description: >
 
 Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Create tables, columns, relationships, forms, views | **dv-metadata** |
+| Create, update, or delete data records | **dv-data** |
+| Query or read records | **dv-query** |
+| Connect to Dataverse / set up MCP | **dv-connect** |
+
+---
+
 ## Create a New Solution
 
 **Use the Python SDK for publisher and solution record creation — not raw HTTP.** Publishers and solutions are standard Dataverse tables. `client.records.create()` and `client.records.get()` handle auth, pagination, and error handling automatically, avoiding the URL encoding, header boilerplate, and GUID-parsing bugs that raw `urllib` calls introduce.
@@ -25,6 +36,14 @@ Every solution belongs to a publisher. The publisher's `customizationprefix` (e.
 **Discovery flow — always run this before creating a publisher:**
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
 # 1. Query for existing non-Microsoft publishers
 pages = client.records.get(
     "publisher",
@@ -63,9 +82,10 @@ else:
 Use the SDK to create the solution record (preferred over raw Web API):
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
-from scripts.auth import get_credential, load_env
-import os
 
 load_env()
 client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
@@ -247,9 +267,12 @@ N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. 
 
 ```python
 # Web API required — SDK does not support N:N $expand
-import urllib.request, json
-from auth import get_token  # get_token() is correct here — SDK can't do this
+import os, sys, urllib.request, json
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env  # get_token() is correct here — SDK can't do this
 
+load_env()
+env = os.environ["DATAVERSE_URL"].rstrip("/")
 token = get_token()
 url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
 req = urllib.request.Request(url, headers={
@@ -302,4 +325,4 @@ pages = client.records.get(
 - `--activate-plugins` ensures any registered plugins in the solution are activated on import.
 - If you see "solution already exists" errors, use `--import-mode ForceUpgrade` to overwrite.
 - Large solutions (Sales, Customer Service) can take 10–20 minutes to import. Be patient and poll rather than re-importing.
-- All validation queries above require auth. Use `scripts/auth.py` for credential/token acquisition. See `/dataverse:python-sdk` for SDK setup patterns.
+- All validation queries above require auth. Use `scripts/auth.py` for credential/token acquisition. See `dv-query` for SDK query patterns and `dv-data` for write patterns.

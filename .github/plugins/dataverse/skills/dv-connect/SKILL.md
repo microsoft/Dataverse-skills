@@ -39,10 +39,10 @@ If any tool is missing, install it (see [tools-setup.md](references/tools-setup.
 
 After Python is confirmed:
 ```
-pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client
+pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
 ```
 
-**Skip condition:** All tools present and Python SDK installed.
+**Skip condition:** All tools present, Python SDK installed, and `pandas` importable (`python -c "import pandas"`).
 
 ---
 
@@ -129,6 +129,8 @@ with open(".env", "w") as f:
 Ensure `.env` is in `.gitignore`:
 
 ```python
+import os
+
 GITIGNORE_ENTRIES = [
     ".env", ".vscode/settings.json", ".claude/mcp_settings.json",
     ".token_cache.bin", "*.snk", "__pycache__/", "*.pyc",
@@ -230,8 +232,8 @@ If `list_tables` is called directly → MCP is connected. If the agent falls bac
 | Create/read/update/delete data records | MCP server |
 | Create a new table | MCP server |
 | Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
-| Add a column to an existing table | Web API (see `dv-metadata`) |
-| Create a relationship / lookup | Web API (see `dv-metadata`) |
+| Add a column to an existing table | MCP server (`update_table`) for basic columns; SDK or Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
+| Create a relationship / lookup | SDK (see `dv-metadata`) |
 | Create or modify a form | Web API (see `dv-metadata`) |
 | Create or modify a view | Web API (see `dv-metadata`) |
 
@@ -241,7 +243,8 @@ After verifying MCP works, tell the user:
 >
 > You can now:
 > - Create tables, columns, and relationships (`dv-metadata`)
-> - Query and manage data (`dv-python-sdk`)
+> - Write and import data (`dv-data`)
+> - Query and analyze data (`dv-query`)
 > - Export and promote solutions (`dv-solution`)
 >
 > To create your first solution, see the `dv-solution` skill.

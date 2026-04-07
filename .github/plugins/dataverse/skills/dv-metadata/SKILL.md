@@ -5,13 +5,57 @@ description: >
   Use when: "add column", "create table", "add relationship", "lookup column", "create form",
   "create view", "modify form", "FormXml", "SavedQuery", "option set", "picklist",
   "MetadataService", "EntityDefinitions".
-  Do not use when: reading/writing data records (use dv-python-sdk),
+  Do not use when: writing data records (use dv-data), reading or querying records (use dv-query),
   exporting solutions (use dv-solution).
 ---
 
 # Skill: Metadata — Making Changes
 
-**Before the first metadata change in a session, confirm the target environment with the user.** See the Multi-Environment Rule in the overview skill for the full confirmation flow.
+**Before the first metadata change in a session:**
+1. **Confirm the target environment** with the user — see the Multi-Environment Rule in dv-overview.
+2. **Confirm the solution** — ask "What solution should these components go into?" If `SOLUTION_NAME` is in `.env`, confirm it. If no solution exists yet, **you MUST ask the user** for the solution name and publisher prefix before creating anything. The publisher prefix is **permanent** — it cannot be changed after components are created with it.
+
+**STOP and ask the user:**
+> "What solution name and publisher prefix should I use? The prefix (e.g., `contoso`, `lit`, `soc`) is permanent on every table and column."
+
+Then query existing publishers and show them — the user may want to reuse one:
+
+```python
+# Publisher discovery + solution creation — use SDK (never raw Web API).
+# See dv-solution for the full publisher discovery flow.
+pages = client.records.get("publisher",
+    filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation'",
+    select=["publisherid", "uniquename", "friendlyname", "customizationprefix"], top=10)
+publishers = [p for page in pages for p in page]
+# MANDATORY: Show existing publishers to user and ask which to use or create new
+```
+
+After user confirms, create using SDK:
+
+```python
+publisher_id = client.records.create("publisher", {
+    "uniquename": "<name>", "friendlyname": "<display>",
+    "customizationprefix": "<prefix>",  # from user input, NOT hardcoded
+    "description": "<desc>",
+})
+solution_id = client.records.create("solution", {
+    "uniquename": "<SolutionName>", "friendlyname": "<Display Name>",
+    "version": "1.0.0.0",
+    "publisherid@odata.bind": f"/publishers({publisher_id})",
+})
+```
+
+Never create tables or columns outside a solution.
+
+3. Pass `solution="<UniqueName>"` in every SDK call, or include `"MSCRM.SolutionName": "<UniqueName>"` on every raw Web API call.
+
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Create, update, or delete data records | **dv-data** |
+| Query or read records | **dv-query** |
+| Export or deploy solutions | **dv-solution** |
 
 ---
 
@@ -33,14 +77,20 @@ The only time you write files directly is when editing something that already ex
 
 ## Creating a Table
 
+**If creating multiple tables for a data import**, also see these sections later in this skill:
+- **Idempotent Table Creation** — catch "already exists" for re-runnable scripts
+- **Alternate Keys** — required for upsert; create immediately after each table
+- **Metadata Propagation Delays and Lock Contention** — phased creation to avoid lock errors
+
 **ALWAYS use the SDK unless you need full control over OwnershipType, HasActivities, or other advanced properties.** Do NOT use `requests` or `urllib` for table creation when the SDK can handle it.
 
 **SDK approach (use this by default):**
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_credential, load_env
 from PowerPlatform.Dataverse.client import DataverseClient
-import os
 
 load_env()
 client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
@@ -82,6 +132,19 @@ entity = {
 }
 # POST to /api/data/v9.2/EntityDefinitions with MSCRM.SolutionUniqueName header
 ```
+
+---
+
+## Column Naming: Avoid `*Id` Suffix Collisions
+
+**Never name a regular column with an `Id` suffix** (e.g., `prefix_CountryId`, `prefix_PlayerId`). When you later create a lookup relationship to another table, Dataverse auto-generates a navigation property with the `Id` suffix (e.g., `prefix_CountryId`). If a regular integer column with the same name already exists, the lookup creation fails with a schema name collision.
+
+**Pattern for source system IDs:**
+- WRONG: `prefix_DepartmentId` (int) — collides when lookup `prefix_DepartmentId` is created later
+- RIGHT: `prefix_SrcDepartmentId` (int) — `Src` prefix distinguishes source IDs from Dataverse lookups
+- RIGHT: `prefix_DepartmentSourceId` (int) — `SourceId` suffix is also safe
+
+This matters most in multi-table imports where you store the source system's integer FK as a column and then create a Dataverse lookup relationship for the same reference.
 
 ---
 
@@ -231,11 +294,13 @@ When you create records that set this lookup, you need the **navigation property
 
 After creating a table via API, add it to your solution so it gets pulled on export:
 ```
-pac solution add-reference \
-  --environment <url> \
-  --solution-unique-name <SOLUTION_NAME> \
-  --entity <logical_name>
+pac solution add-solution-component \
+  --solutionUniqueName <SOLUTION_NAME> \
+  --component <logical_name> \
+  --componentType 1 \
+  --environment <url>
 ```
+Component type `1` = Entity (Table). See dv-solution for the full type code list.
 
 Or via Web API:
 ```python
@@ -258,8 +323,9 @@ Neither the MCP server nor the Python SDK supports forms. Use the Web API direct
 
 ```python
 # POST /api/data/v9.2/systemforms
-import os, json, urllib.request
-from auth import get_token, load_env
+import os, sys, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env  # get_token() is correct here — SDK does not support forms
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -316,20 +382,65 @@ with urllib.request.urlopen(req) as resp:
 ### Retrieve and modify an existing form
 
 ```python
-# GET the form first, modify the XML, then PATCH it back
-url = f"{env}/api/data/v9.2/systemforms?$filter=objecttypecode eq 'new_projectbudget' and type eq 2&$select=formid,name,formxml"
-# ... parse response, modify formxml string, then:
-# PATCH /api/data/v9.2/systemforms(<formid>)
-# body: {"formxml": "<modified xml>"}
+# env and token must be initialized (see form creation setup above)
+import json, urllib.request  # SDK does not support forms — raw Web API required
+
+# Step 1: GET the form
+url = (f"{env}/api/data/v9.2/systemforms"
+       f"?$filter=objecttypecode eq 'new_projectbudget' and type eq 2"
+       f"&$select=formid,name,formxml")
+req = urllib.request.Request(url, headers={
+    "Authorization": f"Bearer {token}",
+    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+})
+with urllib.request.urlopen(req) as resp:
+    forms = json.loads(resp.read()).get("value", [])
+
+if not forms:
+    raise ValueError("Form not found")
+
+form_id = forms[0]["formid"]
+form_xml = forms[0]["formxml"]
+
+# Step 2: Modify form_xml string as needed (e.g., add a control, reorder fields)
+# form_xml = form_xml.replace(...)
+
+# Step 3: PATCH the form back
+patch_body = json.dumps({"formxml": form_xml}).encode()
+req = urllib.request.Request(
+    f"{env}/api/data/v9.2/systemforms({form_id})",
+    data=patch_body,
+    headers={"Authorization": f"Bearer {token}",
+             "Content-Type": "application/json",
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+    method="PATCH"
+)
+with urllib.request.urlopen(req) as resp:
+    print(f"Updated. Status: {resp.status}")
+# Then publish (see Publish section below)
 ```
 
 ### Publish forms after create/modify
 
-Forms must be published to take effect:
+Forms must be published to take effect. Do this immediately after creating or modifying a form. `env` and `token` come from the form creation setup block above — if publishing standalone, re-initialize them:
 ```python
-body = {"ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"}
-# POST /api/data/v9.2/PublishXml
+# env and token must be initialized (see form creation setup above)
+# SDK does not support form publishing — raw Web API required
+body = json.dumps({
+    "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"
+}).encode()
+req = urllib.request.Request(
+    f"{env}/api/data/v9.2/PublishXml",
+    data=body,
+    headers={"Authorization": f"Bearer {token}",
+             "Content-Type": "application/json",
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+    method="POST"
+)
+with urllib.request.urlopen(req) as resp:
+    print(f"Published. Status: {resp.status}")
 ```
+Replace `new_projectbudget` with the logical name of the entity whose form you modified.
 
 ---
 
@@ -462,34 +573,193 @@ Always translate error codes to plain English before presenting them to the user
 
 ---
 
-## Metadata Propagation Delays
+## Metadata Propagation Delays and Lock Contention
 
-After creating tables or columns via the Web API, metadata propagation can take 3-10 seconds. Common symptoms:
+After creating tables, columns, or alternate keys, Dataverse runs internal metadata operations (index building, cache propagation) that can take 3-30 seconds. Submitting another metadata operation while these are still running causes lock contention errors ("another operation is running").
 
+**Common symptoms:**
 - Picklist columns fail with `0x80040216` immediately after table creation
 - Lookup `@odata.bind` operations fail with "Invalid property" shortly after column creation
 - `update_table` (MCP) fails with "EntityId not found in MetadataCache"
+- Alternate key creation fails with lock contention after table creation
+- Lookup creation fails with "another customization operation is running"
 
-**Mitigation:** Add a 3-5 second delay after table creation before adding columns. After creating lookup columns, wait 5-10 seconds before inserting records that use `@odata.bind` on those lookups. If a column creation fails, verify it doesn't already exist, then retry once.
+**Mitigation — use phased creation, not interleaved:**
+
+When creating many tables with alternate keys and lookups (e.g., multi-table import schema), create them in phases rather than interleaving operations on the same table:
+
+1. **Phase 1: Create ALL tables** (5-8s delay between each)
+2. **Wait 15-30s** for metadata propagation
+3. **Phase 2: Create ALL alternate keys** (3s delay between each)
+4. **Wait 15-30s** for index building
+5. **Phase 3: Create ALL lookups** (3s delay between each)
+
+Do NOT interleave: `create table A → create key A → create table B → create key B`. This causes lock contention because key A's index build blocks table B's creation.
+
+**Retry pattern:** Wrap all metadata operations with retry for transient lock errors:
+
+```python
+import time
+
+def retry_metadata(fn, description, max_attempts=5):
+    for attempt in range(max_attempts):
+        try:
+            return fn()
+        except Exception as e:
+            err = str(e)
+            if "already exists" in err.lower() or "0x80040237" in err:
+                print(f"  {description}: already exists, skipping")
+                return None
+            if "another" in err.lower() and "running" in err.lower():
+                wait = 10 * (attempt + 1)
+                print(f"  {description}: lock contention, waiting {wait}s (attempt {attempt+1}/{max_attempts})...")
+                time.sleep(wait)
+                continue
+            raise
+    print(f"  WARNING: {description} failed after {max_attempts} attempts")
+    return None
+```
 
 ---
 
 ## Session Closing: Pull to Repo
 
-**After every metadata session, perform the pull-to-repo sequence.** This is not optional — work that exists only in the environment is lost if the environment is reset.
+**After every metadata session, perform the pull-to-repo sequence** — see dv-overview "After Any Change: Pull to Repo" for the full export/unpack/commit commands.
 
-```bash
-pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
-pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
-rm ./solutions/<SOLUTION_NAME>.zip
-git add ./solutions/<SOLUTION_NAME>
-git commit -m "feat: <description of change>"
-```
-
-If you used the `MSCRM.SolutionName` header during creation, verify components are in the solution before exporting:
+If you used the `MSCRM.SolutionName` header during creation, verify components were added before exporting:
 ```bash
 pac solution list-components --solutionUniqueName <SOLUTION_NAME> --environment <url>
 ```
+
+---
+
+## Idempotent Table Creation
+
+When creating tables programmatically (e.g., a schema setup script that may be re-run), catch `0x80040237` to skip tables that already exist:
+
+```python
+try:
+    info = client.tables.create(schema_name, columns, solution=SOLUTION, primary_column="prefix_name")
+    print(f"Created: {info['table_schema_name']}")
+except Exception as e:
+    err = str(e)
+    if "already exists" in err.lower() or "0x80040237" in err:
+        print("Already exists, skipping")
+    else:
+        raise
+```
+
+To pre-check without creating, query `EntityDefinitions` directly:
+```python
+# Returns 404 if the table does not exist
+GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName
+```
+
+---
+
+## Alternate Keys (Required for Upsert)
+
+An alternate key tells Dataverse how to uniquely identify a record using a business column instead of the GUID primary key. This is required for `UpsertMultiple` — without it, Dataverse has no way to detect whether a record already exists.
+
+**When to create alternate keys:** Always create them on source-system ID columns (`prefix_Src*Id`) during schema setup, before data import. This makes every import idempotent from the start — re-running never creates duplicates.
+
+**How the agent decides which column:**
+- **Database source (SQLite, SQL Server):** Read the schema to identify primary keys — this is unambiguous. The source PK column maps directly to the alternate key:
+  - Source `Country.Country_Id` (INTEGER PRIMARY KEY) → alternate key on `prefix_srccountryid`
+  - Source composite PK (`Order_Id, Line_No`) → composite alternate key on both columns
+- **Excel/CSV source:** Inspect the data for columns with all-unique values and naming conventions suggesting an ID (`*_ID`, `*_Code`). **Propose the candidate to the user and get confirmation** before creating the key — uniqueness in the current data doesn't guarantee it's the intended business key.
+- **No identifiable unique column:** Ask the user which column(s) uniquely identify each row. Do not guess.
+
+**SDK approach (preferred):**
+
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+
+# Single-column key (most common for imports)
+key = client.tables.create_alternate_key(
+    "prefix_Country",
+    "prefix_SrcCountryIdKey",
+    ["prefix_srccountryid"],
+    display_name="Source Country ID",
+)
+print(f"Key created: {key.schema_name} (status: {key.status})")
+
+# Composite key (for tables with multi-column PKs in the source)
+key = client.tables.create_alternate_key(
+    "prefix_OrderLine",
+    "prefix_OrderLineSourceKey",
+    ["prefix_srcorderid", "prefix_srclineno"],
+    display_name="Source Order Line Key",
+)
+```
+
+**Idempotent key creation** — catch "already exists" to make the script re-runnable:
+
+```python
+from PowerPlatform.Dataverse.core.errors import HttpError
+
+def ensure_alternate_key(table, key_name, columns, display_name):
+    try:
+        key = client.tables.create_alternate_key(table, key_name, columns, display_name=display_name)
+        print(f"  Key created: {key_name} on {table}")
+    except HttpError as e:
+        if "already exists" in str(e).lower() or "0x80048d0b" in str(e):
+            print(f"  Key already exists: {key_name}")
+        else:
+            raise
+
+# Create keys for all import tables
+ensure_alternate_key("prefix_Country", "prefix_SrcCountryIdKey",
+    ["prefix_srccountryid"], "Source Country ID")
+ensure_alternate_key("prefix_City", "prefix_SrcCityIdKey",
+    ["prefix_srccityid"], "Source City ID")
+```
+
+**Check key status** — index creation is async for tables with existing data:
+
+```python
+keys = client.tables.get_alternate_keys("prefix_Country")
+for k in keys:
+    print(f"  {k.schema_name}: {k.status}")  # Pending, Active, or Failed
+```
+
+**Constraints:**
+- Valid column types for keys: Integer, Decimal, String, DateTime, Lookup, OptionSet
+- Max 16 columns per key, 900 bytes total key size
+- Max 10 alternate keys per table
+- Index creation is **async** — Dataverse builds the index in the background. For small tables (<10K rows) this is near-instant. For large existing tables, check `EntityKeyIndexStatus` for Active/Failed before using the key.
+- If the key column has non-unique data, index creation **fails** (no data corruption — the key just stays in Failed state). Fix the data, then call `ReactivateEntityKey`.
+
+**Safety:** Creating an alternate key on a column with unique data is a non-destructive metadata operation. It adds a database index — it does not modify existing records. If the column data isn't actually unique, the key creation fails harmlessly.
+
+---
+
+## EntityDefinitions Filter Limitation
+
+**`startswith()` is NOT supported as a filter on `EntityDefinitions`.** This query will return a 400 error:
+
+```
+GET /api/data/v9.2/EntityDefinitions?$filter=startswith(LogicalName,'new_')  # BROKEN
+```
+
+To retrieve metadata for multiple custom tables, query each table individually:
+```python
+GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName,EntitySetName
+```
+
+Or query all entities and filter in Python:
+```python
+GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
+# Then filter: [e for e in result["value"] if e["LogicalName"].startswith("new_")]
+```
+
+This matters for import scripts that need to discover entity set names (e.g., `new_projectbudgets`) before writing records with `@odata.bind`.
 
 ---
 
