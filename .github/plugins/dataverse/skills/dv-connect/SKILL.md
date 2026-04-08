@@ -159,6 +159,8 @@ Copy plugin scripts:
 ```
 cp .dataverse/scripts/auth.py scripts/
 cp .dataverse/scripts/enable-mcp-client.py scripts/
+cp .dataverse/scripts/inspect_schema.py scripts/
+cp .dataverse/scripts/create_sample_data.py scripts/
 ```
 
 Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeholders (`{{DATAVERSE_URL}}`, `{{SOLUTION_NAME}}`, `{{PUBLISHER_PREFIX}}`) with values from `.env`.
