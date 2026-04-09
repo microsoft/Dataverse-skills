@@ -225,6 +225,7 @@ The plugin ships utility scripts in `scripts/`:
 | `enable-mcp-client.py` | Add the MCP Client ID to the list of allowed MCP clients in Dataverse |
 | `inspect_schema.py` | Inspect table columns (types, required levels, constraints) via Web API -- used before generating sample data |
 | `create_sample_data.py` | Create sample records using the Python SDK -- supports any table with templates |
+
 For data write operations (create, update, bulk import), see `dv-data`. For queries, aggregation, and analytics, see `dv-query`. For post-import validation queries, see `dv-solution`.
 
 Any Web API call that goes beyond a one-off query should be written as a Python script and committed to `/scripts/`. Use `scripts/auth.py` for token acquisition.

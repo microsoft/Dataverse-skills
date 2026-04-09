@@ -505,7 +505,6 @@ python scripts/inspect_schema.py contact      # any table
 This script (`scripts/inspect_schema.py`) fetches all columns via the Web API and reports:
 - **Required columns** (`RequiredLevel = "ApplicationRequired"`)
 - **Column types** (`AttributeType`) -- determines what fake data to generate
-- **Constraints** -- `MaxLength` for strings, `MinValue`/`MaxValue` for numbers
 
 #### Step 3: Create sample records
 

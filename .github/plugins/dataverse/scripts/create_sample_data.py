@@ -118,7 +118,22 @@ def create_sample_data(table_name="account", count=5):
 
     records_to_create = []
     for i in range(count):
-        records_to_create.append(templates[i % len(templates)])
+        record = dict(templates[i % len(templates)])  # shallow copy to avoid mutating template
+        if i >= len(templates):
+            # Append a suffix to distinguish cycled records
+            cycle = (i // len(templates)) + 1
+            for key in ("name", "emailaddress1", "telephone1", "websiteurl"):
+                if key in record:
+                    if key == "name":
+                        record[key] = f"{record[key]} ({cycle})"
+                    elif key == "emailaddress1":
+                        local, domain = record[key].rsplit("@", 1)
+                        record[key] = f"{local}+{cycle}@{domain}"
+                    elif key == "telephone1":
+                        record[key] = f"{record[key][:4]}{cycle:02d}{record[key][6:]}"
+                    elif key == "websiteurl":
+                        record[key] = record[key].replace(".example.com", f"-{cycle}.example.com")
+        records_to_create.append(record)
 
     # Create records
     created = []
