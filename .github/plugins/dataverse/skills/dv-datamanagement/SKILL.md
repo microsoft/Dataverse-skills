@@ -373,8 +373,8 @@ pac org update-settings --name isauditenabled --value true --environment https:/
 # Enable user access audit
 pac org update-settings --name isuseraccessauditenabled --value true --environment https://myorg.crm.dynamics.com
 
-# Set plugin trace to capture all
-pac org update-settings --name plugintracelogsetting --value All --environment https://myorg.crm.dynamics.com
+# Set plugin trace to capture all (option sets require integer values)
+pac org update-settings --name plugintracelogsetting --value 2 --environment https://myorg.crm.dynamics.com
 ```
 
 #### Arguments
@@ -382,7 +382,7 @@ pac org update-settings --name plugintracelogsetting --value All --environment h
 | Argument | Alias | Required | Description |
 |----------|-------|----------|-------------|
 | `--name` | `-n` | Yes | Setting name (e.g., `isauditenabled`, `plugintracelogsetting`) |
-| `--value` | `-v` | Yes | New value (`true`/`false` for booleans, `Off`/`Exception`/`All` for plugin trace) |
+| `--value` | `-v` | Yes | New value (`true`/`false` for booleans, integer for option sets -- see Available Settings table) |
 | `--environment` | `-env` | No | Target environment URL or ID |
 
 #### Available Settings
@@ -392,14 +392,14 @@ pac org update-settings --name plugintracelogsetting --value All --environment h
 | `isauditenabled` | bool | `true` / `false` |
 | `isuseraccessauditenabled` | bool | `true` / `false` |
 | `isreadauditenabled` | bool | `true` / `false` |
-| `plugintracelogsetting` | option | `Off`, `Exception`, `All` |
+| `plugintracelogsetting` | option | `0` (Off), `1` (Exception), `2` (All) |
 | `isautosaveenabled` | bool | `true` / `false` |
 | `maxuploadfilesize` | int | Size in KB (e.g., `32768`) |
 | `sessiontimeoutenabled` | bool | `true` / `false` |
 | `sessiontimeoutinmins` | int | Minutes (e.g., `60`) |
 | `inaborttimeoutenabled` | bool | `true` / `false` |
 | `inaborttimeoutinmins` | int | Minutes (e.g., `20`) |
-| `sharepointdeploymenttype` | option | `Online`, `OnPremises` |
+| `sharepointdeploymenttype` | option | `0` (Online), `1` (OnPremises) |
 | `isexternalsearchindexenabled` | bool | `true` / `false` |
 
 ### Batch Workflow: Enable Audit for All Developer Environments
@@ -459,10 +459,10 @@ If `pac admin assign-user` fails with "user has not been assigned any roles", us
 
 ```bash
 # Self-elevate to System Administrator (requires Global admin, PP admin, or D365 admin)
-pac admin self-elevate --environment-id <environment-id-guid> --tenant-id <tenant-id-guid>
+pac admin self-elevate --environment https://myorg.crm.dynamics.com
 ```
 
-Uses the Power Platform `applyAdminRole` API. All elevations are logged to Microsoft Purview.
+Uses the active auth profile if `--environment` is omitted. All elevations are logged to Microsoft Purview.
 
 **Flow**: Always try `pac admin assign-user` first. Only use `admin self-elevate` as fallback when the chicken-and-egg error occurs.
 
