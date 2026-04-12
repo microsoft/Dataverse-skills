@@ -1,0 +1,85 @@
+scenarios:
+
+  - id: org_01
+    category: org_settings
+    prompt: "Enable auditing on my Dataverse environment"
+    expected_approach: pac_cli
+    expected_command: pac org update-settings
+    expected_method: "PATCH organizations entity via Web API with isauditenabled"
+    required_args: ["--name", "--value"]
+    expected_setting_name: "isauditenabled"
+    expected_setting_value: "true"
+    valid_args: ["--name", "--value", "--environment", "-n", "-v", "-env"]
+    hallucinated_args: ["--enable-audit", "--audit", "--setting", "--key", "--flag"]
+    must_confirm_before_execute: false
+    notes: "Correct setting name is isauditenabled. Many models hallucinate --enable-audit."
+
+  - id: org_02
+    category: org_settings
+    prompt: "Enable auditing for all developer environments"
+    expected_approach: pac_cli
+    expected_commands: ["pac admin list", "pac org update-settings"]
+    expected_method: "Loop: GET environments, PATCH organizations for each with isauditenabled"
+    required_workflow_steps: ["list environments", "filter developer", "update each environment"]
+    must_confirm_before_execute: true
+    notes: "Multi-environment batch workflow. Must list + filter + loop. Must confirm before applying."
+
+  - id: org_03
+    category: org_settings
+    prompt: "Turn on plugin trace logging to capture all events"
+    expected_approach: pac_cli
+    expected_command: pac org update-settings
+    expected_method: "PATCH organizations entity via Web API with plugintracelogsetting"
+    required_args: ["--name", "--value"]
+    expected_setting_name: "plugintracelogsetting"
+    expected_setting_value: "2"
+    valid_args: ["--name", "--value", "--environment", "-n", "-v", "-env"]
+    hallucinated_args: ["--trace", "--plugin-trace", "--logging", "--level", "--all"]
+    must_confirm_before_execute: false
+    notes: "Value must be integer 2 (All), not string 'all' or 'true'."
+
+  - id: org_04
+    category: org_settings
+    prompt: "What are the current org settings for my environment?"
+    expected_approach: pac_cli
+    expected_command: pac org list-settings
+    expected_method: "GET organizations entity via Web API"
+    required_args: []
+    valid_args: ["--filter", "--environment", "-f", "-env"]
+    hallucinated_args: ["--all", "--show", "--get", "--list-all"]
+    must_confirm_before_execute: false
+    notes: "Read-only. Should use list-settings not update-settings."
+
+  - id: org_05
+    category: org_settings
+    prompt: "Set session timeout to 60 minutes"
+    expected_approach: pac_cli
+    expected_command: pac org update-settings
+    expected_method: "PATCH organizations entity via Web API with sessiontimeoutinmins"
+    required_args: ["--name", "--value"]
+    expected_setting_name: "sessiontimeoutinmins"
+    expected_setting_value: "60"
+    valid_args: ["--name", "--value", "--environment", "-n", "-v", "-env"]
+    hallucinated_args: ["--timeout", "--session", "--minutes", "--duration"]
+    must_confirm_before_execute: false
+    notes: "Must also check sessiontimeoutenabled=true is set. Two-step operation."
+
+  - id: org_sdk_01
+    category: org_settings
+    prompt: "Enable auditing on my Dataverse environment"
+    expected_approach: either
+    expected_command: pac org update-settings
+    expected_method: "PATCH organizations entity via Web API"
+    sdk_pattern: "organizations"
+    sdk_field: "isauditenabled"
+    must_confirm_before_execute: false
+    notes: "Either PAC CLI (pac org update-settings --name isauditenabled --value true) or SDK (PATCH organizations) is valid."
+
+  - id: org_sdk_02
+    category: org_settings
+    prompt: "Enable auditing for all developer environments"
+    expected_approach: either
+    expected_command: pac org update-settings
+    expected_method: "Loop: get env list via admin API, PATCH organizations for each"
+    must_confirm_before_execute: true
+    notes: "Either PAC CLI batch workflow or SDK batch loop is valid."

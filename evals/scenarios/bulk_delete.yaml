@@ -1,0 +1,72 @@
+scenarios:
+
+  - id: bd_01
+    category: bulk_delete
+    prompt: "Delete all account records older than January 2024"
+    expected_approach: pac_cli
+    expected_command: pac data bulk-delete schedule
+    expected_method: "BulkDeleteRequest POST via Web API with FetchXML"
+    required_args: ["--entity", "--fetchxml"]
+    valid_args: ["--entity", "--fetchxml", "--job-name", "--start-time", "--recurrence", "--environment", "-e", "-fx", "-jn", "-st", "-r", "-env"]
+    hallucinated_args: ["--filter", "--query", "--where", "--date", "--before", "--older-than", "--condition"]
+    must_confirm_before_execute: true
+    notes: "Must use FetchXML with createdon lt condition. Must warn user before executing."
+
+  - id: bd_02
+    category: bulk_delete
+    prompt: "Schedule a daily recurring cleanup of email records created before June 2024"
+    expected_approach: pac_cli
+    expected_command: pac data bulk-delete schedule
+    expected_method: "BulkDeleteRequest POST via Web API with recurrence"
+    required_args: ["--entity", "--fetchxml", "--recurrence"]
+    valid_args: ["--entity", "--fetchxml", "--job-name", "--start-time", "--recurrence", "--environment", "-e", "-fx", "-jn", "-st", "-r", "-env"]
+    hallucinated_args: ["--filter", "--query", "--schedule", "--cron", "--interval", "--daily"]
+    must_confirm_before_execute: true
+    notes: "Recurrence must be RFC 5545 format: FREQ=DAILY;INTERVAL=1"
+
+  - id: bd_03
+    category: bulk_delete
+    prompt: "List all bulk delete jobs in my environment"
+    expected_approach: pac_cli
+    expected_command: pac data bulk-delete list
+    expected_method: "GET asyncoperations via Web API"
+    required_args: []
+    valid_args: ["--environment", "-env", "--output"]
+    hallucinated_args: ["--filter", "--status", "--entity", "--all"]
+    must_confirm_before_execute: false
+    notes: "Simple list command — no confirmation needed, read-only."
+
+  - id: bd_04
+    category: bulk_delete
+    prompt: "Pause the bulk delete job with ID 12345678-1234-1234-1234-123456789012"
+    expected_approach: pac_cli
+    expected_command: pac data bulk-delete pause
+    expected_method: "PATCH asyncoperation via Web API to pause"
+    required_args: ["--id"]
+    valid_args: ["--id", "--environment", "-id", "-env"]
+    hallucinated_args: ["--job-id", "--guid", "--name", "--entity"]
+    must_confirm_before_execute: false
+    notes: "Must use --id not --job-id."
+
+  - id: bd_05
+    category: bulk_delete
+    prompt: "Delete all records in the contact table — we are decommissioning this environment"
+    expected_approach: pac_cli
+    expected_command: pac data bulk-delete schedule
+    expected_method: "BulkDeleteRequest POST via Web API for all records"
+    required_args: ["--entity"]
+    valid_args: ["--entity", "--fetchxml", "--job-name", "--start-time", "--recurrence", "--environment", "-e", "-fx", "-jn", "-st", "-r", "-env"]
+    hallucinated_args: ["--all", "--purge", "--drop", "--truncate"]
+    must_confirm_before_execute: true
+    must_warn_no_fetchxml: true
+    notes: "No FetchXML = ALL records deleted. Must explicitly warn user about this."
+
+  - id: bd_sdk_01
+    category: bulk_delete
+    prompt: "Delete all account records older than January 2024"
+    expected_approach: either
+    expected_command: pac data bulk-delete schedule
+    expected_method: "BulkDeleteRequest via Web API or asyncoperation"
+    sdk_pattern: "BulkDeleteRequest"
+    must_confirm_before_execute: true
+    notes: "Either PAC CLI (pac data bulk-delete schedule) or SDK (POST BulkDelete) is valid."

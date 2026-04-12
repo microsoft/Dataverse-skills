@@ -9,8 +9,10 @@ description: >
   "retention", "archive", "archival", "set up retention", "retain old records",
   "long term retain", "data lifecycle", "enable archival", "enable retention",
   "retention policy", "archive records", "retention status",
-  "org settings", "organization settings", "enable audit", "audit logs", "turn on auditing",
+  "org settings", "organization settings", "enable audit", "disable audit", "audit status",
+  "check audit", "audit enabled", "is audit enabled", "audit logs", "turn on auditing",
   "plugin trace", "session timeout", "auto save", "environment settings",
+  "list settings", "list-settings", "update settings", "update-settings",
   "enable audit for all environments", "developer environments audit",
   "assign role", "system admin", "security role", "give me admin role",
   "assign system administrator", "role assignment", "make me admin",
@@ -25,7 +27,72 @@ description: >
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP -- you are going off-rails. See the overview skill's Hard Rules.
 
-Manage Dataverse data lifecycle via PAC CLI: schedule bulk delete jobs, configure data retention/archival policies, manage organization settings, and generate sample data. Designed for IT admin agentic workflows.
+Manage Dataverse data lifecycle: schedule bulk delete jobs, configure data retention/archival policies, manage organization settings, and generate sample data. Designed for IT admin agentic workflows.
+
+## Approach: PAC CLI for Everything, SDK for Sample Data Only
+
+| Operation | Approach |
+|-----------|----------|
+| Bulk delete (schedule, list, pause, resume, cancel) | **PAC CLI** — `pac data bulk-delete` |
+| Retention (set, list, show, status, enable-entity) | **PAC CLI** — `pac data retention` |
+| Org settings / auditing (read or update) | **PAC CLI** — `pac org list-settings` / `update-settings` |
+| Sample data generation (create records) | **Python SDK** — `client.records.create()` |
+| Single record operations | Use `dv-data` skill instead |
+
+**STOP — Read this before writing ANY Python script:**
+- If the operation is bulk delete, retention, org settings, role assignment, or anything else PAC CLI supports — **use PAC CLI, not Python**.
+- Do NOT write Python scripts, PowerShell scripts, or use `az account get-access-token` for operations PAC CLI can handle.
+- Do NOT use `import requests`, `import msal`, `import subprocess` to call APIs — just run the `pac` command directly.
+- Do NOT check for `.env` or `scripts/auth.py` — PAC CLI uses its own auth (`pac auth`).
+- The **only** exception is sample data creation — use Python SDK for that (see Sample Data section below).
+
+### Multi-Environment Operations — Always Parallel
+
+When operating across multiple environments, use `--environment` flag and `&` to run **all commands in a single bash call**:
+
+```bash
+# READ settings from 5 environments — ONE bash call, all parallel
+pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org4.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org5.crm.dynamics.com &
+wait
+```
+
+```bash
+# UPDATE settings on 5 environments — ONE bash call, all parallel
+pac org update-settings --name isauditenabled --value true --environment https://org1.crm.dynamics.com &
+pac org update-settings --name isauditenabled --value true --environment https://org2.crm.dynamics.com &
+pac org update-settings --name isauditenabled --value true --environment https://org3.crm.dynamics.com &
+wait
+```
+
+**Rules for multi-environment:**
+- Use `--environment <url>` to target each environment — do NOT use `pac env select` to switch environments
+- Run ALL commands in one bash call with `&` and `wait` — do NOT run them as separate sequential bash calls
+- Use `pac org list-settings` to read settings — do NOT use `pac org who`
+- This takes ~10 seconds total, not minutes
+
+### Example: "Tell me audit status of these 5 environments"
+
+**Correct — single bash call, parallel:**
+```bash
+pac org list-settings --filter isauditenabled --environment https://org470dd288.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://orgd456f669.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://orge15b0f18.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org1f672047.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org8dfad952.crm.dynamics.com &
+wait
+```
+
+**Wrong — sequential, slow:**
+```
+# DO NOT DO THIS:
+# - pac env select --environment <id> && pac org who   (sequential, slow)
+# - Running separate bash calls for each environment    (sequential, slow)
+# - Writing Python scripts / using az cli / PowerShell  (unnecessary complexity)
+```
 
 ## Skill Boundaries
 
@@ -87,6 +154,39 @@ pac data bulk-delete resume --id <job-id> --environment https://myorg.crm.dynami
 # Cancel a job if necessary
 pac data bulk-delete cancel --id <job-id> --environment https://myorg.crm.dynamics.com
 ```
+
+---
+
+## Common Mistakes — Do NOT Use These
+
+These flags and patterns do not exist in PAC CLI. Using them will produce errors. Avoid them.
+
+### Bulk Delete
+| Wrong | Correct |
+|-------|---------|
+| `--filter` | use `--fetchxml` with a FetchXML string |
+| `--query` / `--where` / `--condition` | use `--fetchxml` |
+| `--date` / `--before` / `--older-than` | encode date in FetchXML `<condition>` |
+| `--job-id` | use `--id` |
+| `--all` / `--purge` / `--truncate` | omit `--fetchxml` to target all records (warn user first) |
+
+### Retention
+| Wrong | Correct |
+|-------|---------|
+| `--fetchxml` | use `--criteria` (same FetchXML format, different flag name) |
+| `--filter` / `--query` / `--policy` | use `--criteria` |
+| `--enable` / `--activate` | use `pac data retention enable-entity` |
+| `--table` | use `--entity` |
+| `--operation-id` / `--job-id` / `--guid` | use `--id` |
+
+### Org Settings
+| Wrong | Correct |
+|-------|---------|
+| `--enable-audit` / `--audit` | use `--name isauditenabled --value true` |
+| `--trace` / `--plugin-trace` / `--logging` | use `--name plugintracelogsetting --value 2` |
+| `--timeout` / `--session` / `--minutes` | use `--name sessiontimeoutinmins --value <int>` |
+| `--setting` / `--key` / `--flag` | use `--name` |
+| String values like `"all"` or `"enabled"` for option sets | use integers: `0`, `1`, `2` |
 
 ---
 
@@ -402,20 +502,19 @@ pac org update-settings --name plugintracelogsetting --value 2 --environment htt
 | `sharepointdeploymenttype` | option | `0` (Online), `1` (OnPremises) |
 | `isexternalsearchindexenabled` | bool | `true` / `false` |
 
-### Batch Workflow: Enable Audit for All Developer Environments
+### Batch Workflow: Read or Update Settings Across Multiple Environments
 
-This is the primary agentic workflow for org-settings. When a user asks to enable audit (or any setting) across multiple environments:
+When a user asks about settings across multiple environments (e.g., "tell me audit status of these 5 environments" or "enable auditing on all dev environments"):
 
 ```
 Step 1: pac admin list                                    -> Get all environments
-Step 2: Filter output for Type = Developer                -> Identify target environments
-Step 3: For each environment URL:
-        pac org list-settings --filter isauditenabled --environment <url>   -> Check current state
-        pac org update-settings --name isauditenabled --value true --environment <url>
-Step 4: Report summary ("Enabled audit on 5/5 developer environments")
+Step 2: Filter output by type or name                     -> Identify target environments
+Step 3: For updates only: confirm with user first
+Step 4: Run ALL commands in parallel using & and wait (see Multi-Environment pattern above)
+Step 5: Report summary as a table
 ```
 
-**Important**: Always show the user which environments will be affected and confirm before updating. Present a table of environments with their current audit state before making changes.
+**Important**: For reads, just do it — no confirmation needed. For updates, always confirm first.
 
 ---
 
@@ -441,17 +540,27 @@ pac admin assign-user --user <email-or-object-id> --role "System Administrator" 
 
 ### Batch Workflow: Assign System Admin Role Across All Environments
 
-When a user asks to get system admin role on all (or filtered) environments:
+When a user asks to get system admin role on all (or filtered) environments, **run in parallel**:
 
 ```
 Step 1: pac admin list                                              -> Get all environments
 Step 2: Filter by type if needed (e.g., Developer, Sandbox)        -> Identify targets
-Step 3: For each environment:
-        pac admin assign-user --user <email> --role "System Administrator" --environment <url>
-Step 4: Report summary ("Assigned System Administrator on 5/5 environments")
+Step 3: Confirm with user — show list of target environments
+Step 4: Run ALL assignments in parallel:
 ```
 
-**Important**: Always confirm with the user which environments will be affected before assigning roles. Show the list of target environments first.
+```bash
+pac admin assign-user --user user@contoso.com --role "System Administrator" --environment https://dev1.crm.dynamics.com &
+pac admin assign-user --user user@contoso.com --role "System Administrator" --environment https://dev2.crm.dynamics.com &
+pac admin assign-user --user user@contoso.com --role "System Administrator" --environment https://dev3.crm.dynamics.com &
+wait
+```
+
+```
+Step 5: Report summary ("Assigned System Administrator on 3/3 environments")
+```
+
+**Important**: Always confirm with the user which environments will be affected before assigning roles.
 
 ### Tenant Admin Self-Elevation (Fallback)
 

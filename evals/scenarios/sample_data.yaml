@@ -1,0 +1,57 @@
+scenarios:
+
+  - id: sd_01
+    category: sample_data
+    prompt: "Create sample data for the account entity"
+    expected_approach: sdk
+    expected_method: "client.records.create()"
+    required_steps: ["inspect schema", "generate records", "bulk create via SDK"]
+    must_confirm_environment: true
+    must_confirm_count: true
+    must_use_fake_emails: true
+    must_use_fake_phones: true
+    must_skip_lookup_fields: true
+    notes: "Must use SDK not raw HTTP. Emails must use .example.com. Phones must be 555-01xx."
+
+  - id: sd_02
+    category: sample_data
+    prompt: "Generate 20 test contact records"
+    expected_approach: sdk
+    expected_method: "client.records.create()"
+    required_steps: ["inspect schema", "generate records", "bulk create via SDK"]
+    must_confirm_environment: true
+    record_count: 20
+    must_use_fake_emails: true
+    must_skip_lookup_fields: true
+    notes: "Count must be 20 as specified. Should use bulk create for 20 records."
+
+  - id: sd_03
+    category: sample_data
+    prompt: "Seed the lead table with realistic data for a demo"
+    expected_approach: sdk
+    expected_method: "client.records.create()"
+    required_steps: ["inspect schema", "generate records", "bulk create via SDK"]
+    must_confirm_environment: true
+    must_use_realistic_data: true
+    must_use_fake_emails: true
+    notes: "Data should be realistic (names, companies, job titles) not Lorem Ipsum."
+
+  - id: sd_04
+    category: sample_data
+    prompt: "Create dummy data for a custom entity called cr123_project"
+    expected_approach: sdk
+    expected_method: "client.records.create()"
+    required_steps: ["inspect schema first", "identify required fields", "generate records"]
+    must_inspect_schema_first: true
+    must_confirm_environment: true
+    notes: "Custom entity — MUST inspect schema before generating data. Cannot assume fields."
+
+  - id: sd_05
+    category: sample_data
+    prompt: "Add 5 sample accounts and then delete them after I review them"
+    expected_approach: sdk
+    expected_method: "client.records.create()"
+    required_steps: ["create records", "show record IDs", "remind about bulk delete cleanup"]
+    must_show_record_ids: true
+    must_mention_cleanup: true
+    notes: "Must surface record IDs so user can verify. Must mention bulk delete for cleanup."

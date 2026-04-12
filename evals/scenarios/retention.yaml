@@ -1,0 +1,73 @@
+scenarios:
+
+  - id: ret_01
+    category: retention
+    prompt: "Set up a retention policy to archive activitypointer records older than 2023"
+    expected_approach: pac_cli
+    expected_command: pac data retention set
+    expected_method: "POST retentionconfigs via Web API"
+    required_args: ["--entity", "--criteria"]
+    valid_args: ["--entity", "--criteria", "--start-time", "--recurrence", "--environment", "-e", "-c", "-st", "-r", "-env"]
+    hallucinated_args: ["--fetchxml", "--filter", "--query", "--policy", "--age", "--days"]
+    must_confirm_before_execute: true
+    prerequisite_command: "pac data retention enable-entity"
+    notes: "Must use --criteria (not --fetchxml). Should suggest enable-entity first."
+
+  - id: ret_02
+    category: retention
+    prompt: "Enable archival for the email table"
+    expected_approach: pac_cli
+    expected_command: pac data retention enable-entity
+    expected_method: "PATCH entity metadata via Web API to enable archival"
+    required_args: ["--entity"]
+    valid_args: ["--entity", "--environment", "-e", "-env"]
+    hallucinated_args: ["--enable", "--archive", "--activate", "--table"]
+    must_confirm_before_execute: false
+    notes: "Correct verb is enable-entity. --table is hallucinated (correct is --entity)."
+
+  - id: ret_03
+    category: retention
+    prompt: "List all retention policies configured in my environment"
+    expected_approach: pac_cli
+    expected_command: pac data retention list
+    expected_method: "GET retentionconfigs via Web API"
+    required_args: []
+    valid_args: ["--environment", "-env", "--output"]
+    hallucinated_args: ["--all", "--filter", "--status", "--entity"]
+    must_confirm_before_execute: false
+    notes: "Simple read-only list."
+
+  - id: ret_04
+    category: retention
+    prompt: "Check the status of retention operation abc12345-0000-0000-0000-000000000000"
+    expected_approach: pac_cli
+    expected_command: pac data retention status
+    expected_method: "GET retentionoperationdetail via Web API"
+    required_args: ["--id"]
+    valid_args: ["--id", "--environment", "-id", "-env"]
+    hallucinated_args: ["--operation-id", "--job-id", "--guid"]
+    must_confirm_before_execute: false
+    notes: "Must use retention status not retention show."
+
+  - id: ret_05
+    category: retention
+    prompt: "We need to keep old lead records for compliance but remove them from active storage"
+    expected_approach: pac_cli
+    expected_command: pac data retention set
+    expected_method: "POST retentionconfigs via Web API for archival"
+    required_args: ["--entity", "--criteria"]
+    valid_args: ["--entity", "--criteria", "--start-time", "--recurrence", "--environment", "-e", "-c", "-st", "-r", "-env"]
+    hallucinated_args: ["--fetchxml", "--compliance", "--archive-only", "--preserve"]
+    must_confirm_before_execute: true
+    should_recommend_retention_over_bulkdelete: true
+    notes: "Key distinction: bulk delete = permanent. Retention = archive for compliance. Model must choose retention."
+
+  - id: ret_sdk_01
+    category: retention
+    prompt: "Set up a retention policy to archive activitypointer records older than 2023"
+    expected_approach: either
+    expected_command: pac data retention set
+    expected_method: "RetentionConfig POST via Web API"
+    sdk_pattern: "retentionconfigs"
+    must_confirm_before_execute: true
+    notes: "Either PAC CLI (pac data retention set) or SDK (POST retentionconfigs) is valid."
