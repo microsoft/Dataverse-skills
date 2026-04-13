@@ -208,10 +208,11 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | --- | --- |
 | **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
 | **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API) |
-| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts |
+| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts, sample data generation |
 | **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, `$apply` aggregation (Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
-| **dv-datamanagement** | Bulk delete, data retention/archival, org settings, role assignment, sample data generation |
+| **dv-admin** | Bulk delete, data retention/archival, org settings (audit, plugin trace, session timeout). **PAC CLI only** — do not write Python scripts for these operations. Multi-environment: use `pac org list-settings`/`update-settings --environment <url>` in parallel with `&` and `wait` |
+| **dv-security** | Role assignment (`pac admin assign-user`), self-elevation (`pac admin self-elevate`). **PAC CLI only** |
 
 ---
 

@@ -5,7 +5,10 @@ description: >
   Use when: "create records", "insert data", "bulk create", "bulk update", "bulk import",
   "import CSV", "load data", "upsert", "upsert records", "write data", "upload file",
   "add records", "CreateMultiple", "UpdateMultiple", "UpsertMultiple",
-  "multi-table import", "FK dependencies", "dependency order", "parallel import", "large dataset".
+  "multi-table import", "FK dependencies", "dependency order", "parallel import", "large dataset",
+  "create sample data", "seed data", "generate test records", "populate entity",
+  "add sample records", "create dummy data", "generate sample accounts",
+  "seed the account table", "create test data for".
   Do not use when: querying or reading records (use dv-query),
   creating tables, columns, or relationships (use dv-metadata),
   exporting solutions (use dv-solution).
@@ -537,3 +540,65 @@ except HttpError as e:
 - **ASCII only** in `.py` files — curly quotes and em dashes cause `SyntaxError` on Windows.
 - **No `python -c` for multiline code** — write a `.py` file instead.
 - **Generate GUIDs in scripts**: `str(uuid.uuid4())`, not shell backtick substitution.
+
+---
+
+## Sample Data Generation
+
+Generate and insert realistic sample records into any Dataverse table. Useful for development, demos, and testing.
+
+**Use the Python SDK** (`client.records.create()`) — not raw `urllib` or `requests`.
+
+### Agentic Flow
+
+#### Step 1: Confirm environment and count
+
+Before creating anything, confirm:
+- **Target environment** — run `pac auth list` to show the active environment
+- **Record count** — default is **5 records** unless the user specifies otherwise
+- **Table name** — get the logical name (e.g., `account`, `contact`, `cr123_customtable`)
+
+#### Step 2: Inspect the table schema
+
+```bash
+python scripts/inspect_schema.py              # defaults to 'account'
+python scripts/inspect_schema.py contact      # any table
+```
+
+Reports required columns and column types to determine what fake data to generate.
+
+#### Step 3: Create sample records
+
+```bash
+python scripts/create_sample_data.py                       # 5 sample accounts (default)
+python scripts/create_sample_data.py --table account --count 10
+python scripts/create_sample_data.py --table contact --count 20
+```
+
+- Uses `client.records.create()` — not raw HTTP
+- Individual creates for <= 10, bulk `CreateMultiple` for 10+
+- Shows summary table with record IDs
+
+#### Step 4: Generate realistic data
+
+| AttributeType | Generate |
+|---|---|
+| `String` / `Memo` | Realistic text based on column name (e.g., `name` -> company names) |
+| `Integer` / `Decimal` / `Money` | Random values within `MinValue`/`MaxValue` |
+| `Boolean` | Alternate `true`/`false` |
+| `DateTime` | Recent dates in ISO 8601 format |
+| `Picklist` / `Status` | Integer option values (e.g., `industrycode: 1`) |
+| `Lookup` | **Skip by default** — only set if user provides valid record IDs |
+| `Uniqueidentifier` (non-PK) | Skip — let Dataverse auto-generate |
+
+#### Step 5: Run and verify
+
+Show the user: progress, record IDs, link to view in environment UI, reminder to bulk delete for cleanup.
+
+### Safety Rules for Sample Data
+
+- **Always confirm** the target environment and record count
+- Use `.example.com` domains for emails — never real domains
+- Use `555-01xx` phone numbers — obviously fake
+- Skip lookup fields unless user explicitly asks
+- Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
