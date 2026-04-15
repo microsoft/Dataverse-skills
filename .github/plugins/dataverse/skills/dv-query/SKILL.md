@@ -76,17 +76,12 @@ for r in results:
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 
-load_env()
-client = DataverseClient(
-    base_url=os.environ["DATAVERSE_URL"],
-    credential=get_credential(),
-)
+client = create_client()
 ```
 
-For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
+`create_client()` loads `.env`, acquires credentials, and injects the `X-Dataverse-Skills` tracking header on every SDK HTTP call. See `scripts/auth.py`.
 
 ---
 
@@ -193,7 +188,7 @@ for page in client.records.get(
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK cannot do this
+from auth import get_token, load_env, tracking_headers  # get_token() is correct here — SDK cannot do this
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -206,6 +201,7 @@ url = (f"{env}/api/data/v9.2/new_tickets"
 req = urllib.request.Request(url, headers={
     "Authorization": f"Bearer {token}",
     "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+    **tracking_headers("web-api"),
 })
 with urllib.request.urlopen(req, timeout=150) as resp:
     data = json.loads(resp.read())
@@ -232,7 +228,7 @@ with urllib.request.urlopen(req, timeout=150) as resp:
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK does not support $apply
+from auth import get_token, load_env, tracking_headers  # get_token() is correct here — SDK does not support $apply
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -244,6 +240,7 @@ def apply_query(entity_set, apply_expr):
     req = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {token}",
         "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+        **tracking_headers("web-api"),
     })
     with urllib.request.urlopen(req, timeout=150) as resp:
         return json.loads(resp.read()).get("value", [])

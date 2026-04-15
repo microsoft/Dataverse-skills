@@ -23,7 +23,7 @@ import urllib.request
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(__file__))
-from auth import get_token, load_env
+from auth import get_token, load_env, tracking_headers
 
 
 def forward(env_url, token, message):
@@ -33,6 +33,7 @@ def forward(env_url, token, message):
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "application/json",
+        **tracking_headers("mcp-proxy"),
     })
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read())

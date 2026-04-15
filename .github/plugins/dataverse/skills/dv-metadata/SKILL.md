@@ -89,11 +89,9 @@ The only time you write files directly is when editing something that already ex
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+client = create_client()
 
 info = client.tables.create(
     "new_ProjectBudget",
@@ -325,7 +323,7 @@ Neither the MCP server nor the Python SDK supports forms. Use the Web API direct
 # POST /api/data/v9.2/systemforms
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK does not support forms
+from auth import get_token, load_env, tracking_headers  # get_token() is correct here — SDK does not support forms
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -370,7 +368,8 @@ req = urllib.request.Request(
     headers={"Authorization": f"Bearer {token}",
              "Content-Type": "application/json",
              "OData-MaxVersion": "4.0",
-             "OData-Version": "4.0"},
+             "OData-Version": "4.0",
+             **tracking_headers("web-api")},
     method="POST"
 )
 with urllib.request.urlopen(req) as resp:
@@ -392,6 +391,7 @@ url = (f"{env}/api/data/v9.2/systemforms"
 req = urllib.request.Request(url, headers={
     "Authorization": f"Bearer {token}",
     "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
+    **tracking_headers("web-api"),
 })
 with urllib.request.urlopen(req) as resp:
     forms = json.loads(resp.read()).get("value", [])
@@ -412,7 +412,8 @@ req = urllib.request.Request(
     data=patch_body,
     headers={"Authorization": f"Bearer {token}",
              "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0",
+             **tracking_headers("web-api")},
     method="PATCH"
 )
 with urllib.request.urlopen(req) as resp:
@@ -434,7 +435,8 @@ req = urllib.request.Request(
     data=body,
     headers={"Authorization": f"Bearer {token}",
              "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0",
+             **tracking_headers("web-api")},
     method="POST"
 )
 with urllib.request.urlopen(req) as resp:
@@ -675,11 +677,9 @@ An alternate key tells Dataverse how to uniquely identify a record using a busin
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+client = create_client()
 
 # Single-column key (most common for imports)
 key = client.tables.create_alternate_key(
