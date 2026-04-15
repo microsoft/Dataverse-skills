@@ -89,6 +89,13 @@ If an SDK method fails or a PAC CLI command doesn't exist, **consult the relevan
 
 **Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
 
+**Display names vs schema names:** Schema names are permanent internal identifiers (`prefix_PascalCase`, e.g., `gov_ChecklistTemplate`). Display names are human-readable labels shown in the UI (e.g., "Checklist Template"). **Never use the schema name as the display name.** When a user asks to create a "Checklist Template" table, derive:
+- Schema name: `prefix_ChecklistTemplate` (PascalCase, no spaces)
+- Display name: `"Checklist Template"` (natural language with spaces)
+- Plural display name: `"Checklist Templates"`
+
+The SDK `tables.create()` sets display name = schema name automatically. You MUST PATCH the display name after SDK table creation — see `dv-metadata` for the pattern. Apply the same principle to columns: schema `prefix_SpecialtyArea` → display "Specialty Area".
+
 ### 3. Use Documented Auth Patterns
 
 Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.py` (for Python scripts and the SDK).

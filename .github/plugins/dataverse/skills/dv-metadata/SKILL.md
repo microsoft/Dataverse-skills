@@ -75,6 +75,26 @@ The only time you write files directly is when editing something that already ex
 
 ---
 
+## Naming Conventions: Display Names vs Schema Names
+
+**Schema names** are permanent internal identifiers. **Display names** are the human-readable labels users see in the UI. They must always be different.
+
+| What the user says | Schema name | Display name | Plural display name |
+|---|---|---|---|
+| "Checklist Template" | `prefix_ChecklistTemplate` | Checklist Template | Checklist Templates |
+| "Health Inspection Detail" | `prefix_HealthInspectionDetail` | Health Inspection Detail | Health Inspection Details |
+| "Code Enforcement Case" | `prefix_CodeEnforcementCase` | Code Enforcement Case | Code Enforcement Cases |
+
+**Rules:**
+- Schema names use **PascalCase** after the publisher prefix: `prefix_ChecklistTemplate`, never `prefix_checklisttemplate`
+- Display names use **natural language with spaces**: "Checklist Template", never `prefix_ChecklistTemplate`
+- **Never use a schema name as a display name.** Seeing `gov_checklisttemplate` in the UI means the display name was not set correctly.
+- The same rule applies to columns: schema `prefix_SpecialtyArea` → display "Specialty Area"
+
+**SDK limitation:** `client.tables.create()` sets the display name equal to the schema name. You MUST PATCH the display name after SDK table creation (see the table creation section below).
+
+---
+
 ## Creating a Table
 
 **If creating multiple tables for a data import**, also see these sections later in this skill:
@@ -86,14 +106,14 @@ The only time you write files directly is when editing something that already ex
 
 **SDK approach (use this by default):**
 
-```python
-import os, sys
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+The SDK creates the table but sets display name = schema name. Always follow up with a display name PATCH:
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+```python
+import os, sys, json, urllib.request
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import create_client, get_token, load_env, tracking_headers  # SDK does not support display name patching
+
+client = create_client()
 
 info = client.tables.create(
     "new_ProjectBudget",
@@ -102,9 +122,67 @@ info = client.tables.create(
     primary_column="new_Name",
 )
 print(f"Created: {info['table_schema_name']}")
+
+# MANDATORY: Patch display names — SDK sets display_name = schema_name
+env = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
+
+def label(text):
+    return {"@odata.type": "Microsoft.Dynamics.CRM.Label",
+            "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+                                  "Label": text, "LanguageCode": 1033}]}
+
+patch_body = json.dumps({
+    "DisplayName": label("Project Budget"),
+    "DisplayCollectionName": label("Project Budgets"),
+    "Description": label("Tracks project budget allocations"),
+}).encode()
+req = urllib.request.Request(
+    f"{env}/api/data/v9.2/EntityDefinitions(LogicalName='{info['table_logical_name']}')",
+    data=patch_body,
+    headers={"Authorization": f"Bearer {token}",
+             "Content-Type": "application/json",
+             "OData-MaxVersion": "4.0", "OData-Version": "4.0",
+             "MSCRM.MergeLabels": "true",
+             **tracking_headers("web-api")},
+    method="PUT"
+)
+with urllib.request.urlopen(req) as resp:
+    print(f"Display name set to 'Project Budget'")
+```
+
+When creating multiple tables, extract the PATCH into a helper to avoid repetition:
+
+```python
+# SDK does not support display name updates — raw Web API required
+def set_table_display_name(env, token, logical_name, display, plural, description=""):
+    """Patch table display name after SDK creation."""
+    def label(text):
+        return {"@odata.type": "Microsoft.Dynamics.CRM.Label",
+                "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+                                      "Label": text, "LanguageCode": 1033}]}
+    body = json.dumps({
+        "DisplayName": label(display),
+        "DisplayCollectionName": label(plural),
+        "Description": label(description),
+    }).encode()
+    req = urllib.request.Request(
+        f"{env}/api/data/v9.2/EntityDefinitions(LogicalName='{logical_name}')",
+        data=body,
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json",
+                 "OData-MaxVersion": "4.0", "OData-Version": "4.0",
+                 "MSCRM.MergeLabels": "true",
+                 **tracking_headers("web-api")},
+        method="PUT"
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"  Display name: '{display}' set on {logical_name}")
 ```
 
 **Web API fallback (ONLY when you need OwnershipType, HasActivities, or other properties the SDK doesn't expose):**
+
+When using Web API directly, set `DisplayName` and `DisplayCollectionName` explicitly — never copy the schema name:
 
 ```python
 # Helper for Label boilerplate
@@ -115,16 +193,16 @@ def label(text):
 
 entity = {
     "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
-    "SchemaName": "new_ProjectBudget",
-    "DisplayName": label("Project Budget"),
-    "DisplayCollectionName": label("Project Budgets"),
-    "Description": label(""),
+    "SchemaName": "new_ProjectBudget",                      # PascalCase, prefixed
+    "DisplayName": label("Project Budget"),                  # Human-readable
+    "DisplayCollectionName": label("Project Budgets"),       # Plural human-readable
+    "Description": label("Tracks project budget allocations"),
     "OwnershipType": "UserOwned",
     "HasActivities": False, "HasNotes": False, "IsActivity": False,
     "PrimaryNameAttribute": "new_name",
     "Attributes": [{
         "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
-        "SchemaName": "new_name",
+        "SchemaName": "new_Name",
         "DisplayName": label("Name"),
         "RequiredLevel": {"Value": "ApplicationRequired"},
         "MaxLength": 100, "IsPrimaryName": True,
