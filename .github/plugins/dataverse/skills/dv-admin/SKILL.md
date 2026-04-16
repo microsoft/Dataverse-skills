@@ -1,28 +1,30 @@
 ---
 name: dv-admin
 description: >
-  Environment-level Dataverse administration: bulk delete, data retention/archival,
-  and organization settings (audit, plugin trace, session timeout).
-  Use when: "bulk delete", "delete all records", "clean up old records", "schedule deletion",
-  "data cleanup", "remove old data", "pause bulk delete", "cancel bulk delete", "resume job",
-  "bulk delete job status", "list delete jobs", "manage bulk delete", "data management", "pac data",
-  "retention", "archive", "archival", "set up retention", "retain old records",
-  "long term retain", "data lifecycle", "enable archival", "enable retention",
-  "retention policy", "archive records", "retention status",
-  "org settings", "organization settings", "enable audit", "disable audit", "audit status",
+  Environment-level Dataverse administration: organization settings (audit, plugin trace,
+  session timeout), OrgDB settings (MCP, search, copilot, fabric), and recycle bin configuration.
+  Use when: "org settings", "organization settings", "enable audit", "disable audit", "audit status",
   "check audit", "audit enabled", "is audit enabled", "audit logs", "turn on auditing",
   "plugin trace", "session timeout", "auto save", "environment settings",
   "list settings", "list-settings", "update settings", "update-settings",
-  "enable audit for all environments", "developer environments audit".
+  "enable audit for all environments", "developer environments audit",
+  "recycle bin", "enable recycle bin", "disable recycle bin",
+  "recycle bin cleanup", "recyclebinconfig", "cleanup interval",
+  "orgdb settings", "search settings", "copilot settings", "mcp settings",
+  "fabric settings", "enable search", "disable search", "enable mcp", "disable mcp".
   Do not use when: deleting individual records (use dv-data), deleting tables (use dv-metadata),
   exporting/importing data files (use dv-solution), querying records (use dv-query),
   assigning roles or self-elevating (use dv-security), creating sample data (use dv-data),
   tenant governance like DLP or environment lifecycle (use pac admin --help).
 ---
 
-# Skill: Environment Admin — Bulk Delete, Retention, Org Settings
+# Skill: Environment Admin — Org Settings, OrgDB Settings, Recycle Bin
 
-**This skill uses PAC CLI exclusively.** Do NOT write Python scripts, PowerShell scripts, or use `az account get-access-token`. Just run `pac` commands directly.
+**This skill uses PAC CLI for org settings.** Two exceptions require Python SDK:
+- **OrgDB settings** (search, MCP, copilot, fabric) — stored in `orgdborgsettings` XML blob
+- **Recycle bin** — stored in `recyclebinconfigs` entity
+
+Do NOT write Python scripts for operations PAC CLI can handle.
 
 ## CRITICAL: How to Query Multiple Environments
 
@@ -47,7 +49,7 @@ wait
 ## Prerequisites
 
 - PAC CLI installed and authenticated (`pac auth create`)
-- A Dataverse environment with System Administrator or Bulk Delete privilege
+- A Dataverse environment with System Administrator privilege
 - Active auth profile: `pac auth list`
 
 ---
@@ -85,25 +87,6 @@ wait
 
 These flags do not exist. Using them will produce errors.
 
-### Bulk Delete
-| Wrong | Correct |
-|-------|---------|
-| `--filter` | use `--fetchxml` with a FetchXML string |
-| `--query` / `--where` / `--condition` | use `--fetchxml` |
-| `--date` / `--before` / `--older-than` | encode date in FetchXML `<condition>` |
-| `--job-id` | use `--id` |
-| `--all` / `--purge` / `--truncate` | omit `--fetchxml` to target all records (warn user first) |
-
-### Retention
-| Wrong | Correct |
-|-------|---------|
-| `--fetchxml` | use `--criteria` (same FetchXML format, different flag name) |
-| `--filter` / `--query` / `--policy` | use `--criteria` |
-| `--enable` / `--activate` | use `pac data retention enable-entity` |
-| `--table` | use `--entity` |
-| `--operation-id` / `--job-id` / `--guid` | use `--id` |
-
-### Org Settings
 | Wrong | Correct |
 |-------|---------|
 | `--enable-audit` / `--audit` | use `--name isauditenabled --value true` |
@@ -111,158 +94,6 @@ These flags do not exist. Using them will produce errors.
 | `--timeout` / `--session` / `--minutes` | use `--name sessiontimeoutinmins --value <int>` |
 | `--setting` / `--key` / `--flag` | use `--name` |
 | String values like `"all"` or `"enabled"` for option sets | use integers: `0`, `1`, `2` |
-
----
-
-## Bulk Delete Commands
-
-### Schedule a Bulk Delete Job
-
-```bash
-# Delete all records in a table
-pac data bulk-delete schedule --entity account
-
-# Delete with a filter (FetchXML)
-pac data bulk-delete schedule --entity activitypointer \
-    --fetchxml "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2024-01-01'/></filter></entity></fetch>"
-
-# With a custom job name and scheduled start time
-pac data bulk-delete schedule --entity email \
-    --fetchxml "<fetch><entity name='email'><filter><condition attribute='createdon' operator='lt' value='2024-06-01'/></filter></entity></fetch>" \
-    --job-name "Cleanup old emails before 2024" \
-    --start-time 2025-07-01T02:00:00Z
-
-# Recurring daily cleanup
-pac data bulk-delete schedule --entity activitypointer \
-    --fetchxml "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2024-01-01'/></filter></entity></fetch>" \
-    --job-name "Daily activity cleanup" \
-    --recurrence "FREQ=DAILY;INTERVAL=1"
-
-# Target a specific environment
-pac data bulk-delete schedule --entity account \
-    --environment https://myorg.crm.dynamics.com
-```
-
-#### Arguments
-
-| Argument | Alias | Required | Description |
-|----------|-------|----------|-------------|
-| `--entity` | `-e` | Yes | Logical name of the table (e.g., `account`, `activitypointer`, `email`) |
-| `--fetchxml` | `-fx` | No | FetchXML query to filter records. If omitted, **all records** in the table are targeted |
-| `--job-name` | `-jn` | No | Descriptive name for the job. Defaults to `Bulk Delete - <entity> - <timestamp>` |
-| `--start-time` | `-st` | No | ISO 8601 start time (e.g., `2025-07-01T02:00:00Z`). Defaults to now |
-| `--recurrence` | `-r` | No | RFC 5545 recurrence pattern (e.g., `FREQ=DAILY;INTERVAL=1`) |
-| `--environment` | `-env` | No | Target environment URL or ID |
-
-### List Bulk Delete Jobs
-
-```bash
-pac data bulk-delete list
-pac data bulk-delete list --environment https://myorg.crm.dynamics.com
-```
-
-### Show Bulk Delete Job Details
-
-```bash
-pac data bulk-delete show --id <job-id>
-```
-
-### Pause / Resume / Cancel
-
-```bash
-pac data bulk-delete pause --id <job-id> --environment https://myorg.crm.dynamics.com
-pac data bulk-delete resume --id <job-id> --environment https://myorg.crm.dynamics.com
-pac data bulk-delete cancel --id <job-id> --environment https://myorg.crm.dynamics.com
-```
-
-**Cancel cannot be undone.** Records already deleted will not be restored.
-
----
-
-## Common FetchXML Patterns
-
-### Delete records older than a date
-
-```xml
-<fetch>
-  <entity name="activitypointer">
-    <filter>
-      <condition attribute="createdon" operator="lt" value="2024-01-01"/>
-    </filter>
-  </entity>
-</fetch>
-```
-
-### Delete records by status
-
-```xml
-<fetch>
-  <entity name="email">
-    <filter>
-      <condition attribute="statecode" operator="eq" value="1"/>
-      <condition attribute="createdon" operator="lt" value="2024-06-01"/>
-    </filter>
-  </entity>
-</fetch>
-```
-
-### Delete records with null field
-
-```xml
-<fetch>
-  <entity name="contact">
-    <filter>
-      <condition attribute="emailaddress1" operator="null"/>
-    </filter>
-  </entity>
-</fetch>
-```
-
----
-
-## Retention / Archival Commands
-
-Data retention moves old records to long-term storage (archive) without permanently deleting them.
-
-### Agentic Flow
-
-```
-Step 1: pac data retention enable-entity --entity activitypointer
-Step 2: pac data retention list
-Step 3: pac data retention set --entity activitypointer --criteria "<fetchxml>..."
-Step 4: pac data retention show --id <config-id>
-```
-
-### Commands
-
-```bash
-pac data retention list --environment https://myorg.crm.dynamics.com
-pac data retention show --id <config-id> --environment https://myorg.crm.dynamics.com
-
-pac data retention set --entity activitypointer \
-    --criteria "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2023-01-01'/></filter></entity></fetch>" \
-    --environment https://myorg.crm.dynamics.com
-
-pac data retention enable-entity --entity activitypointer --environment https://myorg.crm.dynamics.com
-pac data retention status --id <operation-id> --environment https://myorg.crm.dynamics.com
-```
-
-#### Arguments for `retention set`
-
-| Argument | Alias | Required | Description |
-|----------|-------|----------|-------------|
-| `--entity` | `-e` | Yes | Logical name of the table |
-| `--criteria` | `-c` | Yes | FetchXML defining which records to archive |
-| `--start-time` | `-st` | No | ISO 8601 start time. Defaults to now |
-| `--recurrence` | `-r` | No | RFC 5545 recurrence pattern |
-| `--environment` | `-env` | No | Target environment URL or ID |
-
-### When to Use Retention vs Bulk Delete
-
-| Scenario | Use |
-|----------|-----|
-| Data no longer needed, can be permanently deleted | **Bulk Delete** |
-| Data must be preserved for compliance | **Retention** (archive) |
 
 ---
 
@@ -317,37 +148,230 @@ Step 5: Report summary as a table
 
 ---
 
-## Safety Rules
+## Advanced Settings (Python SDK — PAC CLI Cannot Handle These)
 
-- **Always confirm** before scheduling a bulk delete
-- If `--fetchxml` is omitted, warn that ALL records will be deleted
-- For system tables (`systemuser`, `businessunit`, `organization`), warn that deleting may break the environment
-- Prefer `--start-time` for off-peak scheduling
-- For large deletions, suggest a test run with a narrow filter first
+Some settings can't be managed by `pac org update-settings`. Two patterns exist:
+
+| Setting type | Where it lives | How to update |
+|---|---|---|
+| Top-level org columns (`isauditenabled`, `plugintracelogsetting`, etc.) | Organization entity columns | **PAC CLI** — `pac org update-settings` |
+| OrgDB settings (search, MCP, copilot, fabric, etc.) | XML inside `orgdborgsettings` column | **Python SDK** — fetch XML, parse, modify, PATCH back |
+| Recycle bin (org-level and per-table) | `recyclebinconfigs` entity | **Python SDK** — PATCH `recyclebinconfigs(<id>)` |
 
 ---
 
-## Quick Reference
+### OrgDB Settings (orgdborgsettings XML)
 
-### Bulk Delete
+Settings like search mode, MCP, copilot features, fabric, and retention live inside the `orgdborgsettings` XML blob. The XML uses **direct PascalCase elements** (NOT `<pair>` tags):
 
-| Command | Key Arguments |
-|---------|---------------|
-| `pac data bulk-delete schedule` | `--entity`, `--fetchxml`, `--job-name`, `--start-time`, `--recurrence` |
-| `pac data bulk-delete list` | `--environment` |
-| `pac data bulk-delete show/pause/resume/cancel` | `--id` |
+```xml
+<OrgSettings>
+  <SearchAndCopilotIndexMode>0</SearchAndCopilotIndexMode>
+  <IsRetentionEnabled>true</IsRetentionEnabled>
+  <IsDVCopilotForTextDataEnabled>true</IsDVCopilotForTextDataEnabled>
+</OrgSettings>
+```
 
-### Retention
+**Read all OrgDB settings:**
 
-| Command | Key Arguments |
-|---------|---------------|
-| `pac data retention enable-entity` | `--entity` |
-| `pac data retention set` | `--entity`, `--criteria`, `--start-time`, `--recurrence` |
-| `pac data retention list/show/status` | `--id` or `--environment` |
+```python
+import subprocess, json, urllib.request
+from xml.etree import ElementTree as ET
 
-### JSON Output
+ENV_URL = "https://myorg.crm.dynamics.com"  # replace with target
+
+token = subprocess.run(
+    ["powershell", "-Command",
+     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
+    capture_output=True, text=True
+).stdout.strip()
+
+req = urllib.request.Request(
+    f"{ENV_URL}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
+    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+)
+with urllib.request.urlopen(req) as resp:
+    org = json.loads(resp.read())["value"][0]
+
+root = ET.fromstring(org["orgdborgsettings"])
+for child in sorted(root, key=lambda c: c.tag):
+    print(f"  {child.tag} = {child.text}")
+```
+
+**Update or add an OrgDB setting:**
+
+```python
+import subprocess, json, urllib.request, urllib.error
+from xml.etree import ElementTree as ET
+
+ENV_URL = "https://myorg.crm.dynamics.com"
+SETTING_NAME = "SearchAndCopilotIndexMode"  # PascalCase, case-sensitive
+SETTING_VALUE = "0"                          # always a string in XML
+
+token = subprocess.run(
+    ["powershell", "-Command",
+     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
+    capture_output=True, text=True
+).stdout.strip()
+
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+}
+
+# Fetch current XML
+req = urllib.request.Request(
+    f"{ENV_URL}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    org = json.loads(resp.read())["value"][0]
+    org_id = org["organizationid"]
+
+root = ET.fromstring(org.get("orgdborgsettings", "<OrgSettings></OrgSettings>"))
+
+# Update existing or add new
+existing = root.find(SETTING_NAME)
+if existing is not None:
+    print(f"Current {SETTING_NAME} = {existing.text}")
+    existing.text = SETTING_VALUE
+else:
+    print(f"{SETTING_NAME} not set -- adding")
+    ET.SubElement(root, SETTING_NAME).text = SETTING_VALUE
+
+# PATCH back
+req = urllib.request.Request(
+    f"{ENV_URL}/api/data/v9.2/organizations({org_id})",
+    data=json.dumps({"orgdborgsettings": ET.tostring(root, encoding="unicode")}).encode("utf-8"),
+    headers=headers,
+    method="PATCH",
+)
+try:
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: {SETTING_NAME} = {SETTING_VALUE} (HTTP {resp.status})")
+except urllib.error.HTTPError as e:
+    print(f"ERROR {e.code}: {e.read().decode()}")
+```
+
+**Remove an OrgDB setting:**
+
+```python
+# After fetching and parsing the XML (same as above):
+existing = root.find(SETTING_NAME)
+if existing is not None:
+    root.remove(existing)
+    # PATCH back the XML without the element
+```
+
+**Common OrgDB settings (PascalCase, case-sensitive — use these exact names):**
+
+| Setting | Type | Values | What it controls |
+|---|---|---|---|
+| `IsMCPEnabled` | bool | `true` / `false` | Enable/disable Dataverse MCP server |
+| `SearchAndCopilotIndexMode` | int | `0` = default, `1` = on, `2` = off | Dataverse search and Copilot indexing |
+| `IsRetentionEnabled` | bool | `true` / `false` | Data retention |
+| `IsArchivalEnabled` | bool | `true` / `false` | Data archival |
+| `IsDVCopilotForTextDataEnabled` | bool | `true` / `false` | Copilot for text data |
+| `IsLinkToFabricEnabled` | bool | `true` / `false` | Link to Fabric |
+| `IsFabricVirtualTableEnabled` | bool | `true` / `false` | Fabric virtual tables |
+| `IsShadowLakeEnabled` | bool | `true` / `false` | Shadow lake |
+| `IsCommandingModifiedOnEnabled` | bool | `true` / `false` | Commanding modified-on tracking |
+| `CanCreateApplicationStubUser` | bool | `true` / `false` | Application stub user creation |
+| `AllowRoleAssignmentOnDisabledUsers` | bool | `true` / `false` | Role assignment on disabled users |
+| `EnableActivitiesFeatures` | int | `0` / `1` | Activities features toggle |
+| `EnableActivitiesTimeLinePerfImprovement` | int | `0` / `1` | Timeline performance |
+| `TDSListenerInitialized` | int | `0` / `1` | TDS endpoint |
+| `AzureSynapseLinkIncrementalUpdateTimeInterval` | int | minutes (e.g., `1440`) | Synapse Link update interval |
+
+**Do NOT search or discover setting names at runtime.** Use the table above. If the user asks for a setting not in this table, read all current settings first (`root.find()` loop) and show the user what's available.
+
+---
+
+### Recycle Bin Configuration
+
+Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgsettings` XML. PAC CLI cannot manage these.
+
+### Read Recycle Bin Status
 
 ```bash
-pac data bulk-delete list --output json
-pac data retention list --output json
+# Quick check via PAC CLI
+pac org fetch --xml "<fetch><entity name='recyclebinconfig'><filter><condition attribute='name' operator='eq' value='organization'/></filter><attribute name='isreadyforrecyclebin'/><attribute name='cleanupintervalindays'/></entity></fetch>" --environment https://myorg.crm.dynamics.com
 ```
+
+### Enable/Disable Recycle Bin or Change Cleanup Interval
+
+```python
+import subprocess, json, urllib.request, urllib.error, urllib.parse
+
+ENV_URL = "https://org470dd288.crm.dynamics.com"  # replace with target
+
+# Get token from az cli (works without .env)
+token = subprocess.run(
+    ["powershell", "-Command",
+     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
+    capture_output=True, text=True
+).stdout.strip()
+
+headers = {
+    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+}
+
+# Step 1: Get the org-level recyclebinconfig ID
+filter_q = urllib.parse.quote("name eq 'organization'")
+req = urllib.request.Request(
+    f"{ENV_URL}/api/data/v9.2/recyclebinconfigs?$filter={filter_q}&$select=recyclebinconfigid,isreadyforrecyclebin,cleanupintervalindays",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    config = json.loads(resp.read())["value"][0]
+    config_id = config["recyclebinconfigid"]
+    print(f"Current: isreadyforrecyclebin={config['isreadyforrecyclebin']}, cleanupintervalindays={config['cleanupintervalindays']}")
+
+# Step 2: Update — set cleanup interval (30 days) to enable, or -1 to disable auto-cleanup
+req = urllib.request.Request(
+    f"{ENV_URL}/api/data/v9.2/recyclebinconfigs({config_id})",
+    data=json.dumps({"cleanupintervalindays": 30}).encode("utf-8"),
+    headers=headers,
+    method="PATCH",
+)
+try:
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: cleanupintervalindays = 30 (HTTP {resp.status})")
+except urllib.error.HTTPError as e:
+    print(f"ERROR {e.code}: {e.read().decode()}")
+```
+
+### Key Fields on `recyclebinconfigs`
+
+| Field | Type | What it does |
+|---|---|---|
+| `isreadyforrecyclebin` | bool | Whether the entity supports recycle bin (read-only for org level) |
+| `cleanupintervalindays` | int | Auto-cleanup interval. `-1` = no auto-cleanup. `30` = delete after 30 days |
+| `name` | string | `"organization"` for org-level config, table logical name for per-table configs |
+| `statecode` | int | `0` = active, `1` = inactive |
+
+### Per-Table Recycle Bin Config
+
+Each table has its own `recyclebinconfig` record. To check/update a specific table:
+
+```python
+# Filter by table name
+filter_q = urllib.parse.quote("name eq 'account'")
+# ... same pattern as above, just change the filter
+```
+
+---
+
+## Safety Rules
+
+- **Always confirm** before changing org settings that affect all users
+- For multi-environment updates, show the list of environments and get confirmation first
+- For OrgDB settings, warn that incorrect values can break environment features
+- For recycle bin, warn that reducing cleanup interval will permanently delete records sooner
