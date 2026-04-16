@@ -1,9 +1,16 @@
 ---
 name: dv-admin
 description: >
-  Environment-level Dataverse administration: organization settings (audit, plugin trace,
-  session timeout), OrgDB settings (MCP, search, copilot, fabric), and recycle bin configuration.
-  Use when: "org settings", "organization settings", "enable audit", "disable audit", "audit status",
+  Environment-level Dataverse administration: bulk delete, data retention/archival,
+  organization settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric),
+  and recycle bin configuration.
+  Use when: "bulk delete", "delete all records", "clean up old records", "schedule deletion",
+  "data cleanup", "remove old data", "pause bulk delete", "cancel bulk delete", "resume job",
+  "bulk delete job status", "list delete jobs", "manage bulk delete", "data management", "pac data",
+  "retention", "archive", "archival", "set up retention", "retain old records",
+  "long term retain", "data lifecycle", "enable archival", "enable retention",
+  "retention policy", "archive records", "retention status",
+  "org settings", "organization settings", "enable audit", "disable audit", "audit status",
   "check audit", "audit enabled", "is audit enabled", "audit logs", "turn on auditing",
   "plugin trace", "session timeout", "auto save", "environment settings",
   "list settings", "list-settings", "update settings", "update-settings",
@@ -18,9 +25,9 @@ description: >
   tenant governance like DLP or environment lifecycle (use pac admin --help).
 ---
 
-# Skill: Environment Admin — Org Settings, OrgDB Settings, Recycle Bin
+# Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin
 
-**This skill uses PAC CLI for org settings.** Two exceptions require Python SDK:
+**This skill uses PAC CLI for most operations.** Two exceptions require Python SDK:
 - **OrgDB settings** (search, MCP, copilot, fabric) — stored in `orgdborgsettings` XML blob
 - **Recycle bin** — stored in `recyclebinconfigs` entity
 
@@ -89,11 +96,107 @@ These flags do not exist. Using them will produce errors.
 
 | Wrong | Correct |
 |-------|---------|
+### Bulk Delete
+| Wrong | Correct |
+|-------|---------|
+| `--filter` | use `--fetchxml` with a FetchXML string |
+| `--query` / `--where` / `--condition` | use `--fetchxml` |
+| `--date` / `--before` / `--older-than` | encode date in FetchXML `<condition>` |
+| `--job-id` | use `--id` |
+| `--all` / `--purge` / `--truncate` | omit `--fetchxml` to target all records (warn user first) |
+
+### Retention
+| Wrong | Correct |
+|-------|---------|
+| `--fetchxml` | use `--criteria` (same FetchXML format, different flag name) |
+| `--filter` / `--query` / `--policy` | use `--criteria` |
+| `--enable` / `--activate` | use `pac data retention enable-entity` |
+| `--table` | use `--entity` |
+| `--operation-id` / `--job-id` / `--guid` | use `--id` |
+
+### Org Settings
+| Wrong | Correct |
+|-------|---------|
 | `--enable-audit` / `--audit` | use `--name isauditenabled --value true` |
 | `--trace` / `--plugin-trace` / `--logging` | use `--name plugintracelogsetting --value 2` |
 | `--timeout` / `--session` / `--minutes` | use `--name sessiontimeoutinmins --value <int>` |
 | `--setting` / `--key` / `--flag` | use `--name` |
 | String values like `"all"` or `"enabled"` for option sets | use integers: `0`, `1`, `2` |
+
+---
+
+## Bulk Delete Commands
+
+### Schedule a Bulk Delete Job
+
+```bash
+pac data bulk-delete schedule --entity account
+pac data bulk-delete schedule --entity activitypointer \
+    --fetchxml "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2024-01-01'/></filter></entity></fetch>"
+pac data bulk-delete schedule --entity email \
+    --fetchxml "<fetch><entity name='email'><filter><condition attribute='createdon' operator='lt' value='2024-06-01'/></filter></entity></fetch>" \
+    --job-name "Cleanup old emails" --recurrence "FREQ=DAILY;INTERVAL=1"
+```
+
+| Argument | Alias | Required | Description |
+|----------|-------|----------|-------------|
+| `--entity` | `-e` | Yes | Logical name of the table |
+| `--fetchxml` | `-fx` | No | FetchXML filter. If omitted, **all records** targeted |
+| `--job-name` | `-jn` | No | Descriptive name for the job |
+| `--start-time` | `-st` | No | ISO 8601 start time. Defaults to now |
+| `--recurrence` | `-r` | No | RFC 5545 pattern (e.g., `FREQ=DAILY;INTERVAL=1`) |
+| `--environment` | `-env` | No | Target environment URL |
+
+### Manage Jobs
+
+```bash
+pac data bulk-delete list --environment https://myorg.crm.dynamics.com
+pac data bulk-delete show --id <job-id>
+pac data bulk-delete pause --id <job-id>
+pac data bulk-delete resume --id <job-id>
+pac data bulk-delete cancel --id <job-id>
+```
+
+---
+
+## Retention / Archival Commands
+
+Data retention moves old records to long-term storage without permanently deleting them.
+
+### Agentic Flow
+
+```
+Step 1: pac data retention enable-entity --entity activitypointer
+Step 2: pac data retention list
+Step 3: pac data retention set --entity activitypointer --criteria "<fetchxml>..."
+Step 4: pac data retention show --id <config-id>
+```
+
+### Commands
+
+```bash
+pac data retention enable-entity --entity activitypointer --environment https://myorg.crm.dynamics.com
+pac data retention set --entity activitypointer \
+    --criteria "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2023-01-01'/></filter></entity></fetch>"
+pac data retention list --environment https://myorg.crm.dynamics.com
+pac data retention show --id <config-id>
+pac data retention status --id <operation-id>
+```
+
+| Argument | Alias | Required | Description |
+|----------|-------|----------|-------------|
+| `--entity` | `-e` | Yes | Logical name of the table |
+| `--criteria` | `-c` | Yes | FetchXML defining which records to archive |
+| `--start-time` | `-st` | No | ISO 8601 start time. Defaults to now |
+| `--recurrence` | `-r` | No | RFC 5545 recurrence pattern |
+| `--environment` | `-env` | No | Target environment URL |
+
+### Retention vs Bulk Delete
+
+| Scenario | Use |
+|----------|-----|
+| Data no longer needed, permanently delete | **Bulk Delete** |
+| Data must be preserved for compliance | **Retention** (archive) |
 
 ---
 
@@ -371,6 +474,9 @@ filter_q = urllib.parse.quote("name eq 'account'")
 
 ## Safety Rules
 
+- **Always confirm** before scheduling a bulk delete — this is destructive
+- If `--fetchxml` is omitted, warn that ALL records in the table will be deleted
+- For system tables (`systemuser`, `businessunit`, `organization`), warn that deleting may break the environment
 - **Always confirm** before changing org settings that affect all users
 - For multi-environment updates, show the list of environments and get confirmation first
 - For OrgDB settings, warn that incorrect values can break environment features
