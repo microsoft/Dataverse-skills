@@ -33,29 +33,51 @@ description: >
 
 Do NOT write Python scripts for operations PAC CLI can handle.
 
-## CRITICAL: How to Query Multiple Environments
+## CRITICAL: How to Read or Update Org Settings (Single or Multi-Environment)
 
-**When the user asks about settings, audit status, or any read/write across multiple environments, ALWAYS do this:**
+**To check any org setting (audit, plugin trace, etc.):** `pac org list-settings`
+**To update any org setting:** `pac org update-settings`
+
+These are the ONLY commands for org settings. Do NOT use `pac org fetch`, `pac org who`, `curl`, `urllib`, PowerShell Invoke-RestMethod, or any Web API call. The PAC CLI commands handle authentication automatically.
+
+**Single environment:**
 
 ```bash
-# ONE bash call. ALL environments. Parallel with & and wait.
+pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com
+```
+
+**Multiple environments — ALWAYS parallel in ONE bash call:**
+
+```bash
 pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
 pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
 pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
 wait
 ```
 
-**Do NOT:**
-- Use `pac env select` to switch environments one by one
-- Use `pac org who` to check settings
-- Make separate bash calls for each environment
-- Write Python scripts
+**NEVER do any of these for org settings:**
+- `pac env select` then `pac org fetch` — WRONG, use `pac org list-settings --environment <url>`
+- `pac org who` — shows connection info, NOT settings
+- `curl` / `urllib` / `requests` to the Web API — WRONG, use `pac org list-settings`
+- `pac auth token` — WRONG, PAC CLI handles auth internally
+- PowerShell `Invoke-RestMethod` — WRONG, use PAC CLI directly
+- Separate bash calls per environment — WRONG, use `&` and `wait` in ONE call
+- Python scripts for org settings — WRONG, use PAC CLI
 
 ---
 
 ## Prerequisites
 
-- PAC CLI installed and authenticated (`pac auth create`)
+- PAC CLI **latest version (.NET Framework build)** — `pac data bulk-delete` and `pac data retention` commands are only in the .NET Framework build (not the `dotnet tool` cross-platform version). Check your version:
+  ```bash
+  pac help   # look for "Version: x.x.x (.NET Framework ...)"
+  ```
+  If it shows `.NET 10` or `.NET 8` instead of `.NET Framework`, the `pac data` commands will not be available. To update to the latest .NET Framework build:
+  ```bash
+  pac install latest   # downloads latest NuGet package
+  pac use latest       # switches to the latest installed version
+  ```
+- Authenticated (`pac auth create`)
 - A Dataverse environment with System Administrator privilege
 - Active auth profile: `pac auth list`
 
@@ -63,30 +85,15 @@ wait
 
 ## Multi-Environment Operations — Always Parallel
 
-When operating across multiple environments, use `--environment` flag and `&` to run **all commands in a single bash call**:
+The pattern above applies to ALL multi-environment operations, not just org settings. For updates:
 
 ```bash
-# READ settings from 5 environments — ONE bash call, all parallel
-pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org4.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org5.crm.dynamics.com &
-wait
-```
-
-```bash
-# UPDATE settings on 5 environments — ONE bash call, all parallel
+# UPDATE settings on multiple environments — ONE bash call, all parallel
 pac org update-settings --name isauditenabled --value true --environment https://org1.crm.dynamics.com &
 pac org update-settings --name isauditenabled --value true --environment https://org2.crm.dynamics.com &
 pac org update-settings --name isauditenabled --value true --environment https://org3.crm.dynamics.com &
 wait
 ```
-
-**Rules:**
-- Use `--environment <url>` — do NOT use `pac env select` to switch environments
-- Run ALL commands in one bash call with `&` and `wait` — do NOT run separate sequential bash calls
-- Use `pac org list-settings` to read settings — do NOT use `pac org who`
 
 ---
 
@@ -94,8 +101,6 @@ wait
 
 These flags do not exist. Using them will produce errors.
 
-| Wrong | Correct |
-|-------|---------|
 ### Bulk Delete
 | Wrong | Correct |
 |-------|---------|
@@ -278,19 +283,17 @@ Settings like search mode, MCP, copilot features, fabric, and retention live ins
 **Read all OrgDB settings:**
 
 ```python
-import subprocess, json, urllib.request
+import os, sys, json, urllib.request
 from xml.etree import ElementTree as ET
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env
 
-ENV_URL = "https://myorg.crm.dynamics.com"  # replace with target
-
-token = subprocess.run(
-    ["powershell", "-Command",
-     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
-    capture_output=True, text=True
-).stdout.strip()
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
 
 req = urllib.request.Request(
-    f"{ENV_URL}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
+    f"{env_url}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
     headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
 )
 with urllib.request.urlopen(req) as resp:
@@ -298,24 +301,23 @@ with urllib.request.urlopen(req) as resp:
 
 root = ET.fromstring(org["orgdborgsettings"])
 for child in sorted(root, key=lambda c: c.tag):
-    print(f"  {child.tag} = {child.text}")
+    print(f"  {child.tag} = {child.text}", flush=True)
 ```
 
 **Update or add an OrgDB setting:**
 
 ```python
-import subprocess, json, urllib.request, urllib.error
+import os, sys, json, urllib.request, urllib.error
 from xml.etree import ElementTree as ET
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env
 
-ENV_URL = "https://myorg.crm.dynamics.com"
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
+
 SETTING_NAME = "SearchAndCopilotIndexMode"  # PascalCase, case-sensitive
 SETTING_VALUE = "0"                          # always a string in XML
-
-token = subprocess.run(
-    ["powershell", "-Command",
-     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
-    capture_output=True, text=True
-).stdout.strip()
 
 headers = {
     "Authorization": f"Bearer {token}",
@@ -327,7 +329,7 @@ headers = {
 
 # Fetch current XML
 req = urllib.request.Request(
-    f"{ENV_URL}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
+    f"{env_url}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
     headers=headers,
 )
 with urllib.request.urlopen(req) as resp:
@@ -339,24 +341,24 @@ root = ET.fromstring(org.get("orgdborgsettings", "<OrgSettings></OrgSettings>"))
 # Update existing or add new
 existing = root.find(SETTING_NAME)
 if existing is not None:
-    print(f"Current {SETTING_NAME} = {existing.text}")
+    print(f"Current {SETTING_NAME} = {existing.text}", flush=True)
     existing.text = SETTING_VALUE
 else:
-    print(f"{SETTING_NAME} not set -- adding")
+    print(f"{SETTING_NAME} not set -- adding", flush=True)
     ET.SubElement(root, SETTING_NAME).text = SETTING_VALUE
 
 # PATCH back
 req = urllib.request.Request(
-    f"{ENV_URL}/api/data/v9.2/organizations({org_id})",
+    f"{env_url}/api/data/v9.2/organizations({org_id})",
     data=json.dumps({"orgdborgsettings": ET.tostring(root, encoding="unicode")}).encode("utf-8"),
     headers=headers,
     method="PATCH",
 )
 try:
     with urllib.request.urlopen(req) as resp:
-        print(f"SUCCESS: {SETTING_NAME} = {SETTING_VALUE} (HTTP {resp.status})")
+        print(f"SUCCESS: {SETTING_NAME} = {SETTING_VALUE} (HTTP {resp.status})", flush=True)
 except urllib.error.HTTPError as e:
-    print(f"ERROR {e.code}: {e.read().decode()}")
+    print(f"ERROR {e.code}: {e.read().decode()}", flush=True)
 ```
 
 **Remove an OrgDB setting:**
@@ -397,26 +399,20 @@ if existing is not None:
 
 Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgsettings` XML. PAC CLI cannot manage these.
 
+**Well-known constant:** The organization entity metadata ID is `e1bd1119-6e9d-45a4-bc15-12051e65a0bd` -- this is the same across all Dataverse environments.
+
 ### Read Recycle Bin Status
 
-```bash
-# Quick check via PAC CLI
-pac org fetch --xml "<fetch><entity name='recyclebinconfig'><filter><condition attribute='name' operator='eq' value='organization'/></filter><attribute name='isreadyforrecyclebin'/><attribute name='cleanupintervalindays'/></entity></fetch>" --environment https://myorg.crm.dynamics.com
-```
-
-### Enable/Disable Recycle Bin or Change Cleanup Interval
-
 ```python
-import subprocess, json, urllib.request, urllib.error, urllib.parse
+import os, sys, json, urllib.request, urllib.parse
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env
 
-ENV_URL = "https://org470dd288.crm.dynamics.com"  # replace with target
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
 
-# Get token from az cli (works without .env)
-token = subprocess.run(
-    ["powershell", "-Command",
-     f"az account get-access-token --resource {ENV_URL} --query accessToken -o tsv"],
-    capture_output=True, text=True
-).stdout.strip()
+ORGANIZATION_ENTITY_ID = "e1bd1119-6e9d-45a4-bc15-12051e65a0bd"
 
 headers = {
     "Authorization": f"Bearer {token}",
@@ -426,48 +422,123 @@ headers = {
     "OData-Version": "4.0",
 }
 
-# Step 1: Get the org-level recyclebinconfig ID
-filter_q = urllib.parse.quote("name eq 'organization'")
+# Fetch org-level config by extensionofrecordid (NOT by name)
+filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{ORGANIZATION_ENTITY_ID}'")
 req = urllib.request.Request(
-    f"{ENV_URL}/api/data/v9.2/recyclebinconfigs?$filter={filter_q}&$select=recyclebinconfigid,isreadyforrecyclebin,cleanupintervalindays",
+    f"{env_url}/api/data/v9.2/recyclebinconfigs?$filter={filter_q}&$select=recyclebinconfigid,statecode,statuscode,cleanupintervalindays",
     headers=headers,
 )
 with urllib.request.urlopen(req) as resp:
-    config = json.loads(resp.read())["value"][0]
-    config_id = config["recyclebinconfigid"]
-    print(f"Current: isreadyforrecyclebin={config['isreadyforrecyclebin']}, cleanupintervalindays={config['cleanupintervalindays']}")
+    records = json.loads(resp.read()).get("value", [])
 
-# Step 2: Update — set cleanup interval (30 days) to enable, or -1 to disable auto-cleanup
-req = urllib.request.Request(
-    f"{ENV_URL}/api/data/v9.2/recyclebinconfigs({config_id})",
-    data=json.dumps({"cleanupintervalindays": 30}).encode("utf-8"),
-    headers=headers,
-    method="PATCH",
-)
-try:
+if records:
+    config = records[0]
+    enabled = config["statecode"] == 0
+    cleanup = config["cleanupintervalindays"]
+    print(f"Recycle bin: {'enabled' if enabled else 'disabled'}", flush=True)
+    print(f"Cleanup interval: {cleanup} days ({'-1 means no auto-cleanup' if cleanup == -1 else ''})", flush=True)
+    print(f"Config ID: {config['recyclebinconfigid']}", flush=True)
+else:
+    print("Recycle bin: not configured (no org-level record)", flush=True)
+```
+
+### Enable Recycle Bin
+
+Three cases depending on whether a config record already exists:
+
+```python
+# ... (same imports, headers, ORGANIZATION_ENTITY_ID, and fetch as above)
+
+CLEANUP_DAYS = 30  # default; -1 means records in recycle bin are never auto-purged
+
+if not records:
+    # Case 1: No config exists -- CREATE a new one
+    # extensionofrecordid binds to the entities() metadata endpoint, NOT organizations()
+    payload = {
+        "extensionofrecordid@odata.bind": f"entities({ORGANIZATION_ENTITY_ID})",
+        "extensionofrecordid@OData.Community.Display.V1.FormattedValue": "OrganizationId",
+        "cleanupintervalindays": CLEANUP_DAYS,
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
     with urllib.request.urlopen(req) as resp:
-        print(f"SUCCESS: cleanupintervalindays = 30 (HTTP {resp.status})")
-except urllib.error.HTTPError as e:
-    print(f"ERROR {e.code}: {e.read().decode()}")
+        print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
+else:
+    # Case 2: Config exists -- UPDATE statecode/statuscode and cleanup interval
+    config_id = records[0]["recyclebinconfigid"]
+    payload = {
+        "cleanupintervalindays": CLEANUP_DAYS,
+        "statecode": 0,
+        "statuscode": 1,
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="PATCH",
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
+```
+
+### Disable Recycle Bin
+
+**Disable = DELETE the recyclebinconfig record.** No payload, no statecode change.
+
+```python
+# ... (same fetch as above to get config_id)
+
+if records:
+    config_id = records[0]["recyclebinconfigid"]
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
+        headers=headers,
+        method="DELETE",
+    )
+    with urllib.request.urlopen(req) as resp:
+        print(f"SUCCESS: recycle bin disabled (HTTP {resp.status})", flush=True)
+else:
+    print("Recycle bin is already disabled (no config record)", flush=True)
 ```
 
 ### Key Fields on `recyclebinconfigs`
 
 | Field | Type | What it does |
 |---|---|---|
-| `isreadyforrecyclebin` | bool | Whether the entity supports recycle bin (read-only for org level) |
-| `cleanupintervalindays` | int | Auto-cleanup interval. `-1` = no auto-cleanup. `30` = delete after 30 days |
-| `name` | string | `"organization"` for org-level config, table logical name for per-table configs |
-| `statecode` | int | `0` = active, `1` = inactive |
+| `statecode` | int | `0` = enabled (active), `1` = disabled (inactive) |
+| `statuscode` | int | `1` = enabled, `2` = disabled |
+| `cleanupintervalindays` | int | Auto-cleanup interval. `-1` = no auto-cleanup (default). `30` = purge after 30 days (max). Min: `1` |
+| `_extensionofrecordid_value` | guid | Entity metadata ID this config applies to. Org-level = `e1bd1119-6e9d-45a4-bc15-12051e65a0bd` |
+
+### Important Notes
+
+- **Fetch by `_extensionofrecordid_value`**, not by `name`. The `name` field is unreliable for filtering.
+- **Create uses `entities()` binding** -- `extensionofrecordid@odata.bind: entities({id})`, NOT `organizations()`.
+- **Disable = DELETE**, not a statecode PATCH. This is how the Power Platform Admin Center does it.
+- **Cleanup days**: default is `-1` (no auto-cleanup). Max is `30`. When the UI shows "30 days", the API stores `-1` internally (the platform applies a 30-day default).
+- Solution-managed configs (e.g., `msdyn_recurringsalesaction`) cannot be enabled/disabled via API.
 
 ### Per-Table Recycle Bin Config
 
-Each table has its own `recyclebinconfig` record. To check/update a specific table:
+Each table can have its own `recyclebinconfig` record. Filter by the table's entity metadata ID:
 
 ```python
-# Filter by table name
-filter_q = urllib.parse.quote("name eq 'account'")
-# ... same pattern as above, just change the filter
+# Get entity metadata ID for a specific table
+params = urllib.parse.urlencode({"$select": "MetadataId", "$filter": "LogicalName eq 'account'"})
+req = urllib.request.Request(
+    f"{env_url}/api/data/v9.2/EntityDefinitions?{params}",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    entity_id = json.loads(resp.read())["value"][0]["MetadataId"]
+
+# Then filter recyclebinconfigs by that entity ID
+filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{entity_id}'")
+# ... same enable/disable pattern as org-level
 ```
 
 ---

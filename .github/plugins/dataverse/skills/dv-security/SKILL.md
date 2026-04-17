@@ -81,6 +81,8 @@ pac admin self-elevate --environment https://myorg.crm.dynamics.com
 
 **Flow**: Always try `pac admin assign-user` first. Only use `admin self-elevate` as fallback.
 
+**Fallback**: If `pac admin self-elevate` errors out, self-elevate manually via **Power Platform Admin Center** → select the environment → **Access** → **System Administrator role**. All elevations are still logged to Purview. (In PAC CLI 2.6.4 the command fails with `bolt.authentication.http.AuthenticatedClientException` / `ApiVersionInvalid` because the CLI sends an empty `api-version=` to the backend.)
+
 ---
 
 ## Safety Rules
