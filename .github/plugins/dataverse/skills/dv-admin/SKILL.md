@@ -33,6 +33,18 @@ description: >
 
 Do NOT write Python scripts for operations PAC CLI can handle.
 
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Delete or update individual records | **dv-data** |
+| Create or delete tables, columns, relationships | **dv-metadata** |
+| Query or read records | **dv-query** |
+| Export or import solutions / data files | **dv-solution** |
+| Assign security roles or self-elevate | **dv-security** |
+| Create sample or seed data | **dv-data** |
+| Tenant governance (DLP, env lifecycle) | `pac admin --help` |
+
 ## CRITICAL: Always Show the Command First
 
 Even when the environment URL, entity name, or other values are missing, **your first response must include the full command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Then ask for confirmation and missing values in the same message.
@@ -333,7 +345,7 @@ Settings like search mode, MCP, copilot features, fabric, and retention live ins
 import os, sys, json, urllib.request
 from xml.etree import ElementTree as ET
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env
+from auth import get_token, load_env  # SDK does not support orgdborgsettings XML blob
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -357,7 +369,7 @@ for child in sorted(root, key=lambda c: c.tag):
 import os, sys, json, urllib.request, urllib.error
 from xml.etree import ElementTree as ET
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env
+from auth import get_token, load_env  # SDK does not support orgdborgsettings XML blob
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -453,7 +465,7 @@ Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgset
 ```python
 import os, sys, json, urllib.request, urllib.parse
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env
+from auth import get_token, load_env  # SDK does not support recyclebinconfigs entity
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -495,6 +507,7 @@ Three cases depending on whether a config record already exists:
 
 ```python
 # ... (same imports, headers, ORGANIZATION_ENTITY_ID, and fetch as above)
+# SDK does not support recyclebinconfigs entity
 
 CLEANUP_DAYS = 30  # default; -1 means records in recycle bin are never auto-purged
 
@@ -538,6 +551,7 @@ else:
 
 ```python
 # ... (same fetch as above to get config_id)
+# SDK does not support recyclebinconfigs entity
 
 if records:
     config_id = records[0]["recyclebinconfigid"]
@@ -575,6 +589,7 @@ Each table can have its own `recyclebinconfig` record. Filter by the table's ent
 
 ```python
 # Get entity metadata ID for a specific table
+# SDK does not support recyclebinconfigs entity
 params = urllib.parse.urlencode({"$select": "MetadataId", "$filter": "LogicalName eq 'account'"})
 req = urllib.request.Request(
     f"{env_url}/api/data/v9.2/EntityDefinitions?{params}",

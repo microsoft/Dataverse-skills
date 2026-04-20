@@ -51,6 +51,16 @@ wait
 Fallback: if `assign-user` fails, use `pac admin self-elevate --environment <ENV>` (logged to Purview). Confirm to proceed and provide your UPN.</good>
 </example>
 
+## Skill boundaries
+
+| Need | Use instead |
+|---|---|
+| Create or modify tables, columns, relationships | **dv-metadata** |
+| Manage org settings, audit, bulk delete, retention | **dv-admin** |
+| Query or read records | **dv-query** |
+| Write, update, or delete records | **dv-data** |
+| Tenant-level governance (DLP, env lifecycle) | `pac admin --help` |
+
 ## Prerequisites
 
 - PAC CLI installed and authenticated (`pac auth create`)
