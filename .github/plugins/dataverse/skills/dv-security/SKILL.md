@@ -15,6 +15,42 @@ description: >
 
 **This skill uses PAC CLI exclusively.** Do NOT write Python scripts for role operations.
 
+## CRITICAL: Always Show the Command First
+
+Even when the environment URL or user email is missing, **your first response must include the full `pac admin` command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`). Then ask for confirmation and missing values in the same message.
+
+**Never** ask "which environment?" in isolation — the user cannot evaluate a request they can't see.
+
+### Canonical bad/good examples — follow these literally
+
+<example operation="assign role (user given, env missing)">
+<user>Assign System Administrator role to user@contoso.com</user>
+<bad>Which environment should I target?</bad>
+<good>I'll run:
+
+```bash
+pac admin assign-user --user user@contoso.com --role "System Administrator" --environment <ENV_URL>
+```
+
+Confirm to proceed and provide the target environment URL (or "all" to list and batch).</good>
+</example>
+
+<example operation="admin access across all environments">
+<user>Give me admin access on all my environments</user>
+<bad>Please provide your email address.</bad>
+<good>I'll list environments, then assign the `System Administrator` role in parallel:
+
+```bash
+pac admin list
+# then for each environment:
+pac admin assign-user --user <YOUR_UPN> --role "System Administrator" --environment <ENV_1> &
+pac admin assign-user --user <YOUR_UPN> --role "System Administrator" --environment <ENV_2> &
+wait
+```
+
+Fallback: if `assign-user` fails, use `pac admin self-elevate --environment <ENV>` (logged to Purview). Confirm to proceed and provide your UPN.</good>
+</example>
+
 ## Prerequisites
 
 - PAC CLI installed and authenticated (`pac auth create`)
@@ -90,3 +126,19 @@ pac admin self-elevate --environment https://myorg.crm.dynamics.com
 - **Always confirm** before assigning System Administrator role
 - Show the list of target environments before batch operations
 - Self-elevation is logged and auditable — warn the user
+
+## Confirmation Protocol — Show the Plan First, Then Ask
+
+When the user hasn't provided the target environment URL or user email, **still show the complete `pac admin` command(s) you will run**, using placeholders (`<ENV_URL>`, `<USER_EMAIL>`). Then ask the user to confirm and fill in the missing values in a single follow-up turn.
+
+Do NOT ask "which environment?" in isolation — the user cannot approve a command they haven't seen yet.
+
+Example — user asks "Assign System Administrator role to user@contoso.com" without specifying an environment:
+
+> Here's the command I'll run:
+>
+> ```bash
+> pac admin assign-user --user user@contoso.com --role "System Administrator" --environment <ENV_URL>
+> ```
+>
+> Confirm to proceed, and tell me the target environment URL (or "all" to list and batch).

@@ -33,6 +33,53 @@ description: >
 
 Do NOT write Python scripts for operations PAC CLI can handle.
 
+## CRITICAL: Always Show the Command First
+
+Even when the environment URL, entity name, or other values are missing, **your first response must include the full command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Then ask for confirmation and missing values in the same message.
+
+**Never** ask "which environment?" or "do you want to proceed?" in isolation — the user cannot evaluate a request they can't see. See the Confirmation Protocol section below for examples.
+
+### Canonical bad/good examples — follow these literally
+
+<example operation="pause bulk delete job (all info in prompt)">
+<user>Pause the bulk delete job with ID 12345678-1234-1234-1234-123456789012</user>
+<bad>The command requires approval. Please confirm to pause the job.</bad>
+<good>I'll run:
+
+```bash
+pac data bulk-delete pause --id 12345678-1234-1234-1234-123456789012
+```
+
+Confirm to proceed.</good>
+</example>
+
+<example operation="read recycle bin status (no env URL yet)">
+<user>What's the current recycle bin status?</user>
+<bad>Please provide your environment URL so I can check.</bad>
+<good>I'll read `recyclebinconfig` via PAC CLI:
+
+```bash
+pac org fetch --xml "<fetch><entity name='recyclebinconfig'><filter><condition attribute='name' operator='eq' value='organization'/></filter><attribute name='isreadyforrecyclebin'/><attribute name='cleanupintervalindays'/></entity></fetch>" --environment <ENV_URL>
+```
+
+Provide your environment URL and I'll run this (read-only, no confirmation needed).</good>
+</example>
+
+<example operation="disable MCP (OrgDB setting, no env URL yet)">
+<user>Disable MCP for my environment</user>
+<bad>Please provide your environment URL so I can disable MCP.</bad>
+<good>MCP lives in `orgdborgsettings` XML — PAC CLI can't modify it. Here's the Python I'll run:
+
+```python
+# PATCH organizations entity, setting IsMCPEnabled=false in orgdborgsettings XML
+# (IsMCPEnabled is PascalCase, case-sensitive — not IsMcpEnabled)
+ENV_URL = "<YOUR_ENV_URL>"
+# ... (full script from OrgDB section below)
+```
+
+Confirm to proceed and provide your environment URL.</good>
+</example>
+
 ## CRITICAL: How to Read or Update Org Settings (Single or Multi-Environment)
 
 **To check any org setting (audit, plugin trace, etc.):** `pac org list-settings`
@@ -552,3 +599,24 @@ filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{entity_id}'")
 - For multi-environment updates, show the list of environments and get confirmation first
 - For OrgDB settings, warn that incorrect values can break environment features
 - For recycle bin, warn that reducing cleanup interval will permanently delete records sooner
+
+## Confirmation Protocol — Show the Plan First, Then Ask
+
+When the user hasn't provided the environment URL, user email, or other required values, **still show the complete command(s) or Python code you will run**, using placeholders (`<ENV_URL>`, `<USER_EMAIL>`, etc.). Then ask the user to confirm and fill in the missing values in a single follow-up turn.
+
+Do NOT ask "which environment?" or "should I proceed?" in isolation — the user cannot approve a command they haven't seen yet.
+
+Example — user asks "Enable auditing for all developer environments":
+
+> Here's the plan:
+>
+> ```bash
+> pac admin list                                          # step 1: list environments
+> pac org update-settings --name isauditenabled --value true --environment <DEV_ENV_1> &
+> pac org update-settings --name isauditenabled --value true --environment <DEV_ENV_2> &
+> wait                                                    # step 2: parallel update
+> ```
+>
+> Confirm to proceed, or tell me which environments qualify as "developer".
+
+**OrgDB setting names are case-sensitive.** Use PascalCase with acronyms UPPER: `IsMCPEnabled` (not `IsMcpEnabled`), `IsDVCopilotForTextDataEnabled` (not `IsDvCopilot...`). Getting this wrong silently fails to update.

@@ -18,6 +18,40 @@ description: >
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
 
+## CRITICAL: Always Show the Command First
+
+Even when the environment URL, record count, or other values are missing, **your first response must include the full command(s) or code you plan to run**, using defaults (e.g., `--count 5`) and placeholders (`<ENV_URL>`) for unknowns. Then ask for confirmation and missing values in the same message.
+
+**Never** ask "which environment?" or "how many records?" in isolation — the user cannot evaluate a request they can't see. See the Confirmation Protocol section near the bottom for examples.
+
+### Canonical bad/good examples — follow these literally
+
+<example operation="generate N sample records (count and table given)">
+<user>Generate 20 test contact records</user>
+<bad>Which environment should I target? Please provide the Dataverse URL.</bad>
+<good>I'll inspect the `contact` schema, then bulk-create 20 records via `client.records.create()`:
+
+```bash
+python scripts/inspect_schema.py contact
+python scripts/create_sample_data.py --table contact --count 20
+```
+
+Uses `CreateMultiple` (count >= 10), `.example.com` emails, `555-01xx` phones. Targets the active `pac auth list` environment. Confirm to proceed, or tell me to target a different environment.</good>
+</example>
+
+<example operation="sample data on custom entity (schema unknown)">
+<user>Create dummy data for a custom entity called cr123_project</user>
+<bad>I need more info about the entity. What are the required fields?</bad>
+<good>Custom entity — I'll inspect the schema first, then create 5 records (default):
+
+```bash
+python scripts/inspect_schema.py cr123_project
+python scripts/create_sample_data.py --table cr123_project --count 5
+```
+
+Confirm to proceed (I'll generate fake data only for required non-lookup fields), or tell me a different count.</good>
+</example>
+
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
@@ -602,3 +636,20 @@ Show the user: progress, record IDs, link to view in environment UI, reminder to
 - Use `555-01xx` phone numbers — obviously fake
 - Skip lookup fields unless user explicitly asks
 - Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
+
+### Confirmation Protocol — Show the Plan First, Then Ask
+
+When the user asks for sample data without specifying environment, count, or full table details, **still show the complete Python command(s) you will run**, using default values (count = 5) and placeholders for missing info. Then ask the user to confirm and override any defaults in a single follow-up turn.
+
+Do NOT ask "which environment?" or "how many records?" in isolation — the user cannot approve a command they haven't seen yet.
+
+Example — user asks "Generate 20 test contact records":
+
+> Here's the plan:
+>
+> ```bash
+> python scripts/inspect_schema.py contact                        # step 1: inspect schema
+> python scripts/create_sample_data.py --table contact --count 20 # step 2: bulk create via client.records.create()
+> ```
+>
+> This targets the active `pac auth list` environment and uses `.example.com` emails / `555-01xx` phones. Confirm to proceed, or tell me to target a different environment.
