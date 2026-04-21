@@ -16,21 +16,13 @@ Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skill
 ### Claude Code
 
 ```bash
-/plugin marketplace add microsoft/Dataverse-skills
-/plugin install dataverse@dataverse-skills
+/plugin install dataverse@claude-plugins-official
 ```
 
 ### GitHub Copilot
 
 ```bash
-copilot plugin marketplace add microsoft/Dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-Or via [awesome-copilot](https://github.com/github/awesome-copilot):
-
-```bash
-copilot plugin install dataverse@awesome-copilot
+/plugin install dataverse@awesome-copilot
 ```
 
 ## What's Included
