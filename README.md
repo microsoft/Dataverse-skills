@@ -16,21 +16,13 @@ Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skill
 ### Claude Code
 
 ```bash
-/plugin marketplace add microsoft/Dataverse-skills
-/plugin install dataverse@dataverse-skills
+/plugin install dataverse@claude-plugins-official
 ```
 
 ### GitHub Copilot
 
 ```bash
-copilot plugin marketplace add microsoft/Dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-Or via [awesome-copilot](https://github.com/github/awesome-copilot):
-
-```bash
-copilot plugin install dataverse@awesome-copilot
+/plugin install dataverse@awesome-copilot
 ```
 
 ## What's Included
@@ -71,15 +63,14 @@ The `--plugin-dir` path **must be in double quotes** if it contains spaces or sp
 To register the local plugin marketplace from the cloned repository and install the plugin:
 
 ```bash
-copilot plugin marketplace add <path/to/repo>/Dataverse-skills
-copilot plugin install dataverse@dataverse-skills
+copilot plugin install dataverse@awesome-copilot
 ```
 
 To reinstall the plugin after pulling or making local changes:
 
 ```bash
 copilot plugin uninstall dataverse@dataverse-skills
-copilot plugin install dataverse@dataverse-skills
+copilot plugin install dataverse@awesome-copilot
 ```
 
 To install the local version directly without marketplace registration:
