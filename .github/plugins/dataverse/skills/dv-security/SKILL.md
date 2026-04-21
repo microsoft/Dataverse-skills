@@ -115,6 +115,8 @@ Step 5: Report summary ("Assigned System Administrator on 3/3 environments")
 
 ## Tenant Admin Self-Elevation (Fallback)
 
+**Self-elevation is materially different from assigning a role to another user.** `pac admin assign-user <other>` grants privilege *to someone else*; `pac admin self-elevate` grants privilege *to the caller*. The risk profile and audit posture are different, so the confirmation protocol is stricter.
+
 If `pac admin assign-user` fails with "user has not been assigned any roles", use:
 
 ```bash
@@ -125,9 +127,19 @@ pac admin self-elevate --environment https://myorg.crm.dynamics.com
 - All elevations are logged to Microsoft Purview
 - Uses the active auth profile if `--environment` is omitted
 
-**Flow**: Always try `pac admin assign-user` first. Only use `admin self-elevate` as fallback.
+### Self-elevation confirmation protocol (stricter than assign-user)
 
-**Fallback**: If `pac admin self-elevate` errors out, self-elevate manually via **Power Platform Admin Center** → select the environment → **Access** → **System Administrator role**. All elevations are still logged to Purview. (In PAC CLI 2.6.4 the command fails with `bolt.authentication.http.AuthenticatedClientException` / `ApiVersionInvalid` because the CLI sends an empty `api-version=` to the backend.)
+Before running `pac admin self-elevate`, the agent MUST:
+
+1. **State the risk explicitly.** Include this wording (or equivalent) in the pre-run summary:
+   > "This grants YOU System Administrator on `<env>`. The action is logged to Microsoft Purview with your identity and timestamp."
+2. **Capture a reason.** Ask for a one-line reason — ticket ID, incident number, or a free-form note such as `"dev sandbox access — no ticket"`. Echo the reason back in the pre-run summary so the user sees what will be on the record.
+3. **Wait for an explicit confirmation AFTER the user has seen both (1) and (2).** Do NOT accept a bare "yes" given before the risk statement and reason are on screen.
+4. **Do NOT silently fall back.** If `pac admin assign-user` fails, surface the failure first, then offer `self-elevate` with this protocol — never chain them automatically.
+
+**Flow**: Always try `pac admin assign-user` first. `admin self-elevate` is the documented fallback, gated by the protocol above.
+
+**CLI fallback**: If `pac admin self-elevate` errors out, self-elevate manually via **Power Platform Admin Center** → select the environment → **Access** → **System Administrator role**. All elevations are still logged to Purview. (In PAC CLI 2.6.4 the command fails with `bolt.authentication.http.AuthenticatedClientException` / `ApiVersionInvalid` because the CLI sends an empty `api-version=` to the backend.)
 
 ---
 

@@ -68,13 +68,34 @@ Confirm to proceed.</good>
 <example operation="read recycle bin status (no env URL yet)">
 <user>What's the current recycle bin status?</user>
 <bad>Please provide your environment URL so I can check.</bad>
-<good>I'll read `recyclebinconfig` via PAC CLI:
+<bad>Runs `pac org fetch` against `recyclebinconfig` — PAC CLI does NOT manage recycle bin. Always use the Web API via Python.</bad>
+<good>Recycle bin lives in the `recyclebinconfigs` entity — PAC CLI can't read it. Here's the Python I'll run (full script in the Recycle Bin Configuration section below):
 
-```bash
-pac org fetch --xml "<fetch><entity name='recyclebinconfig'><filter><condition attribute='name' operator='eq' value='organization'/></filter><attribute name='isreadyforrecyclebin'/><attribute name='cleanupintervalindays'/></entity></fetch>" --environment <ENV_URL>
+```python
+ENV_URL = "<YOUR_ENV_URL>"
+# GET /api/data/v9.2/recyclebinconfigs?$filter=_extensionofrecordid_value eq '<ORG_ENTITY_ID>'
+# prints statecode, statuscode, cleanupintervalindays
 ```
 
 Provide your environment URL and I'll run this (read-only, no confirmation needed).</good>
+</example>
+
+<example operation="audit status across N environments">
+<user>Tell me audit status of these 5 environments</user>
+<bad>Runs `pac env select` then `pac org fetch --entity organization --attributes isauditenabled` once per environment, sequentially, across N separate bash calls.</bad>
+<bad>Falls back to Python / `urllib` / the Web API after `pac org fetch` output is hard to parse.</bad>
+<good>Single bash call, one `pac org list-settings` per environment, all backgrounded, single `wait`:
+
+```bash
+pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org4.crm.dynamics.com &
+pac org list-settings --filter isauditenabled --environment https://org5.crm.dynamics.com &
+wait
+```
+
+Then render the results as a table. `pac org list-settings` is the ONLY command for reading org settings — never `pac org fetch`, never `pac env select` + anything.</good>
 </example>
 
 <example operation="disable MCP (OrgDB setting, no env URL yet)">
@@ -194,7 +215,6 @@ These flags do not exist. Using them will produce errors.
 ### Schedule a Bulk Delete Job
 
 ```bash
-pac data bulk-delete schedule --entity account
 pac data bulk-delete schedule --entity activitypointer \
     --fetchxml "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2024-01-01'/></filter></entity></fetch>"
 pac data bulk-delete schedule --entity email \
@@ -205,11 +225,22 @@ pac data bulk-delete schedule --entity email \
 | Argument | Alias | Required | Description |
 |----------|-------|----------|-------------|
 | `--entity` | `-e` | Yes | Logical name of the table |
-| `--fetchxml` | `-fx` | No | FetchXML filter. If omitted, **all records** targeted |
+| `--fetchxml` | `-fx` | No | FetchXML filter. **See the hard-stop rule below — if omitted, ALL records in the table are deleted.** |
 | `--job-name` | `-jn` | No | Descriptive name for the job |
 | `--start-time` | `-st` | No | ISO 8601 start time. Defaults to now |
 | `--recurrence` | `-r` | No | RFC 5545 pattern (e.g., `FREQ=DAILY;INTERVAL=1`) |
 | `--environment` | `-env` | No | Target environment URL |
+
+### Hard stop: no `--fetchxml` means ALL records
+
+A `pac data bulk-delete schedule` without `--fetchxml` targets every record in the table and is irreversible. Bulk delete does not go through the recycle bin. Apply this gate before running:
+
+1. **Refuse to run until the user explicitly acknowledges.** The acknowledgement must include both the word ALL (or ALL RECORDS) **and** the entity logical name. Example accepted: `"yes, delete ALL records in contact"`. Example rejected: a bare `"yes"` or `"proceed"`.
+2. **Disambiguate first.** If the user's ask is vague ("clean up old emails", "remove stale accounts"), ask clarifying questions (date cutoff? statecode filter? owner?) and draft a FetchXML before showing any `bulk-delete schedule` command.
+3. **Do not synthesize empty-filter FetchXML to bypass the gate.** An empty `<filter/>` or `<filter><condition ...><value/></condition></filter>` still targets every record — that counts as "no `--fetchxml`" for this rule.
+4. **Scope.** This gate applies to `pac data bulk-delete schedule` only. `cancel`, `pause`, `resume`, `show`, and `list` don't need it.
+
+For system tables (`systemuser`, `businessunit`, `organization`, `role`), warn additionally that an unfiltered bulk delete will break the environment.
 
 ### Manage Jobs
 
@@ -458,7 +489,7 @@ if existing is not None:
 
 Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgsettings` XML. PAC CLI cannot manage these.
 
-**Well-known constant:** The organization entity metadata ID is `e1bd1119-6e9d-45a4-bc15-12051e65a0bd` -- this is the same across all Dataverse environments.
+**Well-known constant:** The organization entity metadata ID is `e1bd1119-6e9d-45a4-bc15-12051e65a0bd`. This is the `MetadataId` of the `organization` entity's *schema record* in `EntityDefinitions` (a product-level system constant baked into every Dataverse installation), not a tenant-level GUID — so it is identical across all environments and all tenants. Verified empirically across 5 environments. Do not re-query it per environment.
 
 ### Read Recycle Bin Status
 
