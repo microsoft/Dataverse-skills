@@ -38,12 +38,14 @@ Every standalone Python block that imports from `auth` must use this exact patte
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env   # SDK operations
+from auth import create_client              # SDK operations (preferred)
 # OR
-from auth import get_token, load_env        # Raw Web API only
+from auth import get_credential, load_env   # SDK operations (manual setup)
+# OR
+from auth import get_token, load_env, tracking_headers  # Raw Web API only
 ```
 
-`get_credential()` is for SDK (`DataverseClient`) operations. `get_token()` is only for raw Web API calls (forms, views, `$apply`, N:N `$expand`) that the SDK does not support. Never use `get_token()` in a block containing `DataverseClient(`.
+`create_client()` is the preferred way to get a `DataverseClient` — it calls `load_env()`, acquires credentials, and injects the `X-Dataverse-Skills` tracking header automatically. `get_token()` is only for raw Web API calls (forms, views, `$apply`, N:N `$expand`) that the SDK does not support — always import `tracking_headers` alongside it. Never use `get_token()` in a block containing `DataverseClient(`.
 
 The one exception: Jupyter notebook blocks use `InteractiveBrowserCredential` directly (no `scripts/` directory in a notebook environment). Mark this exception explicitly in prose above the block.
 
@@ -84,11 +86,12 @@ Then describe a task that exercises the changed skill in plain English. The agen
 
 ## Version Bumping
 
-When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all four files:
+When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all five files:
 
 1. `.github/plugin/marketplace.json` — top-level `metadata.version`
 2. `.github/plugin/marketplace.json` — plugin entry `version`
 3. `.github/plugins/dataverse/.claude-plugin/plugin.json` — `version`
 4. `.github/plugins/dataverse/.github/plugin/plugin.json` — `version`
+5. `.github/plugins/dataverse/scripts/auth.py` — `PLUGIN_VERSION` constant
 
-All four must match. Use semver: patch for fixes, minor for new patterns or skill changes, major for breaking changes (skill renames, removed sections).
+All five must match. Use semver: patch for fixes, minor for new patterns or skill changes, major for breaking changes (skill renames, removed sections).

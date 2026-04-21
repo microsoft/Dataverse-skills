@@ -73,7 +73,7 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
 
-**Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import get_credential` + `DataverseClient` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
+**Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import create_client` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
 
 **Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
 

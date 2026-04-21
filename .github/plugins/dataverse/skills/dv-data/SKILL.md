@@ -41,8 +41,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **Correct imports** (always preceded by `sys.path.insert` in a full script — see Setup below):
 ```
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 ```
 
 **WRONG for SDK-supported operations:**
@@ -83,19 +82,12 @@ Use raw Web API (`get_token()`) for:
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 
-load_env()
-client = DataverseClient(
-    base_url=os.environ["DATAVERSE_URL"],
-    credential=get_credential(),
-)
+client = create_client()
 ```
 
-`get_credential()` returns `ClientSecretCredential` (if CLIENT_ID + CLIENT_SECRET are in `.env`) or `DeviceCodeCredential` (interactive fallback). See `scripts/auth.py`.
-
-For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
+`create_client()` loads `.env`, acquires credentials, and injects the `X-Dataverse-Skills` tracking header on every SDK HTTP call. It returns a `DataverseClient` ready to use. See `scripts/auth.py`.
 
 ---
 
@@ -242,11 +234,9 @@ client.records.upsert("account", [
 ```python
 import csv, os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 
-load_env()
-client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+client = create_client()
 
 with open("data/customers.csv", newline="", encoding="utf-8") as f:
     rows = list(csv.DictReader(f))
@@ -315,14 +305,12 @@ Using upsert from the start means partial failures, retries, and re-runs never c
 ```python
 import os, sys, csv, time
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import create_client
 from PowerPlatform.Dataverse.models.upsert import UpsertItem
 from PowerPlatform.Dataverse.core.errors import HttpError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-load_env()
-client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+client = create_client()
 
 def bind(entity_set, guid):
     """Build an @odata.bind value. entity_set must be the actual EntitySetName, not a guess."""

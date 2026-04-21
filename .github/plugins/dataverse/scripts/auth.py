@@ -13,19 +13,19 @@ Token caching:
     without re-prompting the user.
 
 Functions:
-  load_env()            — loads .env into os.environ
-  get_credential()      — returns a TokenCredential for use with DataverseClient
-  get_token(scope=None) — returns a raw access token string
+  load_env()              — loads .env into os.environ
+  get_credential()        — returns a TokenCredential for use with DataverseClient
+  get_token(scope=None)   — returns a raw access token string
+  tracking_headers(surface) — returns X-Dataverse-Skills header dict
+  create_client()         — returns a DataverseClient with tracking headers injected
 
 Usage:
-    # PREFERRED — use the Python SDK for all supported operations:
-    from auth import get_credential, load_env
-    from PowerPlatform.Dataverse.client import DataverseClient
-    load_env()
-    client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+    # PREFERRED — use create_client() for all SDK operations:
+    from auth import create_client
+    client = create_client()
 
     # ONLY for operations the SDK does NOT support (forms, views, $ref, $apply):
-    from auth import get_token, load_env
+    from auth import get_token, load_env, tracking_headers
     token = get_token()
 
 Reads from .env in the repo root (parent of scripts/) or current working directory:
@@ -38,6 +38,8 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
 import os
 import sys
 from pathlib import Path
+
+PLUGIN_VERSION = "1.2.0"
 
 # AuthenticationRecord is persisted here so new processes skip device code flow
 _AUTH_RECORD_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".IdentityService" / "dataverse_cli_auth_record.json"
@@ -186,6 +188,30 @@ def get_token(scope=None):
         sys.exit(1)
 
     return token.token
+
+
+def tracking_headers(surface):
+    """Return the X-Dataverse-Skills header dict for the given execution surface."""
+    return {"X-Dataverse-Skills": f"surface={surface}; version={PLUGIN_VERSION}"}
+
+
+def create_client():
+    """Create a DataverseClient with tracking headers auto-injected on every request.
+
+    Patches the internal _headers() method on the OData client so the
+    X-Dataverse-Skills header is included in every SDK HTTP call.
+    """
+    load_env()
+    from PowerPlatform.Dataverse.client import DataverseClient
+    client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+    odata = client._get_odata()
+    _orig = odata._headers
+    def _with_tracking():
+        h = _orig()
+        h.update(tracking_headers("python-sdk"))
+        return h
+    odata._headers = _with_tracking
+    return client
 
 
 if __name__ == "__main__":
