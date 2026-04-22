@@ -84,11 +84,44 @@ Then describe a task that exercises the changed skill in plain English. The agen
 
 ## Version Bumping
 
-When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all four files:
+When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all four fields (across three files):
 
 1. `.github/plugin/marketplace.json` — top-level `metadata.version`
 2. `.github/plugin/marketplace.json` — plugin entry `version`
 3. `.github/plugins/dataverse/.claude-plugin/plugin.json` — `version`
 4. `.github/plugins/dataverse/.github/plugin/plugin.json` — `version`
 
-All four must match. Use semver: patch for fixes, minor for new patterns or skill changes, major for breaking changes (skill renames, removed sections).
+All four must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any of the four fields drift.
+
+Run the PR-level bump check to verify the bump level matches the structural changes in your branch:
+
+```bash
+python .github/evals/version_bump_check.py
+```
+
+It compares your branch to `main` and flags common mistakes — e.g., adding a new skill without a MINOR bump, or removing a skill without a MAJOR bump.
+
+### Semver rules (x.y.z)
+
+**MAJOR (x)** — Breaking changes that require user action:
+- Renaming or removing a skill
+- Removing or renaming a required section in a skill (e.g., `## Skill boundaries`)
+- Changing the auth pattern (e.g., switching from `get_credential` to a new import)
+- Changing MCP server configuration structure
+- Removing supported tools (SDK, PAC CLI, Web API) from routing
+
+**MINOR (y)** — Backward-compatible additions:
+- Adding a new skill
+- Adding a new section to an existing skill
+- New capabilities (new MCP tool guidance, new SDK patterns, new Web API examples)
+- New keywords or metadata fields
+- Expanding skill boundaries to cover new scenarios
+
+**PATCH (z)** — Backward-compatible fixes:
+- Bug fixes in code examples
+- Typo and grammar corrections
+- Clarifying prose without changing behavior
+- Updating links or references
+- Minor refactors that don't change skill routing
+
+**Note:** No need to update the `version` field in the [awesome-copilot marketplace](https://github.com/github/awesome-copilot/blob/main/plugins/external.json). The entry there tracks the default branch of this repo, so version updates propagate automatically. The `version` field in awesome-copilot is cosmetic-only.
