@@ -31,7 +31,7 @@ Check each tool independently — **do not use fail-fast parallel execution.** I
 | Git | `git --version` |
 | Node.js | `node --version` |
 | PAC CLI | `pac` (prints version banner; note: `pac --version` is not a valid command and returns a non-zero exit code) (see [tools-setup.md](references/tools-setup.md) for Windows path discovery if not in PATH) |
-| Dataverse CLI | `npx @microsoft/dataverse --version` |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` (prints `@microsoft/dataverse@<version>` if installed globally; prints `(empty)` if not) |
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
