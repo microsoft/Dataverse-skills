@@ -11,6 +11,8 @@ Check all in parallel. Install any that are missing.
 | Azure CLI | `az --version` | `winget install Microsoft.AzureCLI` |
 | .NET SDK | `dotnet --version` | `winget install Microsoft.DotNet.SDK.9` |
 | Python 3 | `python --version` | `winget install Python.Python.3.12` |
+| Node.js | `node --version` | `winget install OpenJS.NodeJS.LTS` |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (always upgrades to latest — mirrors `pip install --upgrade` for the Python SDK) |
 | Git | `git --version` | `winget install Git.Git` |
 
 After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
