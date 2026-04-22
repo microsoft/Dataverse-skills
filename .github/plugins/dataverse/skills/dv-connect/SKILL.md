@@ -44,9 +44,9 @@ After Python is confirmed:
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
 ```
 
-After Node.js is confirmed, the Dataverse CLI is fetched on first use via `npx -y @microsoft/dataverse@latest`. To pre-warm the cache or pin a specific version globally:
+After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
 ```
-npm install -g @microsoft/dataverse
+npm install -g @microsoft/dataverse@latest
 ```
 
 **Skip condition:** All tools present, Python SDK installed, and `pandas` importable (`python -c "import pandas"`).
