@@ -110,12 +110,14 @@ Read/modify/PATCH the XML blob on `organizations({id})`. PascalCase is significa
 | `2` | Off | Off |
 | `3` | On | Off |
 
-### recyclebinconfigs entity — use Python SDK (2)
+### recyclebinconfigs entity — use Python SDK (2, **org-level only**)
+
+These two toggles operate on the **organization-level** `recyclebinconfigs` row (filtered by the organization entity's MetadataId). Per-table recycle bin enable/disable is **out of scope** — PPAC only exposes the org-level on/off + cleanup days. Refuse requests like "enable recycle bin for `contact` only".
 
 | # | PPAC label | Field | Notes |
 |---|---|---|---|
-| 32 | Keep deleted Dataverse records (on/off) | `statecode` + `statuscode` + `isreadyforrecyclebin` | See "Recycle Bin Configuration" section — always send `isreadyforrecyclebin: true` on enable |
-| 33 | Keep deleted records (days) | `cleanupintervalindays` | int days; `-1` = never auto-purge; max 30 (when UI shows "30 days" with retention, stored as `-1`) |
+| 32 | Keep deleted Dataverse records (on/off) | `statecode` + `statuscode` + `isreadyforrecyclebin` | Org-level row only. See "Recycle Bin Configuration" section — always send `isreadyforrecyclebin: true` on enable |
+| 33 | Keep deleted records (days) | `cleanupintervalindays` | Org-level row only. int days; `-1` = never auto-purge; max 30 (when UI shows "30 days" with retention, stored as `-1`) |
 
 ### settingdefinition + organizationsettings — use Python SDK (2)
 
@@ -430,7 +432,7 @@ Three patterns require Python SDK:
 |---|---|---|
 | Top-level org columns (14 allowlisted — audit, typeahead, quick find, canvas/flow solutions, email validation, audit retention, etc.) | Organization entity columns | **PAC CLI** — `pac org update-settings --name <column>` (accepts any org column) |
 | OrgDB settings (17 allowlisted — MCP, search, Fabric, Work IQ, TDS, attachment security, ownership, address records, block unmanaged, delete users, Excel AI) | XML inside `orgdborgsettings` column | **Python SDK** — fetch XML, parse, modify, PATCH back |
-| Recycle bin (org-level and per-table) | `recyclebinconfigs` entity | **Python SDK** — CREATE/PATCH `recyclebinconfigs(<id>)` |
+| Recycle bin (**org-level only**) | `recyclebinconfigs` entity, row filtered by the organization entity's MetadataId | **Python SDK** — CREATE/PATCH `recyclebinconfigs(<id>)`. Per-table toggles are out of scope — PPAC only exposes the org-level on/off + cleanup days |
 | Settings-definition overrides (2 allowlisted — app/plan security roles) | `settingdefinition` + `organizationsettings` join | **Python SDK** — look up `settingdefinitionid` by `uniquename`, then CREATE/PATCH `organizationsettings` row |
 
 ---
@@ -747,26 +749,7 @@ wait_for_recyclebin_async_jobs(env_url, headers)   # drain the opt-out fan-out
 - **Drain `ProcessRecycleBin` async jobs between toggles.** Query `asyncoperations` for `operationtype eq 50 and statecode ne 3` before and after each enable/disable.
 - **Cleanup days**: default is `-1` (no auto-cleanup). Max is `30`. When the UI shows "30 days", the API stores `-1` internally (the platform applies a 30-day default).
 - Solution-managed configs (e.g., `msdyn_recurringsalesaction`) cannot be enabled/disabled via API.
-
-### Per-Table Recycle Bin Config
-
-Each table can have its own `recyclebinconfig` record. Filter by the table's entity metadata ID:
-
-```python
-# Get entity metadata ID for a specific table
-# SDK does not support recyclebinconfigs entity
-params = urllib.parse.urlencode({"$select": "MetadataId", "$filter": "LogicalName eq 'account'"})
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/EntityDefinitions?{params}",
-    headers=headers,
-)
-with urllib.request.urlopen(req) as resp:
-    entity_id = json.loads(resp.read())["value"][0]["MetadataId"]
-
-# Then filter recyclebinconfigs by that entity ID
-filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{entity_id}'")
-# ... same enable/disable pattern as org-level
-```
+- **Per-table recycle bin toggles are out of scope.** PPAC only exposes the org-level on/off + cleanup days — if a user asks to enable/disable recycle bin for a specific table (e.g., "turn on recycle bin for `contact` only"), refuse with: *"Per-table recycle bin is out of scope for dv-admin. Use the Power Platform admin center."* The `recyclebinconfigs` entity does hold per-entity rows, but this skill only reads/writes the org-level row (filtered by the organization entity's MetadataId).
 
 ---
 
