@@ -29,17 +29,24 @@ Check each tool independently — **do not use fail-fast parallel execution.** I
 |---|---|
 | Python 3 | `python --version` |
 | Git | `git --version` |
+| Node.js | `node --version` |
 | PAC CLI | `pac` (prints version banner; note: `pac --version` is not a valid command and returns a non-zero exit code) (see [tools-setup.md](references/tools-setup.md) for Windows path discovery if not in PATH) |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` (prints `@microsoft/dataverse@<version>` if installed globally; prints `(empty)` if not) |
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
-.NET SDK is needed for PAC CLI but NOT for the MCP proxy (the npm package bundles its own runtime). Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
+.NET SDK is needed for PAC CLI but NOT for the Dataverse CLI (the npm package bundles its own runtime). Node.js powers the Dataverse CLI npm package (`@microsoft/dataverse`), which is used as the MCP proxy and for scripted data plane actions. Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
 
 If any tool is missing, install it (see [tools-setup.md](references/tools-setup.md)), then verify. If `winget` installs a tool but it's not in PATH, ask the user to restart the terminal.
 
 After Python is confirmed:
 ```
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
+```
+
+After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
+```
+npm install -g @microsoft/dataverse@latest
 ```
 
 **Skip condition:** All tools present, Python SDK installed, and `pandas` importable (`python -c "import pandas"`).

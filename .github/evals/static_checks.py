@@ -55,9 +55,16 @@ CAT-6  dv-admin Allowlist Enforcement
        EVAL-ALLOW-02  Allowlist text contains the refusal directive ('must be refused')
        EVAL-ALLOW-03  Known out-of-scope settings are named as explicit denylist examples
        EVAL-ALLOW-04  Every expected allowlisted backend key is present in dv-admin
+       
+CAT-7  Manifest Version Consistency
+       Checks that the plugin version matches across all marketplace and plugin
+       manifest files, preventing drift when version bumps miss a file.
+       EVAL-VERSION-01  All four version fields match (3 files, 4 fields total)
+       EVAL-VERSION-02  Version format is valid semver (x.y.z)
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -408,6 +415,94 @@ def check_readme_skill_count(skills_dir, all_skill_names):
 
 
 # ---------------------------------------------------------------------------
+# CAT-6  Manifest Version Consistency
+# ---------------------------------------------------------------------------
+
+SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def check_version_consistency(repo_root):
+    """
+    EVAL-VERSION-01: All four version fields match across manifest files.
+    EVAL-VERSION-02: Version format is valid semver (x.y.z).
+
+    The four version fields live in three files:
+      1. .github/plugin/marketplace.json -- metadata.version
+      2. .github/plugin/marketplace.json -- plugins[0].version
+      3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
+      4. .github/plugins/dataverse/.github/plugin/plugin.json -- version
+    """
+    failures = []
+
+    manifests = [
+        (
+            ".github/plugin/marketplace.json",
+            lambda d: d.get("metadata", {}).get("version"),
+            "metadata.version",
+        ),
+        (
+            ".github/plugin/marketplace.json",
+            lambda d: (d.get("plugins") or [{}])[0].get("version"),
+            "plugins[0].version",
+        ),
+        (
+            ".github/plugins/dataverse/.claude-plugin/plugin.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
+        (
+            ".github/plugins/dataverse/.github/plugin/plugin.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
+    ]
+
+    found = []
+    for rel_path, extractor, field in manifests:
+        full_path = repo_root / rel_path
+        if not full_path.exists():
+            failures.append(
+                f"EVAL-VERSION-01 [{rel_path}] manifest file not found"
+            )
+            continue
+        try:
+            data = json.loads(full_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            failures.append(
+                f"EVAL-VERSION-01 [{rel_path}] invalid JSON: {e}"
+            )
+            continue
+
+        version = extractor(data)
+        if version is None:
+            failures.append(
+                f"EVAL-VERSION-01 [{rel_path}] missing '{field}' field"
+            )
+            continue
+
+        found.append((rel_path, field, version))
+
+        # EVAL-VERSION-02: semver format check
+        if not SEMVER_PATTERN.match(version):
+            failures.append(
+                f"EVAL-VERSION-02 [{rel_path}] '{field}' = '{version}' "
+                f"does not match semver format x.y.z"
+            )
+
+    # EVAL-VERSION-01: all collected versions must match
+    unique_versions = {v for _, _, v in found}
+    if len(unique_versions) > 1:
+        detail = ", ".join(
+            f"{rp}:{f}={v}" for rp, f, v in found
+        )
+        failures.append(
+            f"EVAL-VERSION-01 version mismatch across manifests -- {detail}"
+        )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -450,6 +545,10 @@ def main():
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
     all_failures.extend(check_overview_index(overview_path, all_skill_names))
     all_failures.extend(check_readme_skill_count(skills_dir, all_skill_names))
+
+    # Manifest version consistency — check across repo root
+    repo_root = skills_dir.parent.parent.parent.parent
+    all_failures.extend(check_version_consistency(repo_root))
 
     if all_failures:
         # Group output by category prefix for readability

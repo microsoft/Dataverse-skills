@@ -1,0 +1,60 @@
+name: PR Metadata Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  check:
+    name: Validate PR title and body
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check PR title and body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const errors = [];
+
+            // 1. No branch-name leak in title (e.g., "Users/alice/my-feature")
+            if (/^[Uu]sers?\//.test(pr.title) || /^[a-z]+\/[a-z0-9._-]+\//.test(pr.title)) {
+              errors.push(
+                `Title appears to contain a branch path: "${pr.title}". ` +
+                `Use a human-readable title instead.`
+              );
+            }
+
+            // 2. Conventional commit prefix (matches CLAUDE.md convention)
+            const validPrefixes = /^(feat|fix|add|refactor|docs|chore|test|perf|build|ci):/i;
+            if (!validPrefixes.test(pr.title)) {
+              errors.push(
+                `Title must start with one of: feat:, fix:, add:, refactor:, docs:, chore:, test:, perf:, build:, ci:`
+              );
+            }
+
+            // 3. Non-empty body with meaningful content
+            const body = (pr.body || '').trim();
+            if (body.length < 50) {
+              errors.push(
+                `PR description must be at least 50 characters. ` +
+                `Explain the why and what of the change.`
+              );
+            }
+
+            // 4. Summary section encouraged
+            if (body.length >= 50 && !/##\s*Summary/i.test(body)) {
+              core.warning(
+                'PR description does not include a "## Summary" section. ' +
+                'Consider adding one for clearer context.'
+              );
+            }
+
+            if (errors.length) {
+              core.setFailed(
+                'PR metadata issues:\n' + errors.map(e => '  - ' + e).join('\n')
+              );
+            } else {
+              core.info('PR metadata check passed.');
+            }
