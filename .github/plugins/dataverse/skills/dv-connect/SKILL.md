@@ -262,7 +262,14 @@ Only when **both** checks pass is the setup verified.
 ```
 npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
 ```
-This exercises both GA and Preview endpoints with a fresh authentication handshake and reports detailed errors (auth, allowlist, consent, endpoint reachability). **Do not use this as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. A `403 Forbidden` specifically on the **Preview** endpoint is **expected** (Preview is opt-in per environment) — the plugin uses the GA endpoint. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
+This exercises both GA and Preview endpoints with a fresh authentication handshake and reports detailed errors (auth, allowlist, consent, endpoint reachability). **Do not use this as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
+
+**How to read `--validate` output:**
+
+- **Look at the GA (Production) endpoint result first.** If GA passes, MCP will work for normal plugin usage regardless of what Preview reports.
+- **A `403 Forbidden` on the Preview endpoint is expected for most environments.** Preview is opt-in per environment; if your environment hasn't enabled it, the Preview check will always fail. This does not indicate a broken setup.
+- **Ignore the overall exit code and the `⚠ Partial success` warning in this case.** The validator returns exit code `1` (failure) unless BOTH GA and Preview pass. Because most environments don't enable Preview, `--validate` will exit `1` even when MCP is fully functional via GA. Focus on per-endpoint results, not the aggregate status.
+- **If GA fails:** that's the real signal to investigate — auth, tenant consent, environment allowlist, or endpoint reachability.
 
 ### MCP Server Capabilities
 
