@@ -1,7 +1,7 @@
 {
   "name": "dataverse",
   "description": "Agent skills for building on, analyzing, and managing Microsoft Dataverse — with Dataverse MCP, PAC CLI, and Python SDK.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": {
     "name": "Microsoft",
     "url": "https://www.microsoft.com"
