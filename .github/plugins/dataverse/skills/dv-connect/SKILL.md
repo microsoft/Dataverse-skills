@@ -238,24 +238,31 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 
 ## Step 7: Final verification
 
-After the editor/CLI restarts, verify MCP works.
+After the editor/CLI restarts, **both** of these must succeed before declaring the setup complete:
 
-**Primary check — `claude mcp list` (or Copilot equivalent):**
+**Check 1: `claude mcp list` (or Copilot equivalent) shows ✓ Connected**
 ```
 claude mcp list
 ```
-If the `dataverse-*` server reports **✓ Connected**, MCP is correctly configured. This is the authoritative signal for first-time setup.
+This proves the MCP server process starts and speaks the MCP protocol. It does NOT by itself prove that data operations work — authentication, environment allowlisting, and endpoint reachability are only exercised on the first real tool call.
 
-**Confidence check — ask the agent directly:**
-> "Try asking: 'List the tables in my Dataverse environment.'"
+**Check 2: Agent successfully calls `list_tables` and returns data**
+> "List the tables in my Dataverse environment."
 
-If `list_tables` is called directly and returns data → MCP is connected and usable. If the agent falls back to PAC CLI or Web API → see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting section.
+This proves end-to-end wiring: auth, tenant consent, environment allowlist, and endpoint reachability are all correct. If the agent falls back to PAC CLI or Web API, see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting.
 
-**Diagnostic — only if the above fail:**
+Only when **both** checks pass is the setup verified.
+
+**Interpreting failures:**
+
+- If Check 1 fails (server not ✓ Connected): the MCP server itself cannot start. Re-run Step 6 and check that `npx`/Node.js are installed and the MCP registration succeeded.
+- If Check 1 passes but Check 2 fails (server starts but `list_tables` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
+
+**Diagnostic — `--validate` (for failure investigation only):**
 ```
 npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
 ```
-This is a **stricter** check than `claude mcp list`: it exercises both GA and Preview endpoints with a fresh authentication handshake and reports detailed errors. **Do not use this as the primary success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine via `claude mcp list`. A `403 Forbidden` specifically on the Preview endpoint is **expected** (Preview is opt-in per environment) — the GA endpoint is what the plugin uses. Reserve `--validate` for diagnosing a confirmed failure (e.g., `claude mcp list` shows ✗ or `list_tables` returns an auth error).
+This exercises both GA and Preview endpoints with a fresh authentication handshake and reports detailed errors (auth, allowlist, consent, endpoint reachability). **Do not use this as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. A `403 Forbidden` specifically on the **Preview** endpoint is **expected** (Preview is opt-in per environment) — the plugin uses the GA endpoint. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
 
 ### MCP Server Capabilities
 
