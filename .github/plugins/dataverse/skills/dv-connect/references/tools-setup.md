@@ -15,20 +15,43 @@ Check all in parallel. Install any that are missing.
 | Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (always upgrades to latest — mirrors `pip install --upgrade` for the Python SDK) |
 | Git | `git --version` | `winget install Git.Git` |
 
-After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
+After any `winget` install, the new tool may not be in PATH until the shell is restarted. For PAC CLI specifically, don't rely on shell restart — discover the install location and add it to PATH inline (see PAC CLI section below). For other tools, if not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
+
+### PAC CLI install — winget primary (Windows + Git Bash)
+
+> **Scope:** the steps below assume Windows with Git Bash (the typical Claude Code environment). For macOS/Linux, see the [official PAC CLI install docs](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction#install-power-platform-cli).
+
+**Prefer `winget install Microsoft.PowerAppsCLI`** as the install method on Windows. `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` has had recurring packaging issues on some .NET SDK versions — if it fails with "The settings file in the tool's NuGet package is invalid" (missing `DotnetToolSettings.xml`), fall back to winget or download the NuGet package directly. The bug is transient per package release, so don't treat `dotnet tool install` as permanently broken; just don't make it the first choice when winget is available.
+
+After `winget install Microsoft.PowerAppsCLI` completes, PAC CLI is typically installed at:
+
+```
+C:\Users\<user>\AppData\Local\Microsoft\PowerAppsCLI\Microsoft.PowerApps.CLI.<version>\tools\
+```
+
+Don't require a shell restart — add the install directory to PATH inline and persist it to `~/.bashrc`. The snippet below assumes a per-user winget install in Git Bash; adapt paths if you installed machine-wide (usually under `C:\Program Files\Microsoft\PowerAppsCLI\`) or are using a different shell:
+
+```bash
+# 1. Find the install directory (the versioned subfolder)
+PAC_DIR=$(ls -d /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI/Microsoft.PowerApps.CLI.*/tools 2>/dev/null | tail -1)
+
+# 2. Add to current session
+export PATH="$PAC_DIR:$PATH"
+
+# 3. Persist to ~/.bashrc (skip if already present)
+touch ~/.bashrc
+grep -q "PowerAppsCLI" ~/.bashrc || echo "export PATH=\"$PAC_DIR:\$PATH\"" >> ~/.bashrc
+
+# 4. Verify
+pac
+```
 
 ### PAC CLI on Windows Git Bash
 
-PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. Use the PowerShell wrapper:
+PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. If after the PATH setup above `pac` still fails, use the PowerShell wrapper:
 
 ```bash
 powershell -Command "& 'C:\Users\$USER\AppData\Local\Microsoft\PowerAppsCLI\pac.cmd' help"
-```
-
-Or, if installed via `dotnet tool install --global`:
-
-```bash
-powershell -Command "& pac help"
 ```
 
 To avoid repeating this, add an alias to `~/.bashrc`:
@@ -38,7 +61,7 @@ echo 'alias pac="powershell -Command \"& pac.cmd\""' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
+If `pac` works directly in your shell (after PATH setup above), skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
 ### Python SDK
 
@@ -49,7 +72,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 ### If winget is unavailable
 
-- PAC CLI: `dotnet tool install --global Microsoft.PowerApps.CLI.Tool`
+- PAC CLI: download the latest NuGet package from https://www.nuget.org/packages/Microsoft.PowerApps.CLI and extract to a local directory, or try `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` (known to fail with "settings file invalid" on some .NET SDK + package version combinations — if that error appears, retry with an explicit `--version` or fall back to the NuGet download above)
 - GitHub CLI: download from https://cli.github.com
 - Azure CLI: download from https://aka.ms/installazurecliwindows
 
