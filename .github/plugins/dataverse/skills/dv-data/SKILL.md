@@ -18,38 +18,27 @@ description: >
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
 
-## CRITICAL: Always Show the Command First
+## Preview Before Running — Scope by Operation Type
 
-Even when the environment URL, record count, or other values are missing, **your first response must include the full command(s) or code you plan to run**, using defaults (e.g., `--count 5`) and placeholders (`<ENV_URL>`) for unknowns. Then ask for confirmation and missing values in the same message.
+Two rules, different strictness:
 
-**Never** ask "which environment?" or "how many records?" in isolation — the user cannot evaluate a request they can't see. See the Confirmation Protocol section near the bottom for examples.
+- **Destructive / stateful operations** (create, update, delete, bulk-import, upsert records) — your first response must include the full command(s) or code you plan to run, with placeholders (`<ENV_URL>`) for unknowns. Ask for confirmation and missing values in the same message.
+- **Read-only or scoped-reference operations** (schema inspection, looking up a record count, explaining what you'll run from a documented snippet) — a one-sentence prose preview is enough. **Do not** pad the response with a placeholder-only code block — it's noise.
 
-### Canonical bad/good examples — follow these literally
+**Never** ask a bare clarifying question ("which environment?", "how many records?"). Either show the command, or state intent in one sentence and ask in the same turn.
 
-<example operation="generate N sample records (count and table given)">
+### Canonical bad/good examples
+
+<example operation="generate N sample records (destructive — show the command)">
 <user>Generate 20 test contact records</user>
 <bad>Which environment should I target? Please provide the Dataverse URL.</bad>
-<good>I'll inspect the `contact` schema, then bulk-create 20 records via `client.records.create()`:
-
-```bash
-python scripts/inspect_schema.py contact
-python scripts/create_sample_data.py --table contact --count 20
-```
-
-Uses `CreateMultiple` (count >= 10), `.example.com` emails, `555-01xx` phones. Targets the active `pac auth list` environment. Confirm to proceed, or tell me to target a different environment.</good>
+<good>I'll run the schema-query + bulk-create snippets from the Sample Data Generation section below with `TABLE="contact"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones against the active `pac auth list` environment. Confirm to proceed, or tell me to target a different environment.</good>
 </example>
 
-<example operation="sample data on custom entity (schema unknown)">
+<example operation="sample data on custom entity (schema unknown — prose is enough)">
 <user>Create dummy data for a custom entity called cr123_project</user>
 <bad>I need more info about the entity. What are the required fields?</bad>
-<good>Custom entity — I'll inspect the schema first, then create 5 records (default):
-
-```bash
-python scripts/inspect_schema.py cr123_project
-python scripts/create_sample_data.py --table cr123_project --count 5
-```
-
-Confirm to proceed (I'll generate fake data only for required non-lookup fields), or tell me a different count.</good>
+<good>Custom entity — I'll query EntityDefinitions for `cr123_project` first to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType`, and call `client.records.create("cr123_project", records)`. Snippets in the Sample Data Generation section below. Confirm to proceed, or tell me a different count.</good>
 </example>
 
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
@@ -594,26 +583,43 @@ Before creating anything, confirm:
 
 #### Step 2: Inspect the table schema
 
-```bash
-python scripts/inspect_schema.py              # defaults to 'account'
-python scripts/inspect_schema.py contact      # any table
+Use the EntityDefinitions metadata API to discover required columns and their types. Two non-obvious bits:
+
+- **`$filter=AttributeOf eq null`** — without this, each lookup column returns a duplicated sub-attribute row (e.g. a `primarycontactid` Lookup plus a `_primarycontactid_value` pair), which makes the list twice as long and confuses downstream code.
+- **`UserLocalizedLabel` is null on unlocalized columns** — dereference safely before reading `.Label`, otherwise custom tables without display names crash the loop.
+
+```python
+import os, sys, json, urllib.request, urllib.parse
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env  # SDK does not support EntityDefinitions metadata
+
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+TABLE = "account"   # or any other table logical name
+
+params = urllib.parse.urlencode({
+    "$select": "LogicalName,AttributeType,RequiredLevel,DisplayName",
+    "$filter": "AttributeOf eq null",
+})
+req = urllib.request.Request(
+    f"{env_url}/api/data/v9.2/EntityDefinitions(LogicalName='{TABLE}')/Attributes?{params}",
+    headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+)
+with urllib.request.urlopen(req) as resp:
+    attrs = json.loads(resp.read())["value"]
+
+for a in attrs:
+    dn = (a.get("DisplayName") or {}).get("UserLocalizedLabel")
+    label = dn["Label"] if dn else a["LogicalName"]
+    if a["RequiredLevel"]["Value"] == "ApplicationRequired":
+        print(f"REQUIRED  {a['LogicalName']:30s} {a['AttributeType']:15s} {label}", flush=True)
 ```
 
-Reports required columns and column types to determine what fake data to generate.
+Filter or group the raw `attrs` list however the task needs — don't assume the printed shape above; inline code downstream should consume `attrs` directly.
 
-#### Step 3: Create sample records
+#### Step 3: Generate realistic data (by AttributeType)
 
-```bash
-python scripts/create_sample_data.py                       # 5 sample accounts (default)
-python scripts/create_sample_data.py --table account --count 10
-python scripts/create_sample_data.py --table contact --count 20
-```
-
-- Uses `client.records.create()` — not raw HTTP
-- Individual creates for <= 10, bulk `CreateMultiple` for 10+
-- Shows summary table with record IDs
-
-#### Step 4: Generate realistic data
+Use the schema from Step 2 to pick a generator per column. No separate script — the agent writes this inline per request so it matches the actual table.
 
 | AttributeType | Generate |
 |---|---|
@@ -624,6 +630,70 @@ python scripts/create_sample_data.py --table contact --count 20
 | `Picklist` / `Status` | Integer option values (e.g., `industrycode: 1`) |
 | `Lookup` | **Skip by default** — only set if user provides valid record IDs |
 | `Uniqueidentifier` (non-PK) | Skip — let Dataverse auto-generate |
+
+#### Step 4: Create the records inline via the SDK — schema-driven
+
+This template is **table-agnostic by design**. It reads the `attrs` list from Step 2 and dispatches by `AttributeType` — no table-specific field names or hardcoded sample values baked in. Use it as a starting point; override/extend `fake()` when the table has domain-specific needs (e.g., look up real picklist option values, generate industry-appropriate company names for `account`, etc.).
+
+```python
+import os, sys, random, datetime
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+client = DataverseClient(base_url=env_url, credential=get_credential())
+
+TABLE = "account"   # any table logical name from Step 1
+COUNT = 5           # confirmed with user
+# `attrs` = the list returned by Step 2's EntityDefinitions query (re-run Step 2 if needed)
+
+SKIP_TYPES = {"Lookup", "Uniqueidentifier", "EntityName", "State", "Status", "Owner", "Customer"}
+
+def fake(attr, i):
+    """Context-based value by AttributeType + PII-safe heuristics on column name."""
+    name, t = attr["LogicalName"], attr["AttributeType"]
+    if t in ("String", "Memo"):
+        if "email" in name: return f"user{i}@example.com"
+        if any(s in name for s in ("phone", "telephone", "fax")): return f"555-01{i:02d}"
+        if "url" in name or "website" in name: return f"https://example.com/{name}/{i}"
+        return f"Sample {name} {i}"
+    if t in ("Integer", "BigInt"):          return random.randint(1, 1000)
+    if t in ("Decimal", "Double", "Money"): return round(random.uniform(1, 10_000), 2)
+    if t == "Boolean":                       return bool(i % 2)
+    if t == "DateTime":
+        d = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=i)
+        return d.isoformat(timespec="seconds").replace("+00:00", "Z")
+    if t in ("Picklist", "Status"):
+        return 1   # placeholder — for real picklists, look up valid OptionSet values first
+    return None    # skip Lookup, Uniqueidentifier, and anything unhandled
+
+required = [a for a in attrs
+            if a["RequiredLevel"]["Value"] == "ApplicationRequired"
+            and a["AttributeType"] not in SKIP_TYPES]
+
+records = []
+for i in range(COUNT):
+    rec = {}
+    for a in required:
+        v = fake(a, i)
+        if v is not None:
+            rec[a["LogicalName"]] = v
+    records.append(rec)
+
+# CreateMultiple for count >= 10, individual creates otherwise.
+if COUNT >= 10:
+    ids = client.records.create(TABLE, records)
+    print(f"Created {len(ids)} records via CreateMultiple", flush=True)
+else:
+    ids = [client.records.create(TABLE, r) for r in records]
+    print(f"Created {len(ids)} records individually", flush=True)
+
+print(f"View: {env_url}/main.aspx?pagetype=entitylist&etn={TABLE}", flush=True)
+```
+
+**Why schema-driven and not a hardcoded 5-account template:** a template that bakes in `account`-shaped columns (`name`, `telephone1`, `revenue`, `numberofemployees`) biases the agent toward copy-paste-then-hack whenever the user asks for `contact` or `cr123_project` records. The `fake()` function above dispatches per-attribute so the same snippet produces correct fields for any table. Override `fake()` when you need domain-specific values — e.g. real company names for `account.name`, valid status-reason integers for a custom picklist.
 
 #### Step 5: Run and verify
 
@@ -637,19 +707,10 @@ Show the user: progress, record IDs, link to view in environment UI, reminder to
 - Skip lookup fields unless user explicitly asks
 - Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
 
-### Confirmation Protocol — Show the Plan First, Then Ask
+### Confirmation Protocol
 
-When the user asks for sample data without specifying environment, count, or full table details, **still show the complete Python command(s) you will run**, using default values (count = 5) and placeholders for missing info. Then ask the user to confirm and override any defaults in a single follow-up turn.
-
-Do NOT ask "which environment?" or "how many records?" in isolation — the user cannot approve a command they haven't seen yet.
+Sample-data creation is destructive-ish (writes records), so follow the destructive-ops rule from the top of this skill: show the command(s), use default values (count = 5) and placeholders for missing info, and ask to confirm or override in the same turn. One-sentence summary referencing the Sample Data Generation section is enough — don't copy the full 30-line snippet inline.
 
 Example — user asks "Generate 20 test contact records":
 
-> Here's the plan:
->
-> ```bash
-> python scripts/inspect_schema.py contact                        # step 1: inspect schema
-> python scripts/create_sample_data.py --table contact --count 20 # step 2: bulk create via client.records.create()
-> ```
->
-> This targets the active `pac auth list` environment and uses `.example.com` emails / `555-01xx` phones. Confirm to proceed, or tell me to target a different environment.
+> I'll run the schema-query + bulk-create snippets from the Sample Data Generation section with `TABLE="contact"`, `COUNT=20` against the active `pac auth list` environment. `.example.com` emails, `555-01xx` phones. Confirm to proceed, or tell me to target a different environment.

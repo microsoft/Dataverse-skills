@@ -650,7 +650,7 @@ except Exception as e:
 ```
 
 To pre-check without creating, query `EntityDefinitions` directly:
-```python
+```
 # Returns 404 if the table does not exist
 GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName
 ```
@@ -749,12 +749,12 @@ GET /api/data/v9.2/EntityDefinitions?$filter=startswith(LogicalName,'new_')  # B
 ```
 
 To retrieve metadata for multiple custom tables, query each table individually:
-```python
+```
 GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName,EntitySetName
 ```
 
 Or query all entities and filter in Python:
-```python
+```
 GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
 # Then filter: [e for e in result["value"] if e["LogicalName"].startswith("new_")]
 ```

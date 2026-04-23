@@ -109,10 +109,10 @@ If the file or the variable doesn't exist, the environment URL must be discovere
 
 ### 3a. Auto-discover via PAC CLI (preferred)
 
-Check if PAC CLI is available:
+Check if PAC CLI is available (the bare `pac` command prints the version banner; `pac --version` is not a valid subcommand and returns non-zero):
 
 ```
-pac --version
+pac
 ```
 
 If available, check auth and list environments:
@@ -354,11 +354,48 @@ Present the two methods (PPAC portal is recommended for non-developers):
 > 9. Paste the MCP Client ID: `{MCP_CLIENT_ID}`
 > 10. Click **Save**
 >
-> **Method B: Programmatic (via script)**
+> **Method B: Programmatic (inline Python)**
 >
-> Run `scripts/enable-mcp-client.py` to add the client ID to the allowed list via the Dataverse API.
+> Query the `allowedmcpclient` entity and add the client ID idempotently (the agent runs the snippet below — adjust `MCP_CLIENT_ID` if registering a client other than the one in `.env`, e.g. Claude and Copilot into the same environment).
 
-If the user completed Method A, attempt to run `scripts/enable-mcp-client.py` anyway to verify. If it reports the client is already enabled, continue. Do not ask for user confirmation.
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_credential, load_env
+from PowerPlatform.Dataverse.client import DataverseClient
+
+load_env()
+client = DataverseClient(
+    base_url=os.environ["DATAVERSE_URL"].rstrip("/"),
+    credential=get_credential(),
+)
+MCP_CLIENT_ID = os.environ["MCP_CLIENT_ID"]   # or pass an explicit GUID for multi-client setups
+
+pages = client.records.get(
+    "allowedmcpclient",
+    filter=f"applicationid eq '{MCP_CLIENT_ID}'",
+    select=["allowedmcpclientid", "isenabled"],
+    top=1,
+)
+existing = next((r for page in pages for r in page), None)
+
+if existing and existing.get("isenabled"):
+    print(f"Already enabled: {MCP_CLIENT_ID}", flush=True)
+elif existing:
+    client.records.update("allowedmcpclient", existing["allowedmcpclientid"], {"isenabled": True})
+    print(f"Enabled existing record for {MCP_CLIENT_ID}", flush=True)
+else:
+    # Name the record by client ID so Claude/Copilot/etc. are distinguishable in PPAC.
+    client.records.create("allowedmcpclient", {
+        "applicationid": MCP_CLIENT_ID,
+        "name": f"mcp-client-{MCP_CLIENT_ID[:8]}",
+        "uniquename": f"new_mcp_client_{MCP_CLIENT_ID.replace('-', '_')}",
+        "isenabled": True,
+    })
+    print(f"Created and enabled: {MCP_CLIENT_ID}", flush=True)
+```
+
+If the user completed Method A, run the snippet above anyway to verify. If it reports the client is already enabled, continue. Do not ask for user confirmation.
 
 ---
 

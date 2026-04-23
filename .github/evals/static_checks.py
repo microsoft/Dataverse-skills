@@ -45,6 +45,16 @@ CAT-5  Cross-Skill Completeness
        EVAL-COMPLETE-03  dv-overview Available Skills table lists every skill directory
        EVAL-COMPLETE-04  No skill references the removed 'dv-python-sdk' skill
        EVAL-COMPLETE-05  README.md skill count matches actual number of skill directories
+
+CAT-6  dv-admin Allowlist Enforcement
+       Checks that the settings allowlist in dv-admin keeps its refusal semantics
+       and covers every backend key it claims to cover. Regression guard against
+       silent allowlist drift (keys disappearing, denylist becoming vague, or
+       the refusal directive being softened).
+       EVAL-ALLOW-01  dv-admin has an 'Allowed settings' heading
+       EVAL-ALLOW-02  Allowlist text contains the refusal directive ('must be refused')
+       EVAL-ALLOW-03  Known out-of-scope settings are named as explicit denylist examples
+       EVAL-ALLOW-04  Every expected allowlisted backend key is present in dv-admin
 """
 
 import argparse
@@ -271,6 +281,88 @@ def check_completeness(name, text, all_skill_names):
     return failures
 
 
+# ---------------------------------------------------------------------------
+# CAT-6  dv-admin Allowlist Enforcement
+# ---------------------------------------------------------------------------
+
+# Representative sample of allowlisted backend keys — one per mechanism.
+# If any of these disappears from dv-admin, the allowlist is broken.
+# Not exhaustive (would make minor formatting edits painful); picked to cover
+# all 4 mechanisms (PAC CLI org column / OrgDB XML / recyclebinconfigs / settingdefinition).
+_ALLOWLIST_REQUIRED_KEYS = [
+    # PAC CLI org columns (existing + new from 1.4.0)
+    "plugintracelogsetting",
+    "auditretentionperiodv2",
+    "enablecanvasappsinsolutionsbydefault",
+    "lookupresolvedelayms",
+    # OrgDB XML keys (existing + new)
+    "IsMCPEnabled",
+    "SearchAndCopilotIndexMode",
+    "EnableWorkIQ",
+    "EnableTDSEndpoint",
+    "EnableOwnershipAcrossBusinessUnits",
+    # recyclebinconfigs
+    "cleanupintervalindays",
+    # settingdefinition
+    "PowerAppsAppLevelSecurityRolesEnabled",
+    "PlanShareSecurityRolesEnabled",
+]
+
+# Known out-of-scope settings — the skill should name these explicitly as
+# denylist examples so the agent has concrete "do not toggle" signal.
+_ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES = [
+    "sessiontimeoutinmins",   # was allowlisted pre-1.2.0, removed
+    "IsArchivalEnabled",      # OrgDB key close to recycle bin but out of scope
+    "IsShadowLakeEnabled",    # OrgDB key, out of scope
+]
+
+
+def check_allowlist(name, text):
+    failures = []
+    if name != "dv-admin":
+        return failures
+
+    # EVAL-ALLOW-01: 'Allowed settings' heading must exist
+    if not re.search(r"^##+\s+Allowed settings", text, re.MULTILINE | re.IGNORECASE):
+        failures.append(
+            f"EVAL-ALLOW-01 [{name}] missing 'Allowed settings' heading"
+        )
+        return failures  # the rest of the rules assume the section exists
+
+    # EVAL-ALLOW-02: the section must contain the refusal directive
+    # Match a reasonably-wide refusal phrase so cosmetic edits don't trip it.
+    section_match = re.search(
+        r"##+\s+Allowed settings.*?(?=^##+\s|\Z)",
+        text, re.MULTILINE | re.IGNORECASE | re.DOTALL,
+    )
+    section_text = section_match.group(0) if section_match else ""
+    if "must be refused" not in section_text:
+        failures.append(
+            f"EVAL-ALLOW-02 [{name}] Allowed settings section missing 'must be refused' directive"
+        )
+
+    # EVAL-ALLOW-03: known out-of-scope settings must be named somewhere in dv-admin.
+    # Use \b word boundaries so 'IsArchivalEnabled' does not spuriously match
+    # 'IsArchivalEnabledExtra' or similar near-miss renames.
+    for denied in _ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES:
+        if not re.search(rf"\b{re.escape(denied)}\b", text):
+            failures.append(
+                f"EVAL-ALLOW-03 [{name}] denylist example '{denied}' no longer appears — "
+                f"agent loses the explicit out-of-scope signal"
+            )
+
+    # EVAL-ALLOW-04: every expected allowlisted key must be present as a whole word
+    # (so a rename like 'IsMCPEnabled' -> 'IsMCPEnabledXX' is caught, not silently passed).
+    for key in _ALLOWLIST_REQUIRED_KEYS:
+        if not re.search(rf"\b{re.escape(key)}\b", text):
+            failures.append(
+                f"EVAL-ALLOW-04 [{name}] allowlisted key '{key}' no longer appears — "
+                f"allowlist has drifted from the documented 37-toggle coverage"
+            )
+
+    return failures
+
+
 def check_overview_index(overview_path, all_skill_names):
     """EVAL-COMPLETE-03: dv-overview Available Skills table lists every skill directory."""
     failures = []
@@ -352,6 +444,18 @@ def main():
         all_failures.extend(check_pac_cli(name, text))
         all_failures.extend(check_structure(name, text))
         all_failures.extend(check_completeness(name, text, all_skill_names))
+        all_failures.extend(check_allowlist(name, text))
+
+    # PAC CLI and Python block checks also apply to reference markdown (code examples
+    # outside SKILL.md) — otherwise broken patterns like `pac --version` slip in via
+    # references/*.md.
+    for ref_file in sorted(skills_dir.glob("*/references/*.md")):
+        ref_text = ref_file.read_text(encoding="utf-8")
+        ref_label = f"{ref_file.parent.parent.name}/references/{ref_file.name}"
+        python_block_count += len(re.findall(r"```python\n", ref_text))
+        all_failures.extend(check_python_blocks(ref_label, ref_text))
+        all_failures.extend(check_auth_patterns(ref_label, ref_text))
+        all_failures.extend(check_pac_cli(ref_label, ref_text))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
@@ -376,7 +480,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"5 categories checked"
+            f"6 categories checked"
         )
 
 

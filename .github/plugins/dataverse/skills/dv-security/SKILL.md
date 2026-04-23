@@ -15,13 +15,13 @@ description: >
 
 **This skill uses PAC CLI exclusively.** Do NOT write Python scripts for role operations.
 
-## CRITICAL: Always Show the Command First
+## Preview Before Running
 
-Even when the environment URL or user email is missing, **your first response must include the full `pac admin` command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`). Then ask for confirmation and missing values in the same message.
+Role grants and self-elevate are destructive (they change security posture and are logged to Purview), so follow the destructive-ops rule: **your first response must include the full `pac admin` command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Ask for confirmation and missing values in the same message.
 
-**Never** ask "which environment?" in isolation — the user cannot evaluate a request they can't see.
+**Never** ask a bare clarifying question ("which environment?") — the user cannot evaluate a request they can't see.
 
-### Canonical bad/good examples — follow these literally
+### Canonical bad/good examples
 
 <example operation="assign role (user given, env missing)">
 <user>Assign System Administrator role to user@contoso.com</user>
@@ -149,11 +149,9 @@ Before running `pac admin self-elevate`, the agent MUST:
 - Show the list of target environments before batch operations
 - Self-elevation is logged and auditable — warn the user
 
-## Confirmation Protocol — Show the Plan First, Then Ask
+## Confirmation Protocol
 
-When the user hasn't provided the target environment URL or user email, **still show the complete `pac admin` command(s) you will run**, using placeholders (`<ENV_URL>`, `<USER_EMAIL>`). Then ask the user to confirm and fill in the missing values in a single follow-up turn.
-
-Do NOT ask "which environment?" in isolation — the user cannot approve a command they haven't seen yet.
+Role grants and self-elevate are destructive — show the full `pac admin` command(s) with placeholders for any missing values and ask to confirm in the same turn.
 
 Example — user asks "Assign System Administrator role to user@contoso.com" without specifying an environment:
 

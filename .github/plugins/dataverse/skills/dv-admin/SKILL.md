@@ -2,23 +2,23 @@
 name: dv-admin
 description: >
   Environment-level Dataverse administration: bulk delete, data retention/archival,
-  organization settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric),
-  and recycle bin configuration.
-  Use when: "bulk delete", "delete all records", "clean up old records", "schedule deletion",
-  "data cleanup", "remove old data", "pause bulk delete", "cancel bulk delete", "resume job",
-  "bulk delete job status", "list delete jobs", "manage bulk delete", "data management", "pac data",
-  "retention", "archive", "archival", "set up retention", "retain old records",
-  "long term retain", "data lifecycle", "enable archival", "enable retention",
-  "retention policy", "archive records", "retention status",
-  "org settings", "organization settings", "enable audit", "disable audit", "audit status",
-  "check audit", "audit enabled", "is audit enabled", "audit logs", "turn on auditing",
-  "plugin trace", "session timeout", "auto save", "environment settings",
-  "list settings", "list-settings", "update settings", "update-settings",
-  "enable audit for all environments", "developer environments audit",
-  "recycle bin", "enable recycle bin", "disable recycle bin",
-  "recycle bin cleanup", "recyclebinconfig", "cleanup interval",
-  "orgdb settings", "search settings", "copilot settings", "mcp settings",
-  "fabric settings", "enable search", "disable search", "enable mcp", "disable mcp".
+  organization settings, OrgDB settings, recycle bin, and settings-definition overrides.
+  Covers 37 allowlisted PPAC toggles — audit, plugin trace, typeahead/quick find, canvas/flow solutions,
+  audit retention, MCP, search, Fabric, Work IQ, M365 Copilot, TDS endpoint, attachment security,
+  ownership across BUs, address records, delete users, Excel AI import, block unmanaged, app/plan security roles.
+  Use when: "bulk delete", "clean up old records", "schedule deletion", "pause/cancel/resume bulk delete", "pac data",
+  "retention", "archive", "data lifecycle", "audit retention", "audit log retention",
+  "org settings", "organization settings", "environment settings", "list-settings", "update-settings",
+  "enable audit", "audit status", "read auditing", "user access audit", "plugin trace",
+  "typeahead", "lookup delay", "quick find", "single table search", "leading wildcard",
+  "canvas apps in solutions", "cloud flows in solutions", "email validation",
+  "recycle bin", "cleanup interval", "recyclebinconfig",
+  "orgdb settings", "search settings", "mcp settings", "mcp advanced",
+  "fabric settings", "link to fabric", "fabric virtual tables",
+  "work iq", "dataverse intelligence", "m365 copilot data",
+  "tds endpoint", "attachment security", "record ownership", "ownership across business units",
+  "address records", "block unmanaged customizations", "delete disabled users", "excel import ai",
+  "app level security roles", "plan level security roles".
   Do not use when: deleting individual records (use dv-data), deleting tables (use dv-metadata),
   exporting/importing data files (use dv-solution), querying records (use dv-query),
   assigning roles or self-elevating (use dv-security), creating sample data (use dv-data),
@@ -27,11 +27,16 @@ description: >
 
 # Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin
 
-**This skill uses PAC CLI for most operations.** Two exceptions require Python SDK:
-- **OrgDB settings** (search, MCP, copilot, fabric) — stored in `orgdborgsettings` XML blob
-- **Recycle bin** — stored in `recyclebinconfigs` entity
+**Four mechanisms — pick based on where the setting lives:**
 
-Do NOT write Python scripts for operations PAC CLI can handle.
+| Mechanism | Use for | How |
+|---|---|---|
+| **PAC CLI** (`pac org update-settings` / `list-settings`) | Columns on the `organization` entity (audit, plugin trace, typeahead, quick find, canvas/flow solutions, email validation, audit retention) | `--name <column> --value <value>` — accepts any org column, not just the legacy audit ones |
+| **Python SDK — OrgDB XML** | Keys inside the `orgdborgsettings` XML blob (MCP, search, Fabric, Work IQ, TDS endpoint, attachment security, ownership, address records, block unmanaged, delete users, Excel AI) | Read XML → parse → modify → PATCH whole blob back on `organizations({id})` |
+| **Python SDK — recyclebinconfigs** | Recycle bin on/off + retention days | CREATE/PATCH `recyclebinconfigs` entity record |
+| **Python SDK — settingdefinition + organizationsettings** | App-level / plan-level security role toggles | Look up `settingdefinition` by `uniquename` → CREATE or PATCH `organizationsettings` row with `value` |
+
+Do NOT write Python scripts for operations PAC CLI can handle. Do NOT mix mechanisms (e.g., don't hand-PATCH an org column that PAC CLI already covers).
 
 ## Skill boundaries
 
@@ -45,15 +50,96 @@ Do NOT write Python scripts for operations PAC CLI can handle.
 | Create sample or seed data | **dv-data** |
 | Tenant governance (DLP, env lifecycle) | `pac admin --help` |
 
-## CRITICAL: Always Show the Command First
+## Allowed settings — hard allowlist
 
-Even when the environment URL, entity name, or other values are missing, **your first response must include the full command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Then ask for confirmation and missing values in the same message.
+This skill is only permitted to **read or update** the 37 PPAC toggles listed below (mapped to 35 unique backend keys — `SearchAndCopilotIndexMode` covers two toggles, `auditretentionperiodv2` covers two). Any request to change any other setting (session timeout, autosave, upload size, abort timeout, archival, shadow lake, activities features, synapse, or any org column / OrgDB key / `organizationsettings` override not in this table) **must be refused** with: *"That setting is out of scope for dv-admin. Use the Power Platform admin center."*
 
-**Never** ask "which environment?" or "do you want to proceed?" in isolation — the user cannot evaluate a request they can't see. See the Confirmation Protocol section below for examples.
+Reading other settings is also out of scope — do not generate `pac org list-settings` without `--filter`, and do not dump the whole `orgdborgsettings` XML when the user's question is about a specific non-allowlisted setting.
 
-### Canonical bad/good examples — follow these literally
+### Organization entity columns — use PAC CLI (14)
 
-<example operation="pause bulk delete job (all info in prompt)">
+Use `pac org list-settings --filter <column>` to read, `pac org update-settings --name <column> --value <value>` to write. PAC CLI accepts any column on the organization entity — not just the legacy audit ones.
+
+| # | PPAC label | Column | Type |
+|---|---|---|---|
+| 1 | Start Auditing | `isauditenabled` | bool |
+| 2 | Audit user access (Log access) | `isuseraccessauditenabled` | bool |
+| 3 | Start Read Auditing (Read logs to Purview) | `isreadauditenabled` | bool |
+| 4 | Plugin trace log setting | `plugintracelogsetting` | int: `0` Off, `1` Exception, `2` All |
+| 5 | Single table search option | `tablescopeddvsearchinapps` | bool |
+| 6 | Prevent slow keyword filter for quick find terms | `allowleadingwildcardsinquickfind` | int: `0` prevent, `1` allow (UI "prevent=On" flips to `0`) |
+| 7 | Quick Find record limits | `quickfindrecordlimitenabled` | bool |
+| 8 | Use quick find view for searching on grids/subgrids | `usequickfindviewforgridsearch` | bool |
+| 9 | Canvas apps in Dataverse solutions by default | `enablecanvasappsinsolutionsbydefault` | bool |
+| 10 | Cloud flows in Dataverse solutions by default | `enableflowsinsolutionbydefault` | bool (note: `solution` singular) |
+| 11 | Enable email address validation (preview) | `isemailaddressvalidationenabled` | bool |
+| 12 | Minimum number of characters to trigger typeahead | `lookupcharactercountbeforeresolve` | int (0–MAX_INT, null = feature off) |
+| 13 | Delay between character inputs that trigger a search | `lookupresolvedelayms` | int ms (default 250) |
+| 14 | Audit log retention policy / Custom retention period (days) | `auditretentionperiodv2` | int days (`-1` = Forever; presets 30/90/180/365/730/2555; max 365000) |
+
+### OrgDB XML keys — use Python SDK on `orgdborgsettings` blob (17)
+
+Read/modify/PATCH the XML blob on `organizations({id})`. PascalCase is significant — `IsMCPEnabled`, not `IsMcpEnabled`.
+
+| # | PPAC label | XML key | Type |
+|---|---|---|---|
+| 15 | Allow MCP clients to interact with Dataverse MCP server | `IsMCPEnabled` | bool |
+| 16 | Advanced Settings (non-Copilot Studio MCP clients) | `IsMCPPreviewEnabled` | bool |
+| 17 | Dataverse search / Search for records in Microsoft 365 apps | `SearchAndCopilotIndexMode` | int 0–3 (see truth table below — one key, two UI toggles) |
+| 18 | Link Dataverse tables with Microsoft Fabric workspace | `IsLinkToFabricEnabled` | bool |
+| 19 | Define Dataverse virtual tables using Fabric OneLake data | `IsFabricVirtualTableEnabled` | bool |
+| 20 | Allow data availability in Microsoft 365 Copilot | `ShowDataInM365Copilot` | bool |
+| 21 | Turn on Dataverse intelligence (Work IQ) for agents | `EnableWorkIQ` | bool |
+| 22 | Block unmanaged customizations in environment | `IsLockdownOfUnmanagedCustomizationEnabled` | bool |
+| 23 | Enable security on Attachment entity | `EnableSecurityOnAttachment` | bool |
+| 24 | Enable TDS endpoint | `EnableTDSEndpoint` | bool |
+| 25 | Enable user level access control for TDS endpoint | `AllowAccessToTDSEndpoint` | bool |
+| 26 | Record ownership across business units | `EnableOwnershipAcrossBusinessUnits` | bool |
+| 27 | Disable empty address record creation | `CreateOnlyNonEmptyAddressRecordsForEligibleEntities` | bool |
+| 28 | Enable deletion of address records | `EnableDeleteAddressRecords` | bool |
+| 29 | Block deletion of OOB attribute maps | `BlockDeleteManagedAttributeMap` | bool |
+| 30 | Enable delete disabled users | `EnableSystemUserDelete` | bool |
+| 31 | Import Excel to existing table with AI-assisted mapping | `IsExcelToExistingTableWithAssistedMappingEnabled` | bool |
+
+**`SearchAndCopilotIndexMode` truth table** (one int encodes two UI toggles):
+
+| Value | "Dataverse search" | "Search for records in M365 apps" (Copilot) |
+|---|---|---|
+| `0` | Off | On |
+| `1` | On | On |
+| `2` | Off | Off |
+| `3` | On | Off |
+
+### recyclebinconfigs entity — use Python SDK (2)
+
+| # | PPAC label | Field | Notes |
+|---|---|---|---|
+| 32 | Keep deleted Dataverse records (on/off) | `statecode` + `statuscode` + `isreadyforrecyclebin` | See "Recycle Bin Configuration" section — always send `isreadyforrecyclebin: true` on enable |
+| 33 | Keep deleted records (days) | `cleanupintervalindays` | int days; `-1` = never auto-purge; max 30 (when UI shows "30 days" with retention, stored as `-1`) |
+
+### settingdefinition + organizationsettings — use Python SDK (2)
+
+These live in a join: `settingdefinition` holds the definition (default value, datatype), `organizationsettings` holds the org-level override. No override row means the defaultvalue applies.
+
+| # | PPAC label | `settingdefinition.uniquename` | Type |
+|---|---|---|---|
+| 34 | Enable app level security roles for canvas apps | `PowerAppsAppLevelSecurityRolesEnabled` | bool (string `"true"`/`"false"`) |
+| 35 | Enable plan level security roles for plan designer | `PlanShareSecurityRolesEnabled` | bool (string `"true"`/`"false"`) |
+
+Bulk delete, retention/archival jobs, and role assignment are covered elsewhere in this skill and remain in scope — this allowlist is about **environment/org/orgdb settings** only.
+
+## Preview Before Running — Scope by Operation Type
+
+Two rules, different strictness:
+
+- **Destructive / stateful operations** (bulk delete schedule/cancel/pause/resume, org-settings update, OrgDB-settings update, recycle bin toggle or interval change, role assignment, self-elevate, retention set/enable-entity) — your first response must include the full command(s) you plan to run, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Ask for confirmation and missing values in the same message.
+- **Read-only operations** (list-settings, list jobs, show job, read recycle bin status, read OrgDB settings) — a one-sentence prose preview is enough. Don't pad with a placeholder-only code block.
+
+**Never** ask a bare clarifying question ("which environment?", "do you want to proceed?"). Either show the command, or state intent in one sentence and ask in the same turn.
+
+### Canonical bad/good examples
+
+<example operation="pause bulk delete job (destructive — all info given)">
 <user>Pause the bulk delete job with ID 12345678-1234-1234-1234-123456789012</user>
 <bad>The command requires approval. Please confirm to pause the job.</bad>
 <good>I'll run:
@@ -65,22 +151,14 @@ pac data bulk-delete pause --id 12345678-1234-1234-1234-123456789012
 Confirm to proceed.</good>
 </example>
 
-<example operation="read recycle bin status (no env URL yet)">
+<example operation="read recycle bin status (read-only — prose is enough)">
 <user>What's the current recycle bin status?</user>
 <bad>Please provide your environment URL so I can check.</bad>
 <bad>Runs `pac org fetch` against `recyclebinconfig` — PAC CLI does NOT manage recycle bin. Always use the Web API via Python.</bad>
-<good>Recycle bin lives in the `recyclebinconfigs` entity — PAC CLI can't read it. Here's the Python I'll run (full script in the Recycle Bin Configuration section below):
-
-```python
-ENV_URL = "<YOUR_ENV_URL>"
-# GET /api/data/v9.2/recyclebinconfigs?$filter=_extensionofrecordid_value eq '<ORG_ENTITY_ID>'
-# prints statecode, statuscode, cleanupintervalindays
-```
-
-Provide your environment URL and I'll run this (read-only, no confirmation needed).</good>
+<good>Recycle bin lives in the `recyclebinconfigs` entity — PAC CLI can't read it. I'll run the "Read Recycle Bin Status" snippet in the Recycle Bin Configuration section below (read-only, no confirmation needed). Provide your environment URL.</good>
 </example>
 
-<example operation="audit status across N environments">
+<example operation="audit status across N environments (read-only but multi-call — show the pattern)">
 <user>Tell me audit status of these 5 environments</user>
 <bad>Runs `pac env select` then `pac org fetch --entity organization --attributes isauditenabled` once per environment, sequentially, across N separate bash calls.</bad>
 <bad>Falls back to Python / `urllib` / the Web API after `pac org fetch` output is hard to parse.</bad>
@@ -98,19 +176,10 @@ wait
 Then render the results as a table. `pac org list-settings` is the ONLY command for reading org settings — never `pac org fetch`, never `pac env select` + anything.</good>
 </example>
 
-<example operation="disable MCP (OrgDB setting, no env URL yet)">
+<example operation="disable MCP (destructive OrgDB write — prose + snippet reference)">
 <user>Disable MCP for my environment</user>
 <bad>Please provide your environment URL so I can disable MCP.</bad>
-<good>MCP lives in `orgdborgsettings` XML — PAC CLI can't modify it. Here's the Python I'll run:
-
-```python
-# PATCH organizations entity, setting IsMCPEnabled=false in orgdborgsettings XML
-# (IsMCPEnabled is PascalCase, case-sensitive — not IsMcpEnabled)
-ENV_URL = "<YOUR_ENV_URL>"
-# ... (full script from OrgDB section below)
-```
-
-Confirm to proceed and provide your environment URL.</good>
+<good>MCP is the `IsMCPEnabled` key in the `orgdborgsettings` XML blob — PAC CLI can't modify it. I'll run the "Update or add an OrgDB setting" snippet in the OrgDB Settings section with `SETTING_NAME="IsMCPEnabled"`, `SETTING_VALUE="false"`. Provide your environment URL and confirm to proceed.</good>
 </example>
 
 ## CRITICAL: How to Read or Update Org Settings (Single or Multi-Environment)
@@ -204,7 +273,6 @@ These flags do not exist. Using them will produce errors.
 |-------|---------|
 | `--enable-audit` / `--audit` | use `--name isauditenabled --value true` |
 | `--trace` / `--plugin-trace` / `--logging` | use `--name plugintracelogsetting --value 2` |
-| `--timeout` / `--session` / `--minutes` | use `--name sessiontimeoutinmins --value <int>` |
 | `--setting` / `--key` / `--flag` | use `--name` |
 | String values like `"all"` or `"enabled"` for option sets | use integers: `0`, `1`, `2` |
 
@@ -319,20 +387,28 @@ pac org update-settings --name plugintracelogsetting --value 2 --environment htt
 | `--value` | `-v` | Yes | New value (`true`/`false` for booleans, integer for option sets) |
 | `--environment` | `-env` | No | Target environment URL or ID |
 
-#### Available Settings
+#### Allowed Settings (14 org columns)
 
-| Setting Name | Type | Values |
-|-------------|------|--------|
-| `isauditenabled` | bool | `true` / `false` |
-| `isuseraccessauditenabled` | bool | `true` / `false` |
-| `isreadauditenabled` | bool | `true` / `false` |
-| `plugintracelogsetting` | option | `0` (Off), `1` (Exception), `2` (All) |
-| `isautosaveenabled` | bool | `true` / `false` |
-| `maxuploadfilesize` | int | Size in KB (e.g., `32768`) |
-| `sessiontimeoutenabled` | bool | `true` / `false` |
-| `sessiontimeoutinmins` | int | Minutes (e.g., `60`) |
-| `inaborttimeoutenabled` | bool | `true` / `false` |
-| `inaborttimeoutinmins` | int | Minutes (e.g., `20`) |
+`pac org update-settings --name <column>` accepts any column on the `organization` entity, not just the legacy audit ones — verified against real orgs.
+
+| Setting Name | Type | Values | PPAC label |
+|-------------|------|--------|------------|
+| `isauditenabled` | bool | `true` / `false` | Start Auditing |
+| `isuseraccessauditenabled` | bool | `true` / `false` | Audit user access (Log access) |
+| `isreadauditenabled` | bool | `true` / `false` | Start Read Auditing (Read logs to Purview) |
+| `plugintracelogsetting` | option | `0` Off, `1` Exception, `2` All | Plugin trace log setting |
+| `tablescopeddvsearchinapps` | bool | `true` / `false` | Single table search option |
+| `allowleadingwildcardsinquickfind` | int | `0` = prevent slow filter (UI "Prevent" ON), `1` = allow | Prevent slow keyword filter for quick find terms |
+| `quickfindrecordlimitenabled` | bool | `true` / `false` | Quick Find record limits |
+| `usequickfindviewforgridsearch` | bool | `true` / `false` | Use quick find view for searching on grids/subgrids |
+| `enablecanvasappsinsolutionsbydefault` | bool | `true` / `false` | Canvas apps in Dataverse solutions by default |
+| `enableflowsinsolutionbydefault` | bool | `true` / `false` | Cloud flows in Dataverse solutions by default (note: `solution` singular, no `s`) |
+| `isemailaddressvalidationenabled` | bool | `true` / `false` | Enable email address validation (preview) |
+| `lookupcharactercountbeforeresolve` | int | `0`–MAX_INT (null = feature off) | Minimum number of characters to trigger typeahead search |
+| `lookupresolvedelayms` | int | milliseconds (default `250`) | Delay between character inputs that trigger a search |
+| `auditretentionperiodv2` | int | `-1` = Forever; presets `30`, `90`, `180`, `365`, `730`, `2555`; custom integer `30`–`365000` (PPAC validates this range; `< 30` or `> 365000` fails) | Audit log retention policy / Custom retention period (days) |
+
+Any other org column (`isautosaveenabled`, `maxuploadfilesize`, `sessiontimeoutenabled`, `sessiontimeoutinmins`, `inaborttimeoutenabled`, `inaborttimeoutinmins`, etc.) is **out of scope** — refuse and direct the user to the Power Platform admin center.
 
 ### Batch Workflow
 
@@ -348,13 +424,14 @@ Step 5: Report summary as a table
 
 ## Advanced Settings (Python SDK — PAC CLI Cannot Handle These)
 
-Some settings can't be managed by `pac org update-settings`. Two patterns exist:
+Three patterns require Python SDK:
 
 | Setting type | Where it lives | How to update |
 |---|---|---|
-| Top-level org columns (`isauditenabled`, `plugintracelogsetting`, etc.) | Organization entity columns | **PAC CLI** — `pac org update-settings` |
-| OrgDB settings (search, MCP, copilot, fabric, etc.) | XML inside `orgdborgsettings` column | **Python SDK** — fetch XML, parse, modify, PATCH back |
-| Recycle bin (org-level and per-table) | `recyclebinconfigs` entity | **Python SDK** — PATCH `recyclebinconfigs(<id>)` |
+| Top-level org columns (14 allowlisted — audit, typeahead, quick find, canvas/flow solutions, email validation, audit retention, etc.) | Organization entity columns | **PAC CLI** — `pac org update-settings --name <column>` (accepts any org column) |
+| OrgDB settings (17 allowlisted — MCP, search, Fabric, Work IQ, TDS, attachment security, ownership, address records, block unmanaged, delete users, Excel AI) | XML inside `orgdborgsettings` column | **Python SDK** — fetch XML, parse, modify, PATCH back |
+| Recycle bin (org-level and per-table) | `recyclebinconfigs` entity | **Python SDK** — CREATE/PATCH `recyclebinconfigs(<id>)` |
+| Settings-definition overrides (2 allowlisted — app/plan security roles) | `settingdefinition` + `organizationsettings` join | **Python SDK** — look up `settingdefinitionid` by `uniquename`, then CREATE/PATCH `organizationsettings` row |
 
 ---
 
@@ -364,9 +441,10 @@ Settings like search mode, MCP, copilot features, fabric, and retention live ins
 
 ```xml
 <OrgSettings>
+  <IsMCPEnabled>true</IsMCPEnabled>
   <SearchAndCopilotIndexMode>0</SearchAndCopilotIndexMode>
-  <IsRetentionEnabled>true</IsRetentionEnabled>
-  <IsDVCopilotForTextDataEnabled>true</IsDVCopilotForTextDataEnabled>
+  <IsLinkToFabricEnabled>true</IsLinkToFabricEnabled>
+  <IsFabricVirtualTableEnabled>false</IsFabricVirtualTableEnabled>
 </OrgSettings>
 ```
 
@@ -461,27 +539,29 @@ if existing is not None:
     # PATCH back the XML without the element
 ```
 
-**Common OrgDB settings (PascalCase, case-sensitive — use these exact names):**
+**Allowed OrgDB settings (17 keys — PascalCase, case-sensitive):**
 
-| Setting | Type | Values | What it controls |
+| Setting | Type | Values | PPAC label |
 |---|---|---|---|
-| `IsMCPEnabled` | bool | `true` / `false` | Enable/disable Dataverse MCP server |
-| `SearchAndCopilotIndexMode` | int | `0` = default, `1` = on, `2` = off | Dataverse search and Copilot indexing |
-| `IsRetentionEnabled` | bool | `true` / `false` | Data retention |
-| `IsArchivalEnabled` | bool | `true` / `false` | Data archival |
-| `IsDVCopilotForTextDataEnabled` | bool | `true` / `false` | Copilot for text data |
-| `IsLinkToFabricEnabled` | bool | `true` / `false` | Link to Fabric |
-| `IsFabricVirtualTableEnabled` | bool | `true` / `false` | Fabric virtual tables |
-| `IsShadowLakeEnabled` | bool | `true` / `false` | Shadow lake |
-| `IsCommandingModifiedOnEnabled` | bool | `true` / `false` | Commanding modified-on tracking |
-| `CanCreateApplicationStubUser` | bool | `true` / `false` | Application stub user creation |
-| `AllowRoleAssignmentOnDisabledUsers` | bool | `true` / `false` | Role assignment on disabled users |
-| `EnableActivitiesFeatures` | int | `0` / `1` | Activities features toggle |
-| `EnableActivitiesTimeLinePerfImprovement` | int | `0` / `1` | Timeline performance |
-| `TDSListenerInitialized` | int | `0` / `1` | TDS endpoint |
-| `AzureSynapseLinkIncrementalUpdateTimeInterval` | int | minutes (e.g., `1440`) | Synapse Link update interval |
+| `IsMCPEnabled` | bool | `true` / `false` | Allow MCP clients to interact with Dataverse MCP server |
+| `IsMCPPreviewEnabled` | bool | `true` / `false` | Advanced Settings (enable non-Copilot Studio MCP clients) |
+| `SearchAndCopilotIndexMode` | int | `0` Search Off / Copilot On; `1` Both On; `2` Both Off; `3` Search On / Copilot Off | Dataverse search + Search for records in Microsoft 365 apps (one key, two UI toggles — see truth table above) |
+| `IsLinkToFabricEnabled` | bool | `true` / `false` | Link Dataverse tables with Microsoft Fabric workspace |
+| `IsFabricVirtualTableEnabled` | bool | `true` / `false` | Define Dataverse virtual tables using Fabric OneLake data |
+| `ShowDataInM365Copilot` | bool | `true` / `false` | Allow data availability in Microsoft 365 Copilot |
+| `EnableWorkIQ` | bool | `true` / `false` | Turn on Dataverse intelligence (Work IQ) for agents |
+| `IsLockdownOfUnmanagedCustomizationEnabled` | bool | `true` / `false` | Block unmanaged customizations in environment |
+| `EnableSecurityOnAttachment` | bool | `true` / `false` | Enable security on Attachment entity |
+| `EnableTDSEndpoint` | bool | `true` / `false` | Enable TDS endpoint |
+| `AllowAccessToTDSEndpoint` | bool | `true` / `false` | Enable user level access control for TDS endpoint (requires TDS endpoint enabled first) |
+| `EnableOwnershipAcrossBusinessUnits` | bool | `true` / `false` | Record ownership across business units |
+| `CreateOnlyNonEmptyAddressRecordsForEligibleEntities` | bool | `true` / `false` | Disable empty address record creation (affects Account, Contact, Lead) |
+| `EnableDeleteAddressRecords` | bool | `true` / `false` | Enable deletion of address records |
+| `BlockDeleteManagedAttributeMap` | bool | `true` / `false` | Block deletion of OOB attribute maps |
+| `EnableSystemUserDelete` | bool | `true` / `false` | Enable delete disabled users |
+| `IsExcelToExistingTableWithAssistedMappingEnabled` | bool | `true` / `false` | Import Excel to existing table with AI-assisted mapping |
 
-**Do NOT search or discover setting names at runtime.** Use the table above. If the user asks for a setting not in this table, read all current settings first (`root.find()` loop) and show the user what's available.
+Every other OrgDB key (`IsRetentionEnabled`, `IsArchivalEnabled`, `IsDVCopilotForTextDataEnabled`, `IsShadowLakeEnabled`, `IsCommandingModifiedOnEnabled`, `CanCreateApplicationStubUser`, `AllowRoleAssignmentOnDisabledUsers`, `EnableActivitiesFeatures`, `TDSListenerInitialized`, `AzureSynapseLinkIncrementalUpdateTimeInterval`, etc.) is **out of scope** — refuse and direct the user to the Power Platform admin center. Do NOT dump the whole `orgdborgsettings` XML to "discover" other settings for the user.
 
 ---
 
@@ -532,9 +612,25 @@ else:
     print("Recycle bin: not configured (no org-level record)", flush=True)
 ```
 
+### Critical: Always Send `isreadyforrecyclebin: true` on Enable
+
+**Every enable payload (POST or PATCH) must set `isreadyforrecyclebin: true`.**
+
+Without it, the platform defaults `isreadyforrecyclebin` to `false` (CREATE) or leaves it null (PATCH), which forces the platform into the **asynchronous** opt-in path — a `ProcessRecycleBin` background job is queued and your HTTP call returns success before any entity-level work happens. In that window, platform metadata operations (solution imports, attribute publish, async handlers) can race against the partial state and throw `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin`. Sending `isreadyforrecyclebin: true` forces the synchronous, globally-locked opt-in path, which fans out to every entity inside one transaction.
+
+### Critical: Disable via PATCH, Not DELETE
+
+**Disable with `PATCH statecode=1, statuscode=2, isreadyforrecyclebin=false`. Do not DELETE the org config record.**
+
+DELETE enqueues an async opt-out (when `RecycleBinOptOutOrgAsynchronously` is on) while leaving the org row marked Inactive and child entity rows still flagged `IsReadyForRecycleBin=true, IsDisabled=false`. Any platform operation that runs between your DELETE and your next enable will see "org is enabled" from the config cache, proceed to `RecycleBinConfigService.Update(<entity-config>)` synchronously, and throw when the DB-backed `IsRecycleBinEnabledForEntity` check disagrees. A PATCH-based disable takes the synchronous `OptOutOrganization` path under the customization lock, cleanly cascading to every entity.
+
+### Wait for in-flight `ProcessRecycleBin` Jobs Between Toggles
+
+Every enable/disable queues a `ProcessRecycleBin` async operation (OperationType = `50`). Do NOT enable-then-disable-then-enable rapidly; the jobs share a dependency token and can interleave in ways that corrupt state. Before any second toggle, poll `AsyncOperation` until no `ProcessRecycleBin` row is `Queued` or `InProgress` for this org.
+
 ### Enable Recycle Bin
 
-Three cases depending on whether a config record already exists:
+Two cases depending on whether a config record already exists. Both send `isreadyforrecyclebin: true`.
 
 ```python
 # ... (same imports, headers, ORGANIZATION_ENTITY_ID, and fetch as above)
@@ -542,12 +638,32 @@ Three cases depending on whether a config record already exists:
 
 CLEANUP_DAYS = 30  # default; -1 means records in recycle bin are never auto-purged
 
+# Pre-flight: wait for any in-flight ProcessRecycleBin async jobs to finish
+import time
+def wait_for_recyclebin_async_jobs(env_url, headers, timeout_s=120):
+    # OperationType 50 = ProcessRecycleBin; StateCode 0=Ready/1=Suspended/2=Locked are all "not done"
+    filter_q = urllib.parse.quote("operationtype eq 50 and statecode ne 3")
+    url = f"{env_url}/api/data/v9.2/asyncoperations?$filter={filter_q}&$select=asyncoperationid,statecode,statuscode,name"
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as resp:
+            pending = json.loads(resp.read()).get("value", [])
+        if not pending:
+            return
+        print(f"  waiting on {len(pending)} ProcessRecycleBin job(s)...", flush=True)
+        time.sleep(5)
+    raise RuntimeError("Timed out waiting for pending ProcessRecycleBin async jobs")
+
+wait_for_recyclebin_async_jobs(env_url, headers)
+
 if not records:
     # Case 1: No config exists -- CREATE a new one
     # extensionofrecordid binds to the entities() metadata endpoint, NOT organizations()
     payload = {
         "extensionofrecordid@odata.bind": f"entities({ORGANIZATION_ENTITY_ID})",
         "extensionofrecordid@OData.Community.Display.V1.FormattedValue": "OrganizationId",
+        "isreadyforrecyclebin": True,   # MUST be true -- forces sync opt-in under the global lock
         "cleanupintervalindays": CLEANUP_DAYS,
     }
     req = urllib.request.Request(
@@ -559,12 +675,13 @@ if not records:
     with urllib.request.urlopen(req) as resp:
         print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
 else:
-    # Case 2: Config exists -- UPDATE statecode/statuscode and cleanup interval
+    # Case 2: Config exists -- PATCH statecode/statuscode, cleanup interval, and isreadyforrecyclebin
     config_id = records[0]["recyclebinconfigid"]
     payload = {
         "cleanupintervalindays": CLEANUP_DAYS,
         "statecode": 0,
         "statuscode": 1,
+        "isreadyforrecyclebin": True,   # MUST be true -- without this, UpdateInternal routes through updateAsync
     }
     req = urllib.request.Request(
         f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
@@ -574,28 +691,43 @@ else:
     )
     with urllib.request.urlopen(req) as resp:
         print(f"SUCCESS: recycle bin enabled with {CLEANUP_DAYS} day cleanup (HTTP {resp.status})", flush=True)
+
+# Post-flight: drain the sync opt-in fan-out before returning control
+wait_for_recyclebin_async_jobs(env_url, headers)
 ```
 
 ### Disable Recycle Bin
 
-**Disable = DELETE the recyclebinconfig record.** No payload, no statecode change.
+**Disable = PATCH `statecode=1, statuscode=2, isreadyforrecyclebin=false`.** This triggers the synchronous `OptOutOrganization` path which cascades cleanly to every entity config.
 
 ```python
 # ... (same fetch as above to get config_id)
 # SDK does not support recyclebinconfigs entity
 
+wait_for_recyclebin_async_jobs(env_url, headers)   # drain first
+
 if records:
     config_id = records[0]["recyclebinconfigid"]
+    payload = {
+        "statecode": 1,                 # Inactive
+        "statuscode": 2,                # Inactive
+        "isreadyforrecyclebin": False,  # required to take the isOptOut branch in UpdateInternal
+    }
     req = urllib.request.Request(
         f"{env_url}/api/data/v9.2/recyclebinconfigs({config_id})",
+        data=json.dumps(payload).encode("utf-8"),
         headers=headers,
-        method="DELETE",
+        method="PATCH",
     )
     with urllib.request.urlopen(req) as resp:
         print(f"SUCCESS: recycle bin disabled (HTTP {resp.status})", flush=True)
 else:
     print("Recycle bin is already disabled (no config record)", flush=True)
+
+wait_for_recyclebin_async_jobs(env_url, headers)   # drain the opt-out fan-out
 ```
+
+**Do NOT use DELETE to disable.** Legacy guidance (including older Admin Center behavior) suggested DELETE, but DELETE enqueues an async opt-out and can leave per-entity configs orphaned — any platform metadata operation that runs before cleanup finishes will throw `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin` on an unrelated entity.
 
 ### Key Fields on `recyclebinconfigs`
 
@@ -610,7 +742,9 @@ else:
 
 - **Fetch by `_extensionofrecordid_value`**, not by `name`. The `name` field is unreliable for filtering.
 - **Create uses `entities()` binding** -- `extensionofrecordid@odata.bind: entities({id})`, NOT `organizations()`.
-- **Disable = DELETE**, not a statecode PATCH. This is how the Power Platform Admin Center does it.
+- **Enable payloads MUST include `isreadyforrecyclebin: true`.** Without it, CREATE defaults to false and PATCH sends null — both force the async opt-in path and expose the org to cache-vs-DB races during platform metadata operations.
+- **Disable = PATCH `statecode=1, statuscode=2, isreadyforrecyclebin=false`**, not DELETE. DELETE enqueues an async opt-out and can leave per-entity configs orphaned.
+- **Drain `ProcessRecycleBin` async jobs between toggles.** Query `asyncoperations` for `operationtype eq 50 and statecode ne 3` before and after each enable/disable.
 - **Cleanup days**: default is `-1` (no auto-cleanup). Max is `30`. When the UI shows "30 days", the API stores `-1` internally (the platform applies a 30-day default).
 - Solution-managed configs (e.g., `msdyn_recurringsalesaction`) cannot be enabled/disabled via API.
 
@@ -636,6 +770,100 @@ filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{entity_id}'")
 
 ---
 
+### Settings-Definition Overrides (app/plan security roles)
+
+A small number of allowlisted toggles don't live on the `organization` entity or in `orgdborgsettings`. They're modeled as a join between two entities:
+
+- **`settingdefinition`** — defines the setting (uniquename, datatype, defaultvalue, description). Read-only; one row per known setting; identical across environments in the same build.
+- **`organizationsettings`** — holds per-org overrides. If no row exists for a given `settingdefinitionid`, the `defaultvalue` from `settingdefinition` applies.
+
+Allowlisted uniquenames (both `datatype=2` bool, stored as string `"true"`/`"false"`):
+- `PowerAppsAppLevelSecurityRolesEnabled` — Enable app level security roles for canvas apps
+- `PlanShareSecurityRolesEnabled` — Enable plan level security roles for plan designer
+
+**Read current value:**
+
+```python
+import os, sys, json, urllib.request, urllib.parse
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_token, load_env  # SDK does not support settingdefinition/organizationsettings entities
+
+load_env()
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+headers = {
+    "Authorization": f"Bearer {get_token()}",
+    "Accept": "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+    "Content-Type": "application/json",
+}
+
+UNIQUENAME = "PowerAppsAppLevelSecurityRolesEnabled"   # or PlanShareSecurityRolesEnabled
+
+q = urllib.parse.quote(f"uniquename eq '{UNIQUENAME}'")
+req = urllib.request.Request(
+    f"{env_url}/api/data/v9.2/settingdefinitions?$filter={q}"
+    f"&$select=settingdefinitionid,uniquename,defaultvalue,datatype",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    defn = json.loads(resp.read())["value"][0]
+
+sd_id = defn["settingdefinitionid"]
+default = defn["defaultvalue"]
+
+q2 = urllib.parse.quote(f"_settingdefinitionid_value eq '{sd_id}'")
+req = urllib.request.Request(
+    f"{env_url}/api/data/v9.2/organizationsettings?$filter={q2}&$select=organizationsettingid,value",
+    headers=headers,
+)
+with urllib.request.urlopen(req) as resp:
+    overrides = json.loads(resp.read())["value"]
+
+current = overrides[0]["value"] if overrides else default
+print(f"{UNIQUENAME} = {current} (default = {default}, override present: {bool(overrides)})", flush=True)
+```
+
+**Write (idempotent CREATE-or-PATCH):**
+
+```python
+# Continues from Read script above — reuses UNIQUENAME, sd_id, overrides, headers, env_url.
+# SDK does not support settingdefinition/organizationsettings entities.
+NEW_VALUE = "true"   # bool-as-string; "true"/"false" (lowercase)
+
+if overrides:
+    setting_id = overrides[0]["organizationsettingid"]
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/organizationsettings({setting_id})",
+        data=json.dumps({"value": NEW_VALUE}).encode("utf-8"),
+        headers=headers,
+        method="PATCH",
+    )
+else:
+    # No override exists — CREATE a new one
+    payload = {
+        "settingdefinitionid@odata.bind": f"settingdefinitions({sd_id})",
+        "value": NEW_VALUE,
+    }
+    req = urllib.request.Request(
+        f"{env_url}/api/data/v9.2/organizationsettings",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+with urllib.request.urlopen(req) as resp:
+    print(f"SUCCESS: {UNIQUENAME} = {NEW_VALUE} (HTTP {resp.status})", flush=True)
+```
+
+**Notes:**
+- `datatype=2` means bool; other values exist for string/int but only bool toggles are in our allowlist today.
+- `value` is always a **string**, even for bool and int definitions — `"true"` not `True`.
+- The two allowlisted uniquenames are gated by ECS feature flags (`enablePowerAppsAppLevelSecurityRolesToggle`, `enablePlanShareSecurityRolesToggle`) in the PPAC UI, but the entities exist regardless — if the flag is off in an env, setting the override still takes effect.
+- `DELETE` on the override row reverts to the `settingdefinition.defaultvalue`.
+
+---
+
 ## Safety Rules
 
 - **Always confirm** before scheduling a bulk delete — this is destructive
@@ -645,12 +873,11 @@ filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{entity_id}'")
 - For multi-environment updates, show the list of environments and get confirmation first
 - For OrgDB settings, warn that incorrect values can break environment features
 - For recycle bin, warn that reducing cleanup interval will permanently delete records sooner
+- For recycle bin enable/disable: always set `isreadyforrecyclebin` explicitly (true on enable, false on disable), use PATCH for disable (not DELETE), and drain any in-flight `ProcessRecycleBin` async jobs before toggling. Omitting these can produce `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin` on unrelated platform operations.
 
-## Confirmation Protocol — Show the Plan First, Then Ask
+## Confirmation Protocol
 
-When the user hasn't provided the environment URL, user email, or other required values, **still show the complete command(s) or Python code you will run**, using placeholders (`<ENV_URL>`, `<USER_EMAIL>`, etc.). Then ask the user to confirm and fill in the missing values in a single follow-up turn.
-
-Do NOT ask "which environment?" or "should I proceed?" in isolation — the user cannot approve a command they haven't seen yet.
+Follow the destructive-ops rule at the top of this skill: for writes (settings updates, bulk delete, retention, role grants, recycle bin changes) show the command(s) with placeholders (`<ENV_URL>`, `<USER_EMAIL>`, etc.) and ask to confirm in the same turn. For reads, a one-sentence preview is enough — skip the code block.
 
 Example — user asks "Enable auditing for all developer environments":
 
@@ -665,4 +892,4 @@ Example — user asks "Enable auditing for all developer environments":
 >
 > Confirm to proceed, or tell me which environments qualify as "developer".
 
-**OrgDB setting names are case-sensitive.** Use PascalCase with acronyms UPPER: `IsMCPEnabled` (not `IsMcpEnabled`), `IsDVCopilotForTextDataEnabled` (not `IsDvCopilot...`). Getting this wrong silently fails to update.
+**OrgDB setting names are case-sensitive.** Use PascalCase with acronyms UPPER: `IsMCPEnabled` (not `IsMcpEnabled`), `IsLinkToFabricEnabled` (not `IsLinkToFABRICEnabled`). Getting this wrong silently fails to update.
