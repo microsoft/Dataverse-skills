@@ -17,7 +17,26 @@ One-step connection to Dataverse. Handles tool installation, authentication, env
 
 > **Environment-First Rule** — All metadata (solutions, columns, tables, forms, views) and plugin registrations are created **in the Dynamics environment** via API or scripts, then pulled into the repo. Never write or edit solution XML by hand to create new components.
 
-**Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal.
+**Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal. **Exception:** Step 0 below can short-circuit the entire flow if the workspace is already set up.
+
+---
+
+## Step 0: Detect existing setup (run this first)
+
+Before touching anything, check whether this workspace is already connected to a Dataverse environment. This matters a lot on `claude --continue` or any re-run — the whole flow takes several minutes, and repeating it on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
+
+Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
+
+1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
+2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
+3. **PAC CLI auth matches `.env`** — `pac auth list` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `pac org who` against that profile succeeds
+4. **Python SDK is importable** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas"` exits 0
+
+**If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
+
+> Example: "Detected existing Dataverse setup at `{DATAVERSE_URL}` (auth profile: `{PROFILE}`, MCP server: `dataverse-{orgid}`). Running verification only."
+
+**If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
 ---
 
@@ -35,7 +54,7 @@ Check each tool independently — **do not use fail-fast parallel execution.** I
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
-.NET SDK is needed for PAC CLI but NOT for the Dataverse CLI (the npm package bundles its own runtime). Node.js powers the Dataverse CLI npm package (`@microsoft/dataverse`), which is used as the MCP proxy and for scripted data plane actions. Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
+.NET SDK is needed for PAC CLI but NOT for the Dataverse CLI (the npm package bundles its own runtime). Node.js powers the [Dataverse CLI](https://www.npmjs.com/package/@microsoft/dataverse) npm package (`@microsoft/dataverse`). This is a **dual-purpose tool**: it runs as the **MCP server** (`dataverse mcp <url>`) that agents use to talk to Dataverse, and as a **shell CLI** (`dataverse auth`, `dataverse org`, and additional data/workspace/skill subcommands as they land) for developers who want to script Dataverse operations from the terminal. For agent-driven data operations, the plugin continues to route through MCP, the Python SDK, or the Web API — the shell CLI subcommands are intended for user-authored scripts and CI workflows, not for agent routing. Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
 
 If any tool is missing, install it (see [tools-setup.md](references/tools-setup.md)), then verify. If `winget` installs a tool but it's not in PATH, ask the user to restart the terminal.
 
@@ -221,16 +240,22 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 
 After the editor/CLI restarts, verify MCP works.
 
-**Programmatic check (preferred):**
+**Primary check — `claude mcp list` (or Copilot equivalent):**
+```
+claude mcp list
+```
+If the `dataverse-*` server reports **✓ Connected**, MCP is correctly configured. This is the authoritative signal for first-time setup.
+
+**Confidence check — ask the agent directly:**
+> "Try asking: 'List the tables in my Dataverse environment.'"
+
+If `list_tables` is called directly and returns data → MCP is connected and usable. If the agent falls back to PAC CLI or Web API → see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting section.
+
+**Diagnostic — only if the above fail:**
 ```
 npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
 ```
-This tests both GA and Preview endpoints, verifies authentication, and reports detailed errors without starting the server. If it passes, MCP is correctly configured.
-
-**Agent check (alternative):**
-> "Try asking: 'List the tables in my Dataverse environment.'"
-
-If `list_tables` is called directly → MCP is connected. If the agent falls back to PAC CLI or Web API → see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting section.
+This is a **stricter** check than `claude mcp list`: it exercises both GA and Preview endpoints with a fresh authentication handshake and reports detailed errors. **Do not use this as the primary success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine via `claude mcp list`. A `403 Forbidden` specifically on the Preview endpoint is **expected** (Preview is opt-in per environment) — the GA endpoint is what the plugin uses. Reserve `--validate` for diagnosing a confirmed failure (e.g., `claude mcp list` shows ✗ or `list_tables` returns an auth error).
 
 ### MCP Server Capabilities
 

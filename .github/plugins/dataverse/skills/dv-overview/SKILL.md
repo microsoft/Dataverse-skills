@@ -77,6 +77,8 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 
 **Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
 
+**Note on the Dataverse CLI (`@microsoft/dataverse`):** The Dataverse CLI is a shell tool for user-authored scripts and CI workflows (e.g., `dataverse data query ...`). The agent should continue to route through **MCP → SDK → Web API** as described above — do NOT substitute `dataverse <subcommand>` shell calls for agent-driven data operations. The CLI is the same npm package that powers the MCP server, but the shell subcommands are not part of the agent routing hierarchy.
+
 **NEVER use raw Web API (`get_token()` / `urllib` / `requests`) for:**
 - Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
 - Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
