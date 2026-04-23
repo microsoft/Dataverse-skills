@@ -3,14 +3,18 @@ auth.py — Acquire Dataverse tokens via Azure Identity.
 
 Auth priority:
   1. Service principal (CLIENT_ID + CLIENT_SECRET in .env) — non-interactive
-  2. Device code flow — interactive on first login, silent refresh thereafter
+  2. Interactive browser flow — opens a browser window once, silent refresh thereafter
+     (best for local development on Windows/Mac/Linux machines with a browser)
+  3. Device code flow — fallback for headless environments (SSH, containers, CI)
+     Enabled by setting DATAVERSE_AUTH_DEVICE_CODE=1 in the environment, or used
+     automatically when the interactive browser flow fails (e.g., no browser available).
 
 Token caching:
   - Service principal: in-memory (tokens are short-lived, no persistent cache needed)
-  - Device code: OS credential store (Windows Credential Manager, macOS Keychain,
-    Linux libsecret) via TokenCachePersistenceOptions. An AuthenticationRecord is
-    persisted alongside the token cache so that new processes can silently refresh
-    without re-prompting the user.
+  - Interactive browser / device code: OS credential store (Windows Credential Manager,
+    macOS Keychain, Linux libsecret) via TokenCachePersistenceOptions. An
+    AuthenticationRecord is persisted alongside the token cache so that new processes
+    can silently refresh without re-prompting the user.
 
 Functions:
   load_env()            — loads .env into os.environ
@@ -29,10 +33,12 @@ Usage:
     token = get_token()
 
 Reads from .env in the repo root (parent of scripts/) or current working directory:
-    DATAVERSE_URL      — required
-    TENANT_ID          — required
-    CLIENT_ID          — optional, enables service principal auth
-    CLIENT_SECRET      — optional, enables service principal auth
+    DATAVERSE_URL              — required
+    TENANT_ID                  — required
+    CLIENT_ID                  — optional, enables service principal auth
+    CLIENT_SECRET              — optional, enables service principal auth
+    DATAVERSE_AUTH_DEVICE_CODE — optional, set to "1" to force device code flow
+                                 (use in headless/CI environments where no browser is available)
 """
 
 import os
@@ -85,6 +91,7 @@ def get_credential():
     dataverse_url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
     client_id = os.environ.get("CLIENT_ID")
     client_secret = os.environ.get("CLIENT_SECRET")
+    force_device_code = os.environ.get("DATAVERSE_AUTH_DEVICE_CODE", "").strip() == "1"
 
     if not tenant_id or not dataverse_url:
         missing = [k for k, v in [("TENANT_ID", tenant_id), ("DATAVERSE_URL", dataverse_url)] if not v]
@@ -96,6 +103,7 @@ def get_credential():
         from azure.identity import (
             ClientSecretCredential,
             DeviceCodeCredential,
+            InteractiveBrowserCredential,
             TokenCachePersistenceOptions,
         )
     except ImportError:
@@ -105,7 +113,7 @@ def get_credential():
     # Warn if only one of CLIENT_ID / CLIENT_SECRET is set
     if bool(client_id) != bool(client_secret):
         print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for", flush=True)
-        print("  service principal auth. Falling back to interactive device code flow.", flush=True)
+        print("  service principal auth. Falling back to interactive browser flow.", flush=True)
 
     # Path 1: Service principal (non-interactive)
     if client_id and client_secret:
@@ -115,9 +123,9 @@ def get_credential():
             client_secret=client_secret,
         )
     else:
-        # Path 2: Device code flow (interactive) with persistent OS-level token cache.
+        # Paths 2 & 3 share the same token cache and AuthenticationRecord.
         # AuthenticationRecord tells the credential which cached account to silently
-        # refresh, avoiding a device code prompt on every new process.
+        # refresh, avoiding an auth prompt on every new process.
         from azure.identity import AuthenticationRecord
 
         auth_record = None
@@ -127,20 +135,41 @@ def get_credential():
             except Exception:
                 pass  # Corrupt or stale record — will re-authenticate
 
-        def _prompt_callback(verification_uri, user_code, _expires_on):
-            print(f"\nTo sign in, visit {verification_uri} and enter code: {user_code}", flush=True)
-            print("(Waiting for you to complete the login in your browser...)\n", flush=True)
+        # Well-known Microsoft Power Apps public client app ID
+        PUBLIC_CLIENT_ID = "51f81489-12ee-4a9e-aaae-a2591f45987d"
 
-        _credential = DeviceCodeCredential(
-            tenant_id=tenant_id,
-            client_id="51f81489-12ee-4a9e-aaae-a2591f45987d",  # Well-known Microsoft Power Apps public client app ID
-            prompt_callback=_prompt_callback,
-            cache_persistence_options=TokenCachePersistenceOptions(
-                name="dataverse_cli",
-                allow_unencrypted_storage=True,
-            ),
-            authentication_record=auth_record,
+        cache_opts = TokenCachePersistenceOptions(
+            name="dataverse_cli",
+            allow_unencrypted_storage=True,
         )
+
+        if force_device_code:
+            # Path 3 explicit: user opted into device code (headless / CI / SSH)
+            def _prompt_callback(verification_uri, user_code, _expires_on):
+                print(f"\nTo sign in, visit {verification_uri} and enter code: {user_code}", flush=True)
+                print("(Waiting for you to complete the login in your browser...)\n", flush=True)
+
+            _credential = DeviceCodeCredential(
+                tenant_id=tenant_id,
+                client_id=PUBLIC_CLIENT_ID,
+                prompt_callback=_prompt_callback,
+                cache_persistence_options=cache_opts,
+                authentication_record=auth_record,
+            )
+        else:
+            # Path 2 (default): Interactive browser flow. Opens a browser window once;
+            # subsequent processes silently refresh via the persisted token cache.
+            # No code-copying needed — better UX than device code on local dev machines.
+            #
+            # If no browser is available (SSH, headless CI), the first get_token()
+            # call will fail; set DATAVERSE_AUTH_DEVICE_CODE=1 to opt into device
+            # code flow instead.
+            _credential = InteractiveBrowserCredential(
+                tenant_id=tenant_id,
+                client_id=PUBLIC_CLIENT_ID,
+                cache_persistence_options=cache_opts,
+                authentication_record=auth_record,
+            )
 
     return _credential
 
@@ -168,21 +197,39 @@ def get_token(scope=None):
     credential = get_credential()
 
     try:
-        from azure.identity import DeviceCodeCredential
-        if isinstance(credential, DeviceCodeCredential) and not _auth_record_saved and not _AUTH_RECORD_PATH.exists():
+        from azure.identity import DeviceCodeCredential, InteractiveBrowserCredential
+        interactive_types = (DeviceCodeCredential, InteractiveBrowserCredential)
+        if isinstance(credential, interactive_types) and not _auth_record_saved and not _AUTH_RECORD_PATH.exists():
             # First login ever — use authenticate() to get and save the record
             record = credential.authenticate(scopes=[scope])
             _AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
             _AUTH_RECORD_PATH.write_text(record.serialize(), encoding="utf-8")
             _auth_record_saved = True
-    except Exception:
-        pass  # Fall through to normal get_token flow
+    except Exception as e:
+        # If interactive browser auth fails (e.g., no browser available),
+        # suggest the device-code fallback before failing.
+        try:
+            from azure.identity import InteractiveBrowserCredential
+            if isinstance(credential, InteractiveBrowserCredential):
+                print(f"ERROR: Interactive browser authentication failed: {e}", flush=True)
+                print("  If no browser is available on this machine (SSH, headless CI, container),", flush=True)
+                print("  set DATAVERSE_AUTH_DEVICE_CODE=1 to use the device code flow instead.", flush=True)
+                sys.exit(1)
+        except ImportError:
+            pass
+        # For other credential types, fall through to normal get_token flow
 
     try:
         token = credential.get_token(scope)
     except Exception as e:
         print(f"ERROR: Failed to acquire access token: {e}", flush=True)
         print("  Check your network connection, credentials, and .env configuration.", flush=True)
+        try:
+            from azure.identity import InteractiveBrowserCredential
+            if isinstance(credential, InteractiveBrowserCredential):
+                print("  If no browser is available (SSH/headless/CI), set DATAVERSE_AUTH_DEVICE_CODE=1.", flush=True)
+        except ImportError:
+            pass
         sys.exit(1)
 
     return token.token
