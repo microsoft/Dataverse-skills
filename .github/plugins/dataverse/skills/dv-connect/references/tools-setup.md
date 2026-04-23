@@ -15,20 +15,41 @@ Check all in parallel. Install any that are missing.
 | Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (always upgrades to latest — mirrors `pip install --upgrade` for the Python SDK) |
 | Git | `git --version` | `winget install Git.Git` |
 
-After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
+After any `winget` install, the new tool may not be in PATH until the shell is restarted. For PAC CLI specifically, don't rely on shell restart — discover the install location and add it to PATH inline (see PAC CLI section below). For other tools, if not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
+
+### PAC CLI install — winget is the primary path
+
+**Use `winget install Microsoft.PowerAppsCLI`.** Do NOT use `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` as the primary install method — it has a known packaging bug (missing `DotnetToolSettings.xml`) that fails on recent .NET SDK versions with the error "The settings file in the tool's NuGet package is invalid." Reserve `dotnet tool install` as a last-resort fallback only when winget is unavailable.
+
+After `winget install Microsoft.PowerAppsCLI` completes, PAC CLI is typically installed at:
+
+```
+C:\Users\<user>\AppData\Local\Microsoft\PowerAppsCLI\Microsoft.PowerApps.CLI.<version>\tools\
+```
+
+Don't require a shell restart. Instead, add the install directory to PATH inline in the current session and persist it to `~/.bashrc`:
+
+```bash
+# 1. Find the install directory (the versioned subfolder)
+PAC_DIR=$(ls -d /c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI/Microsoft.PowerApps.CLI.*/tools 2>/dev/null | tail -1)
+
+# 2. Add to current session
+export PATH="$PAC_DIR:$PATH"
+
+# 3. Persist to ~/.bashrc (skip if already present)
+touch ~/.bashrc
+grep -q "PowerAppsCLI" ~/.bashrc || echo "export PATH=\"$PAC_DIR:\$PATH\"" >> ~/.bashrc
+
+# 4. Verify
+pac
+```
 
 ### PAC CLI on Windows Git Bash
 
-PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. Use the PowerShell wrapper:
+PAC CLI is a `.cmd` wrapper. In Git Bash (used by Claude Code), `pac` alone may fail or hang. If after the PATH setup above `pac` still fails, use the PowerShell wrapper:
 
 ```bash
 powershell -Command "& 'C:\Users\$USER\AppData\Local\Microsoft\PowerAppsCLI\pac.cmd' help"
-```
-
-Or, if installed via `dotnet tool install --global`:
-
-```bash
-powershell -Command "& pac help"
 ```
 
 To avoid repeating this, add an alias to `~/.bashrc`:
@@ -38,7 +59,7 @@ echo 'alias pac="powershell -Command \"& pac.cmd\""' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
+If `pac` works directly in your shell (after PATH setup above), skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
 ### Python SDK
 
@@ -49,7 +70,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 ### If winget is unavailable
 
-- PAC CLI: `dotnet tool install --global Microsoft.PowerApps.CLI.Tool`
+- PAC CLI: download the latest NuGet package from https://www.nuget.org/packages/Microsoft.PowerApps.CLI and extract to a local directory, or (last resort) `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` (known to fail with "settings file invalid" — retry with a specific version if the latest is broken)
 - GitHub CLI: download from https://cli.github.com
 - Azure CLI: download from https://aka.ms/installazurecliwindows
 
