@@ -17,9 +17,11 @@ Check all in parallel. Install any that are missing.
 
 After any `winget` install, the new tool may not be in PATH until the shell is restarted. For PAC CLI specifically, don't rely on shell restart — discover the install location and add it to PATH inline (see PAC CLI section below). For other tools, if not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
 
-### PAC CLI install — winget is the primary path
+### PAC CLI install — winget primary (Windows + Git Bash)
 
-**Use `winget install Microsoft.PowerAppsCLI`.** Do NOT use `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` as the primary install method — it has a known packaging bug (missing `DotnetToolSettings.xml`) that fails on recent .NET SDK versions with the error "The settings file in the tool's NuGet package is invalid." Reserve `dotnet tool install` as a last-resort fallback only when winget is unavailable.
+> **Scope:** the steps below assume Windows with Git Bash (the typical Claude Code environment). For macOS/Linux, see the [official PAC CLI install docs](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction#install-power-platform-cli).
+
+**Prefer `winget install Microsoft.PowerAppsCLI`** as the install method on Windows. `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` has had recurring packaging issues on some .NET SDK versions — if it fails with "The settings file in the tool's NuGet package is invalid" (missing `DotnetToolSettings.xml`), fall back to winget or download the NuGet package directly. The bug is transient per package release, so don't treat `dotnet tool install` as permanently broken; just don't make it the first choice when winget is available.
 
 After `winget install Microsoft.PowerAppsCLI` completes, PAC CLI is typically installed at:
 
@@ -27,7 +29,7 @@ After `winget install Microsoft.PowerAppsCLI` completes, PAC CLI is typically in
 C:\Users\<user>\AppData\Local\Microsoft\PowerAppsCLI\Microsoft.PowerApps.CLI.<version>\tools\
 ```
 
-Don't require a shell restart. Instead, add the install directory to PATH inline in the current session and persist it to `~/.bashrc`:
+Don't require a shell restart — add the install directory to PATH inline and persist it to `~/.bashrc`. The snippet below assumes a per-user winget install in Git Bash; adapt paths if you installed machine-wide (usually under `C:\Program Files\Microsoft\PowerAppsCLI\`) or are using a different shell:
 
 ```bash
 # 1. Find the install directory (the versioned subfolder)
@@ -70,7 +72,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 ### If winget is unavailable
 
-- PAC CLI: download the latest NuGet package from https://www.nuget.org/packages/Microsoft.PowerApps.CLI and extract to a local directory, or (last resort) `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` (known to fail with "settings file invalid" — retry with a specific version if the latest is broken)
+- PAC CLI: download the latest NuGet package from https://www.nuget.org/packages/Microsoft.PowerApps.CLI and extract to a local directory, or try `dotnet tool install --global Microsoft.PowerApps.CLI.Tool` (known to fail with "settings file invalid" on some .NET SDK + package version combinations — if that error appears, retry with an explicit `--version` or fall back to the NuGet download above)
 - GitHub CLI: download from https://cli.github.com
 - Azure CLI: download from https://aka.ms/installazurecliwindows
 
