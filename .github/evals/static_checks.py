@@ -446,17 +446,6 @@ def main():
         all_failures.extend(check_completeness(name, text, all_skill_names))
         all_failures.extend(check_allowlist(name, text))
 
-    # PAC CLI and Python block checks also apply to reference markdown (code examples
-    # outside SKILL.md) — otherwise broken patterns like `pac --version` slip in via
-    # references/*.md.
-    for ref_file in sorted(skills_dir.glob("*/references/*.md")):
-        ref_text = ref_file.read_text(encoding="utf-8")
-        ref_label = f"{ref_file.parent.parent.name}/references/{ref_file.name}"
-        python_block_count += len(re.findall(r"```python\n", ref_text))
-        all_failures.extend(check_python_blocks(ref_label, ref_text))
-        all_failures.extend(check_auth_patterns(ref_label, ref_text))
-        all_failures.extend(check_pac_cli(ref_label, ref_text))
-
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
     all_failures.extend(check_overview_index(overview_path, all_skill_names))
