@@ -165,7 +165,6 @@ mkdir -p solutions plugins scripts
 Copy plugin scripts:
 ```
 cp .dataverse/scripts/auth.py scripts/
-cp .dataverse/scripts/enable-mcp-client.py scripts/
 ```
 
 Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeholders (`{{DATAVERSE_URL}}`, `{{SOLUTION_NAME}}`, `{{PUBLISHER_PREFIX}}`) with values from `.env`.
