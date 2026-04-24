@@ -157,8 +157,9 @@ Two rules, different strictness:
 <example operation="audit status across N environments (read-only but multi-call — teach the pattern)">
 <user>Tell me audit status of these 5 environments</user>
 <bad>Runs `pac env select` then `pac org fetch --entity organization --attributes isauditenabled` once per environment, sequentially, across N separate bash calls.</bad>
-<bad>Falls back to Python / `urllib` / the Web API after `pac org fetch` output is hard to parse.</bad>
-<good>I'll read `isauditenabled` across all 5 environments in parallel (one batch, single `wait`), then render the results as a table. `pac org list-settings` is the only command for reading org settings — never `pac org fetch` or `pac env select` + anything.</good>
+<bad>Starts with Python / `urllib` / the SDK because "audit status" sounds like a multi-attribute query. Then falls back to `pac org fetch` when that fails, then PowerShell. All forbidden.</bad>
+<bad>Uses a `for env_id in ...` bash loop (sequential) instead of `&`-backgrounded parallel calls.</bad>
+<good>I'll run `pac org list-settings --filter audit` in parallel across all 5 environments (one `&`-batch, single `wait`), then render each env's audit block as a merged table. `--filter audit` returns every audit-related setting in one call (`isauditenabled`, `auditretentionperiodv2`, `isuseraccessauditenabled`, etc.) so we don't need multiple passes. `pac org list-settings` is the only command for reading org settings — never `pac org fetch`, `pac env select`, Python, PowerShell, or Web API.</good>
 </example>
 
 <example operation="disable MCP (destructive OrgDB write — prose + snippet reference)">
@@ -169,34 +170,44 @@ Two rules, different strictness:
 
 ## CRITICAL: How to Read or Update Org Settings (Single or Multi-Environment)
 
-**To check any org setting (audit, plugin trace, etc.):** `pac org list-settings`
-**To update any org setting:** `pac org update-settings`
+**Org settings = always `pac org list-settings` / `pac org update-settings`. No exceptions.** Single setting or a whole category, single env or many — this pair of commands covers all of it. If you are about to write Python, FetchXML, PowerShell, or any HTTP call to read or write an org column, STOP: you are off-rails.
 
-These are the ONLY commands for org settings. Do NOT use `pac org fetch`, `pac org who`, `curl`, `urllib`, PowerShell Invoke-RestMethod, or any Web API call. The PAC CLI commands handle authentication automatically.
-
-**Single environment:**
+**Single setting on one environment:**
 
 ```bash
 pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com
 ```
 
+**Category / multi-attribute read (e.g., "audit status", "all MCP settings") — substring filter in one call:**
+
+```bash
+pac org list-settings --filter audit --environment https://org1.crm.dynamics.com
+```
+
+`--filter` is a substring match on the setting name. `--filter audit` returns everything whose name contains "audit" (`isauditenabled`, `auditretentionperiodv2`, `isuseraccessauditenabled`, `isreadauditenabled`, etc.). Prefer this over running N separate `--filter <one>` calls when the user asks about a category.
+
 **Multiple environments — ALWAYS parallel in ONE bash call:**
 
 ```bash
-pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
+pac org list-settings --filter audit --environment https://org1.crm.dynamics.com &
+pac org list-settings --filter audit --environment https://org2.crm.dynamics.com &
+pac org list-settings --filter audit --environment https://org3.crm.dynamics.com &
 wait
 ```
 
-**NEVER do any of these for org settings:**
+Then parse each environment's output and render a table. Same pattern for N environments: N backgrounded calls, one `wait`, one merged table.
+
+**NEVER do any of these for org settings — no exceptions, even when `list-settings` feels limiting:**
 - `pac env select` then `pac org fetch` — WRONG, use `pac org list-settings --environment <url>`
+- `pac org fetch` with FetchXML to query the `organization` entity — WRONG, PAC CLI reads org settings via `list-settings` only
 - `pac org who` — shows connection info, NOT settings
-- `curl` / `urllib` / `requests` to the Web API — WRONG, use `pac org list-settings`
-- `pac auth token` — WRONG, PAC CLI handles auth internally
+- `curl` / `urllib` / `requests` to the Web API — WRONG for org columns, use `pac org list-settings`
+- `pac auth token` + raw HTTP — WRONG, PAC CLI handles auth internally
 - PowerShell `Invoke-RestMethod` — WRONG, use PAC CLI directly
-- Separate bash calls per environment — WRONG, use `&` and `wait` in ONE call
-- Python scripts for org settings — WRONG, use PAC CLI
+- Python `DataverseClient` / `get_token()` / any Azure Identity call for org columns — WRONG, use PAC CLI
+- Separate bash calls per environment / a `for` loop with sequential calls — WRONG, use `&` and `wait` in ONE call
+
+**If `pac org list-settings` fails for a setting**, that setting is NOT an org column — it lives elsewhere (OrgDB XML blob, `recyclebinconfigs`, `settingdefinition`). See the mechanism routing table below. Do not fall back to Web API / PowerShell / FetchXML.
 
 ---
 
