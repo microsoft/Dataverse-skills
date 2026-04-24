@@ -134,23 +134,17 @@ Bulk delete, retention/archival jobs, and role assignment are covered elsewhere 
 
 Two rules, different strictness:
 
-- **Destructive / stateful operations** (bulk delete schedule/cancel/pause/resume, org-settings update, OrgDB-settings update, recycle bin toggle or interval change, role assignment, self-elevate, retention set/enable-entity) — your first response must include the full command(s) you plan to run, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Ask for confirmation and missing values in the same message.
-- **Read-only operations** (list-settings, list jobs, show job, read recycle bin status, read OrgDB settings) — a one-sentence prose preview is enough. Don't pad with a placeholder-only code block.
+- **Destructive / stateful operations** (bulk delete schedule/cancel/pause/resume, org-settings update, OrgDB-settings update, recycle bin toggle or interval change, role assignment, self-elevate, retention set/enable-entity) — preview the action in plain prose: what's changing, new value, and which environment(s), using placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for anything unknown. Ask for confirmation and missing values in the same turn. Skip the raw command block; the user shouldn't need to read CLI syntax to approve a change.
+- **Read-only operations** (list-settings, list jobs, show job, read recycle bin status, read OrgDB settings) — a one-sentence prose preview is enough.
 
-**Never** ask a bare clarifying question ("which environment?", "do you want to proceed?"). Either show the command, or state intent in one sentence and ask in the same turn.
+**Key principle:** the user should be able to evaluate what's about to happen from your first response. A bare *"which environment?"* fails that test; a one-line prose preview passes it.
 
-### Canonical bad/good examples
+### Examples
 
 <example operation="pause bulk delete job (destructive — all info given)">
 <user>Pause the bulk delete job with ID 12345678-1234-1234-1234-123456789012</user>
 <bad>The command requires approval. Please confirm to pause the job.</bad>
-<good>I'll run:
-
-```bash
-pac data bulk-delete pause --id 12345678-1234-1234-1234-123456789012
-```
-
-Confirm to proceed.</good>
+<good>I'll pause bulk delete job `12345678-1234-1234-1234-123456789012` on the active environment. Confirm to proceed.</good>
 </example>
 
 <example operation="read recycle bin status (read-only — prose is enough)">
@@ -160,22 +154,11 @@ Confirm to proceed.</good>
 <good>Recycle bin lives in the `recyclebinconfigs` entity — PAC CLI can't read it. I'll run the "Read Recycle Bin Status" snippet in the Recycle Bin Configuration section below (read-only, no confirmation needed). Provide your environment URL.</good>
 </example>
 
-<example operation="audit status across N environments (read-only but multi-call — show the pattern)">
+<example operation="audit status across N environments (read-only but multi-call — teach the pattern)">
 <user>Tell me audit status of these 5 environments</user>
 <bad>Runs `pac env select` then `pac org fetch --entity organization --attributes isauditenabled` once per environment, sequentially, across N separate bash calls.</bad>
 <bad>Falls back to Python / `urllib` / the Web API after `pac org fetch` output is hard to parse.</bad>
-<good>Single bash call, one `pac org list-settings` per environment, all backgrounded, single `wait`:
-
-```bash
-pac org list-settings --filter isauditenabled --environment https://org1.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org2.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org3.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org4.crm.dynamics.com &
-pac org list-settings --filter isauditenabled --environment https://org5.crm.dynamics.com &
-wait
-```
-
-Then render the results as a table. `pac org list-settings` is the ONLY command for reading org settings — never `pac org fetch`, never `pac env select` + anything.</good>
+<good>I'll read `isauditenabled` across all 5 environments in parallel (one batch, single `wait`), then render the results as a table. `pac org list-settings` is the only command for reading org settings — never `pac org fetch` or `pac env select` + anything.</good>
 </example>
 
 <example operation="disable MCP (destructive OrgDB write — prose + snippet reference)">
@@ -858,21 +841,3 @@ with urllib.request.urlopen(req) as resp:
 - For recycle bin, warn that reducing cleanup interval will permanently delete records sooner
 - For recycle bin enable/disable: always set `isreadyforrecyclebin` explicitly (true on enable, false on disable), use PATCH for disable (not DELETE), and drain any in-flight `ProcessRecycleBin` async jobs before toggling. Omitting these can produce `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin` on unrelated platform operations.
 
-## Confirmation Protocol
-
-Follow the destructive-ops rule at the top of this skill: for writes (settings updates, bulk delete, retention, role grants, recycle bin changes) show the command(s) with placeholders (`<ENV_URL>`, `<USER_EMAIL>`, etc.) and ask to confirm in the same turn. For reads, a one-sentence preview is enough — skip the code block.
-
-Example — user asks "Enable auditing for all developer environments":
-
-> Here's the plan:
->
-> ```bash
-> pac admin list                                          # step 1: list environments
-> pac org update-settings --name isauditenabled --value true --environment <DEV_ENV_1> &
-> pac org update-settings --name isauditenabled --value true --environment <DEV_ENV_2> &
-> wait                                                    # step 2: parallel update
-> ```
->
-> Confirm to proceed, or tell me which environments qualify as "developer".
-
-**OrgDB setting names are case-sensitive.** Use PascalCase with acronyms UPPER: `IsMCPEnabled` (not `IsMcpEnabled`), `IsLinkToFabricEnabled` (not `IsLinkToFABRICEnabled`). Getting this wrong silently fails to update.

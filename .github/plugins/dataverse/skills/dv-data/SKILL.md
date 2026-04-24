@@ -22,12 +22,12 @@ description: >
 
 Two rules, different strictness:
 
-- **Destructive / stateful operations** (create, update, delete, bulk-import, upsert records) — your first response must include the full command(s) or code you plan to run, with placeholders (`<ENV_URL>`) for unknowns. Ask for confirmation and missing values in the same message.
-- **Read-only or scoped-reference operations** (schema inspection, looking up a record count, explaining what you'll run from a documented snippet) — a one-sentence prose preview is enough. **Do not** pad the response with a placeholder-only code block — it's noise.
+- **Destructive / stateful operations** (create, update, delete, bulk-import, upsert records) — preview the action in plain prose: which table, how many records, and which environment, using placeholders (`<ENV_URL>`) for anything unknown. Reference the documented snippet by name rather than pasting the full block inline. Ask for confirmation and missing values in the same turn.
+- **Read-only or scoped-reference operations** (schema inspection, looking up a record count, explaining what you'll run from a documented snippet) — a one-sentence prose preview is enough.
 
-**Never** ask a bare clarifying question ("which environment?", "how many records?"). Either show the command, or state intent in one sentence and ask in the same turn.
+**Key principle:** the user should be able to evaluate what's about to happen from your first response. A bare *"which environment?"* fails that test; a one-line prose preview passes it.
 
-### Canonical bad/good examples
+### Examples
 
 <example operation="generate N sample records (destructive — show the command)">
 <user>Generate 20 test contact records</user>
@@ -695,10 +695,6 @@ print(f"View: {env_url}/main.aspx?pagetype=entitylist&etn={TABLE}", flush=True)
 
 **Why schema-driven and not a hardcoded 5-account template:** a template that bakes in `account`-shaped columns (`name`, `telephone1`, `revenue`, `numberofemployees`) biases the agent toward copy-paste-then-hack whenever the user asks for `contact` or `cr123_project` records. The `fake()` function above dispatches per-attribute so the same snippet produces correct fields for any table. Override `fake()` when you need domain-specific values — e.g. real company names for `account.name`, valid status-reason integers for a custom picklist.
 
-#### Step 5: Run and verify
-
-Show the user: progress, record IDs, link to view in environment UI, reminder to bulk delete for cleanup.
-
 ### Safety Rules for Sample Data
 
 - **Always confirm** the target environment and record count
@@ -706,11 +702,3 @@ Show the user: progress, record IDs, link to view in environment UI, reminder to
 - Use `555-01xx` phone numbers — obviously fake
 - Skip lookup fields unless user explicitly asks
 - Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
-
-### Confirmation Protocol
-
-Sample-data creation is destructive-ish (writes records), so follow the destructive-ops rule from the top of this skill: show the command(s), use default values (count = 5) and placeholders for missing info, and ask to confirm or override in the same turn. One-sentence summary referencing the Sample Data Generation section is enough — don't copy the full 30-line snippet inline.
-
-Example — user asks "Generate 20 test contact records":
-
-> I'll run the schema-query + bulk-create snippets from the Sample Data Generation section with `TABLE="contact"`, `COUNT=20` against the active `pac auth list` environment. `.example.com` emails, `555-01xx` phones. Confirm to proceed, or tell me to target a different environment.

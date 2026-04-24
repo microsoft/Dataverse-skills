@@ -17,38 +17,22 @@ description: >
 
 ## Preview Before Running
 
-Role grants and self-elevate are destructive (they change security posture and are logged to Purview), so follow the destructive-ops rule: **your first response must include the full `pac admin` command(s) you plan to run**, with placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for unknowns. Ask for confirmation and missing values in the same message.
+Role grants and self-elevate are destructive (they change security posture and are logged to Purview). Before running, preview the action in plain prose — target user, role, environment(s) — using placeholders (`<ENV_URL>`, `<USER_EMAIL>`) for anything unknown, and ask for confirmation and missing values in the same turn. Skip the raw `pac admin` block; the user shouldn't have to read CLI syntax to approve a security change.
 
-**Never** ask a bare clarifying question ("which environment?") — the user cannot evaluate a request they can't see.
+**Key principle:** the user should be able to evaluate what's about to happen from your first response. A bare *"which environment?"* fails that test; a one-line prose preview passes it.
 
-### Canonical bad/good examples
+### Examples
 
 <example operation="assign role (user given, env missing)">
 <user>Assign System Administrator role to user@contoso.com</user>
 <bad>Which environment should I target?</bad>
-<good>I'll run:
-
-```bash
-pac admin assign-user --user user@contoso.com --role "System Administrator" --environment <ENV_URL>
-```
-
-Confirm to proceed and provide the target environment URL (or "all" to list and batch).</good>
+<good>I'll assign **System Administrator** to `user@contoso.com` on `<ENV_URL>`. Confirm to proceed and provide the target environment URL (or "all" to list and batch).</good>
 </example>
 
 <example operation="admin access across all environments">
 <user>Give me admin access on all my environments</user>
 <bad>Please provide your email address.</bad>
-<good>I'll list environments, then assign the `System Administrator` role in parallel:
-
-```bash
-pac admin list
-# then for each environment:
-pac admin assign-user --user <YOUR_UPN> --role "System Administrator" --environment <ENV_1> &
-pac admin assign-user --user <YOUR_UPN> --role "System Administrator" --environment <ENV_2> &
-wait
-```
-
-Fallback: if `assign-user` fails, use `pac admin self-elevate --environment <ENV>` (logged to Purview). Confirm to proceed and provide your UPN.</good>
+<good>I'll list your environments, then assign **System Administrator** in parallel on each one for `<YOUR_UPN>`. If `assign-user` fails on any environment, I'll fall back to self-elevate (logged to Purview) for that one. Confirm to proceed and provide your UPN.</good>
 </example>
 
 ## Skill boundaries
@@ -149,16 +133,3 @@ Before running `pac admin self-elevate`, the agent MUST:
 - Show the list of target environments before batch operations
 - Self-elevation is logged and auditable — warn the user
 
-## Confirmation Protocol
-
-Role grants and self-elevate are destructive — show the full `pac admin` command(s) with placeholders for any missing values and ask to confirm in the same turn.
-
-Example — user asks "Assign System Administrator role to user@contoso.com" without specifying an environment:
-
-> Here's the command I'll run:
->
-> ```bash
-> pac admin assign-user --user user@contoso.com --role "System Administrator" --environment <ENV_URL>
-> ```
->
-> Confirm to proceed, and tell me the target environment URL (or "all" to list and batch).
