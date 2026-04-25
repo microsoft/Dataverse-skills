@@ -1,17 +1,6 @@
 ---
 name: dv-data
-description: >
-  Create, update, delete, bulk-import, and upsert Dataverse records using the official Python SDK.
-  Use when: "create records", "insert data", "bulk create", "bulk update", "bulk import",
-  "import CSV", "load data", "upsert", "upsert records", "write data", "upload file",
-  "add records", "CreateMultiple", "UpdateMultiple", "UpsertMultiple",
-  "multi-table import", "FK dependencies", "dependency order", "parallel import", "large dataset",
-  "create sample data", "seed data", "generate test records", "populate entity",
-  "add sample records", "create dummy data", "generate sample accounts",
-  "seed the account table", "create test data for".
-  Do not use when: querying or reading records (use dv-query),
-  creating tables, columns, or relationships (use dv-metadata),
-  exporting solutions (use dv-solution).
+description: Creates, updates, deletes, bulk-imports, and upserts Dataverse records via the Python SDK. Use when writing or modifying records, bulk-importing data, upserting with alternate keys, running multi-table imports with FK dependencies, or generating sample or seed data.
 ---
 
 # Skill: Data — Create, Update, Delete, and Bulk Import
@@ -29,17 +18,13 @@ Two rules, different strictness:
 
 ### Examples
 
-<example operation="generate N sample records (destructive — show the command)">
-<user>Generate 20 test contact records</user>
-<bad>Which environment should I target? Please provide the Dataverse URL.</bad>
-<good>I'll run the schema-query + bulk-create snippets from the Sample Data Generation section below with `TABLE="contact"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones against the active `pac auth list` environment. Confirm to proceed, or tell me to target a different environment.</good>
-</example>
+**Generate N sample records (destructive — preview the snippet, ask for env):**
+- ❌ "Which environment should I target? Please provide the Dataverse URL."
+- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
 
-<example operation="sample data on custom entity (schema unknown — prose is enough)">
-<user>Create dummy data for a custom entity called cr123_project</user>
-<bad>I need more info about the entity. What are the required fields?</bad>
-<good>Custom entity — I'll query EntityDefinitions for `cr123_project` first to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType`, and call `client.records.create("cr123_project", records)`. Snippets in the Sample Data Generation section below. Confirm to proceed, or tell me a different count.</good>
-</example>
+**Sample data on a custom entity (schema unknown — prose is enough):**
+- ❌ "I need more info about the entity. What are the required fields?"
+- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."
 
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
 
@@ -258,7 +243,7 @@ client.records.upsert("account", [
 
 ## Bulk Import from CSV
 
-> **For imports that may be re-run** (most real-world cases), use `UpsertItem` with alternate keys instead of `create()` — see the Multi-Table Import section below. The `create()` pattern here is for one-shot loads only.
+> **For imports that may be re-run** (most real-world cases), use `UpsertItem` with alternate keys instead of `create()` — see [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md). The `create()` pattern here is for one-shot loads only.
 
 | Volume | Tool | Why |
 |---|---|---|
@@ -325,219 +310,22 @@ Before bulk-creating in a system table (account, contact, opportunity):
 
 ## Multi-Table Import with FK Dependencies
 
-When importing data across multiple tables with foreign key relationships, follow this sequence:
+When importing data across multiple tables with foreign key relationships, the import must run in dependency order with `UpsertItem` + alternate keys (idempotent, safe for re-runs).
 
-1. **Create tables** with source ID columns (`prefix_Src*Id`) — see **dv-metadata**
-2. **Create alternate keys** on the source ID columns — see **dv-metadata** "Alternate Keys" section
-3. **Create lookup relationships** — see **dv-metadata**
-4. **Import data** in dependency order using `UpsertItem` with alternate keys (safe for re-runs)
+**Quick reference:**
+1. Create tables with source ID columns + alternate keys + lookup relationships (see **dv-metadata**).
+2. Import Level 0 (no FK deps) tables in parallel via `ThreadPoolExecutor`. Sequential chunks within each table (concurrent writes deadlock).
+3. Build source-ID → GUID maps by querying back (upsert doesn't return GUIDs).
+4. Repeat per dependency level — Level 1 needs Level 0's maps for `@odata.bind`.
 
-Using upsert from the start means partial failures, retries, and re-runs never create duplicates. The alternate key lets Dataverse match records by the source system's ID instead of GUIDs.
+For the full pattern — adaptive `bulk_upsert` helper, composite-key handling, post-import verification, and the first-time `bulk_create` variant — see [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md).
 
-**Deciding which alternate key to create:**
-- **Database source (SQLite, SQL Server):** Read the schema to identify primary keys. The source PK maps directly to the Dataverse alternate key. Agent can decide without asking.
-- **Excel/CSV source:** Inspect the data for columns with all-unique values (`df[col].nunique() == len(df)`). Look for naming conventions (`*_ID`, `*_Code`). **Propose the candidate to the user and confirm** — "Column `Employee_ID` has 500 unique values across 500 rows. Use this as the key?" Do not create the key without confirmation, since uniqueness in current data doesn't guarantee it's the intended business key.
+Key invariants (apply even without reading the reference):
 
-```python
-import os, sys, csv, time
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
-from PowerPlatform.Dataverse.models.upsert import UpsertItem
-from PowerPlatform.Dataverse.core.errors import HttpError
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-load_env()
-client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
-
-def bind(entity_set, guid):
-    """Build an @odata.bind value. entity_set must be the actual EntitySetName, not a guess."""
-    return f"/{entity_set}({guid})"
-
-# IMPORTANT: EntitySetName is NOT always logical_name + 's'.
-# Dataverse uses English pluralization: country -> countries, city -> cities,
-# winby -> winbies, extraruns -> extrarunses.
-# Always query the actual names before building @odata.bind values:
-#   GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
-
-def bulk_upsert(logical_name, items, chunk_size=1000, retries=3):
-    """Upsert items in adaptive chunks with retry. Starts at chunk_size, doubles on
-    success (up to max_size), halves on size/timeout failure. Caps at last successful
-    size to avoid oscillation. Safe for re-runs."""
-    import requests as req_lib  # for timeout exception types
-    current_size = chunk_size
-    max_size = 4000
-    i = 0
-    while i < len(items):
-        chunk = items[i:i + current_size]
-        for attempt in range(retries):
-            try:
-                client.records.upsert(logical_name, chunk)
-                print(f"  {logical_name}: {i + len(chunk)}/{len(items)} (chunk={current_size})", flush=True)
-                i += len(chunk)
-                current_size = min(current_size * 2, max_size)  # ramp up
-                break
-            except HttpError as e:
-                if e.status_code == 429 and attempt < retries - 1:
-                    time.sleep(5 * (attempt + 1))
-                    continue
-                if e.status_code in (413, 500) and current_size > 100:
-                    current_size = max(current_size // 2, 100)
-                    max_size = current_size
-                    print(f"  {logical_name}: chunk capped at {current_size}", flush=True)
-                    break  # retry same offset with smaller chunk
-                raise
-            except req_lib.exceptions.RequestException:
-                # Network timeout — SDK default is 120s for POST
-                if current_size > 100:
-                    current_size = max(current_size // 2, 100)
-                    max_size = current_size
-                    print(f"  {logical_name}: timeout, chunk capped at {current_size}", flush=True)
-                    break
-                raise
-        else:
-            i += len(chunk)  # skip chunk after all retries exhausted
-
-def build_map(logical_name, src_col, id_col):
-    """Query Dataverse to build source_id -> GUID map after upsert."""
-    result = {}
-    for page in client.records.get(logical_name, select=[src_col, id_col]):
-        for r in page:
-            src_val = r.get(src_col)
-            if src_val is not None:
-                result[src_val] = r[id_col]
-    return result
-
-def upsert_table(logical_name, items, chunk_size=1000):
-    """Upsert one table — used as target for ThreadPoolExecutor."""
-    bulk_upsert(logical_name, items, chunk_size)
-    return logical_name
-```
-
-**Import data in dependency levels — parallelize tables within each level:**
-
-Tables at the same dependency level are independent of each other and can be imported concurrently. Tables at different levels must be sequential (Level 1 needs Level 0's GUIDs for `@odata.bind`).
-
-```python
-# --- Level 0: All lookup tables concurrently (no FK dependencies) ---
-# Alternate keys must already exist. See dv-metadata "Alternate Keys".
-level0 = {
-    "prefix_country": [UpsertItem(
-        alternate_key={"prefix_srccountryid": r["id"]},
-        record={"prefix_name": r["name"]},  # key cols must NOT be in record body
-    ) for r in country_rows],
-    "prefix_team": [UpsertItem(...) for r in team_rows],
-    # ... all other Level 0 tables
-}
-
-# For composite-key tables (e.g., line items with multi-column PK):
-# ALL key columns go in alternate_key, NONE of them in record.
-line_items = [UpsertItem(
-    alternate_key={
-        "prefix_srcorderid": r["order_id"],
-        "prefix_srclineno": r["line_no"],
-    },
-    record={  # only non-key columns here
-        "prefix_name": f"Order-{r['order_id']}-Line-{r['line_no']}",
-        "prefix_quantity": r["qty"],
-        "prefix_unitprice": r["price"],
-    },
-) for r in order_line_rows]
-
-level0 = {
-    # ... lookup tables as above
-}
-
-with ThreadPoolExecutor(max_workers=len(level0)) as pool:
-    futures = {pool.submit(upsert_table, t, items): t for t, items in level0.items()}
-    for f in as_completed(futures):
-        table = futures[f]
-        try:
-            f.result()
-            print(f"  {table}: done", flush=True)
-        except Exception as e:
-            print(f"  {table}: FAILED — {e}", flush=True)
-            # Continue — don't kill other tables. Re-run later (upsert is idempotent).
-
-# Build lookup maps by querying back (upsert doesn't return GUIDs)
-country_map = build_map("prefix_country", "prefix_srccountryid", "prefix_countryid")
-team_map = build_map("prefix_team", "prefix_srcteamid", "prefix_teamid")
-
-# --- Level 1: Tables referencing Level 0, imported concurrently ---
-# Build items with @odata.bind using Level 0 maps, then import in parallel
-# ... repeat pattern for each level
-```
-
-**Key rules:**
-- **Parallelize across tables at the same level** — they share no data pages or indexes. Use `ThreadPoolExecutor` with one worker per table.
-- **Sequential between levels** — Level 1 needs Level 0's GUIDs for `@odata.bind`.
-- **Sequential chunks within each table** — concurrent writes to the same table cause SQL deadlocks (error 1205).
-- Use `UpsertItem` with the source system's PK as the alternate key — idempotent, safe for re-runs and partial failures.
-- **Do NOT put alternate key columns in the record body.** `UpsertMultiple` fails with "An unexpected error" if key columns appear in both. Single upsert tolerates it; bulk does not.
-- **Catch per-table failures in ThreadPoolExecutor** — wrap `f.result()` in try/except. One table failing must not kill the entire executor and prevent other tables from completing.
-- Build GUID maps by querying Dataverse after each level (upsert doesn't return GUIDs).
-- Start with `chunk_size=1000` and let the adaptive helper ramp up. Dataverse has no fixed record limit — the constraints are payload size and timeout. Narrow tables (few columns) can handle 2000-4000 per chunk.
-- `flush=True` on all print statements for real-time progress on Windows.
-- If a source row references a missing lookup ID, skip the row and log it.
-
-**Do NOT parallelize chunks within a single table.** Concurrent `UpsertMultiple`/`CreateMultiple` calls to the same table cause SQL Server deadlocks because concurrent inserts contend on shared data pages and index pages — even though the records are different.
-
-### Post-Import Verification
-
-After all levels are imported, verify record counts match the source. Count by iterating pages with a single-column select (memory-efficient — no need to load full DataFrames just for counts):
-
-```python
-def count_records(logical_name, id_col):
-    return sum(len(page) for page in client.records.get(logical_name, select=[id_col]))
-
-# Build expected counts from source data (e.g., len(rows) per table from earlier import phases)
-expected = {"prefix_department": 12, "prefix_employee": 500, "prefix_timesheet": 15000}
-for table, exp in expected.items():
-    actual = count_records(table, table + "id")  # e.g., prefix_department -> prefix_departmentid
-    status = "OK" if actual == exp else f"MISMATCH ({actual})"
-    print(f"  {table}: {status} (expected {exp})", flush=True)
-```
-
-For deeper verification (spot-check data values, not just counts), use `client.dataframe.get()` — see **dv-query**.
-
-### First-Time Import (when you are certain no re-runs are needed)
-
-If you control the environment and are certain the tables are empty, `client.records.create()` is faster than upsert (no existence check). But if the import fails partway through, re-running will create duplicates. Use this only for one-shot loads into fresh environments:
-
-```python
-def bulk_create(logical_name, records, chunk_size=1000):
-    """Import via create with adaptive chunking — faster but NOT safe for re-runs."""
-    import requests as req_lib
-    all_guids = []
-    current_size = chunk_size
-    max_size = 4000
-    i = 0
-    while i < len(records):
-        chunk = records[i:i + current_size]
-        try:
-            guids = client.records.create(logical_name, chunk)
-            all_guids.extend(guids)
-            print(f"  {logical_name}: {i + len(chunk)}/{len(records)} (chunk={current_size})", flush=True)
-            i += len(chunk)
-            current_size = min(current_size * 2, max_size)
-        except HttpError as e:
-            if e.status_code in (413, 500) and current_size > 100:
-                current_size = max(current_size // 2, 100)
-                max_size = current_size
-                print(f"  {logical_name}: chunk capped at {current_size}", flush=True)
-            else:
-                raise
-        except req_lib.exceptions.RequestException:
-            if current_size > 100:
-                current_size = max(current_size // 2, 100)
-                max_size = current_size
-                print(f"  {logical_name}: timeout, chunk capped at {current_size}", flush=True)
-            else:
-                raise
-    return all_guids
-```
-
----
+- **Parallelize across tables at the same level**, sequential between levels, sequential chunks within a table.
+- **Alternate key columns must NOT also appear in the record body** — `UpsertMultiple` fails.
+- **Catch per-table failures** in the executor — one table failing must not kill the others.
+- Start `chunk_size=1000`; the helper ramps up adaptively.
 
 ## Error Handling
 
@@ -568,137 +356,12 @@ except HttpError as e:
 
 ## Sample Data Generation
 
-Generate and insert realistic sample records into any Dataverse table. Useful for development, demos, and testing.
+Generate realistic sample records inline — schema-driven, table-agnostic, PII-safe defaults (`@example.com` emails, `555-01xx` phones).
 
-**Use the Python SDK** (`client.records.create()`) — not raw `urllib` or `requests`.
+**Quick reference:** confirm environment + count + table → query `EntityDefinitions(LogicalName='<table>')/Attributes?$filter=AttributeOf eq null` for required columns → dispatch by `AttributeType` (String / Memo / Integer / DateTime / Picklist / etc.) → `client.records.create()` (use `CreateMultiple` for count >= 10).
 
-### Agentic Flow
+For the schema-driven `fake()` template, the `EntityDefinitions` query, and the safety rules, see [`references/sample-data-generation.md`](references/sample-data-generation.md).
 
-#### Step 1: Confirm environment and count
-
-Before creating anything, confirm:
-- **Target environment** — run `pac auth list` to show the active environment
-- **Record count** — default is **5 records** unless the user specifies otherwise
-- **Table name** — get the logical name (e.g., `account`, `contact`, `cr123_customtable`)
-
-#### Step 2: Inspect the table schema
-
-Use the EntityDefinitions metadata API to discover required columns and their types. Two non-obvious bits:
-
-- **`$filter=AttributeOf eq null`** — without this, each lookup column returns a duplicated sub-attribute row (e.g. a `primarycontactid` Lookup plus a `_primarycontactid_value` pair), which makes the list twice as long and confuses downstream code.
-- **`UserLocalizedLabel` is null on unlocalized columns** — dereference safely before reading `.Label`, otherwise custom tables without display names crash the loop.
-
-```python
-import os, sys, json, urllib.request, urllib.parse
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # SDK does not support EntityDefinitions metadata
-
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-TABLE = "account"   # or any other table logical name
-
-params = urllib.parse.urlencode({
-    "$select": "LogicalName,AttributeType,RequiredLevel,DisplayName",
-    "$filter": "AttributeOf eq null",
-})
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/EntityDefinitions(LogicalName='{TABLE}')/Attributes?{params}",
-    headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
-)
-with urllib.request.urlopen(req) as resp:
-    attrs = json.loads(resp.read())["value"]
-
-for a in attrs:
-    dn = (a.get("DisplayName") or {}).get("UserLocalizedLabel")
-    label = dn["Label"] if dn else a["LogicalName"]
-    if a["RequiredLevel"]["Value"] == "ApplicationRequired":
-        print(f"REQUIRED  {a['LogicalName']:30s} {a['AttributeType']:15s} {label}", flush=True)
-```
-
-Filter or group the raw `attrs` list however the task needs — don't assume the printed shape above; inline code downstream should consume `attrs` directly.
-
-#### Step 3: Generate realistic data (by AttributeType)
-
-Use the schema from Step 2 to pick a generator per column. No separate script — the agent writes this inline per request so it matches the actual table.
-
-| AttributeType | Generate |
-|---|---|
-| `String` / `Memo` | Realistic text based on column name (e.g., `name` -> company names) |
-| `Integer` / `Decimal` / `Money` | Random values within `MinValue`/`MaxValue` |
-| `Boolean` | Alternate `true`/`false` |
-| `DateTime` | Recent dates in ISO 8601 format |
-| `Picklist` / `Status` | Integer option values (e.g., `industrycode: 1`) |
-| `Lookup` | **Skip by default** — only set if user provides valid record IDs |
-| `Uniqueidentifier` (non-PK) | Skip — let Dataverse auto-generate |
-
-#### Step 4: Create the records inline via the SDK — schema-driven
-
-This template is **table-agnostic by design**. It reads the `attrs` list from Step 2 and dispatches by `AttributeType` — no table-specific field names or hardcoded sample values baked in. Use it as a starting point; override/extend `fake()` when the table has domain-specific needs (e.g., look up real picklist option values, generate industry-appropriate company names for `account`, etc.).
-
-```python
-import os, sys, random, datetime
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
-
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-client = DataverseClient(base_url=env_url, credential=get_credential())
-
-TABLE = "account"   # any table logical name from Step 1
-COUNT = 5           # confirmed with user
-# `attrs` = the list returned by Step 2's EntityDefinitions query (re-run Step 2 if needed)
-
-SKIP_TYPES = {"Lookup", "Uniqueidentifier", "EntityName", "State", "Status", "Owner", "Customer"}
-
-def fake(attr, i):
-    """Context-based value by AttributeType + PII-safe heuristics on column name."""
-    name, t = attr["LogicalName"], attr["AttributeType"]
-    if t in ("String", "Memo"):
-        if "email" in name: return f"user{i}@example.com"
-        if any(s in name for s in ("phone", "telephone", "fax")): return f"555-01{i:02d}"
-        if "url" in name or "website" in name: return f"https://example.com/{name}/{i}"
-        return f"Sample {name} {i}"
-    if t in ("Integer", "BigInt"):          return random.randint(1, 1000)
-    if t in ("Decimal", "Double", "Money"): return round(random.uniform(1, 10_000), 2)
-    if t == "Boolean":                       return bool(i % 2)
-    if t == "DateTime":
-        d = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=i)
-        return d.isoformat(timespec="seconds").replace("+00:00", "Z")
-    if t in ("Picklist", "Status"):
-        return 1   # placeholder — for real picklists, look up valid OptionSet values first
-    return None    # skip Lookup, Uniqueidentifier, and anything unhandled
-
-required = [a for a in attrs
-            if a["RequiredLevel"]["Value"] == "ApplicationRequired"
-            and a["AttributeType"] not in SKIP_TYPES]
-
-records = []
-for i in range(COUNT):
-    rec = {}
-    for a in required:
-        v = fake(a, i)
-        if v is not None:
-            rec[a["LogicalName"]] = v
-    records.append(rec)
-
-# CreateMultiple for count >= 10, individual creates otherwise.
-if COUNT >= 10:
-    ids = client.records.create(TABLE, records)
-    print(f"Created {len(ids)} records via CreateMultiple", flush=True)
-else:
-    ids = [client.records.create(TABLE, r) for r in records]
-    print(f"Created {len(ids)} records individually", flush=True)
-
-print(f"View: {env_url}/main.aspx?pagetype=entitylist&etn={TABLE}", flush=True)
-```
-
-**Why schema-driven and not a hardcoded 5-account template:** a template that bakes in `account`-shaped columns (`name`, `telephone1`, `revenue`, `numberofemployees`) biases the agent toward copy-paste-then-hack whenever the user asks for `contact` or `cr123_project` records. The `fake()` function above dispatches per-attribute so the same snippet produces correct fields for any table. Override `fake()` when you need domain-specific values — e.g. real company names for `account.name`, valid status-reason integers for a custom picklist.
-
-### Safety Rules for Sample Data
-
-- **Always confirm** the target environment and record count
-- Use `.example.com` domains for emails — never real domains
-- Use `555-01xx` phone numbers — obviously fake
-- Skip lookup fields unless user explicitly asks
-- Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
+Key invariants:
+- Skip Lookup, Uniqueidentifier, State, Status, Owner, Customer fields unless the user explicitly provides values.
+- `UserLocalizedLabel` may be null — dereference safely.

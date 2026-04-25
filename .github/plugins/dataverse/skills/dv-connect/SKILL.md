@@ -1,14 +1,6 @@
 ---
 name: dv-connect
-description: >
-  Connect to a Dataverse environment in one step — installs tools, authenticates, configures MCP, and verifies the connection.
-  Use when: "connect to Dataverse", "configure MCP", "set up MCP server", "MCP not working",
-  ".env is missing", "setting up on a new machine", "starting a new project",
-  "initialize workspace", "new repo", "first time setup", "install tools",
-  "command not found", "missing tools", "new machine setup", "authenticate",
-  "MCP not connected", "create a new environment", "select environment",
-  "connect via MCP", "add Dataverse to Copilot", "add Dataverse to Claude",
-  "load demo data", "sample data".
+description: Connects to a Dataverse environment in one step — installs tools, authenticates, configures MCP, and verifies the connection. Use when setting up Dataverse on a new machine, configuring MCP, fixing a missing .env, starting a new project, or troubleshooting MCP connectivity.
 ---
 
 # Skill: Connect

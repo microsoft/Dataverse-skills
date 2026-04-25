@@ -31,11 +31,13 @@ CAT-3  PAC CLI Accuracy
 
 CAT-4  Skill Structure & Discoverability
        Checks that every skill has the structural elements agents need to
-       discover and route to it correctly.
+       discover and route to it correctly. Anchored to Anthropic's Skills
+       authoring guidance: description is a single descriptive sentence with
+       an inline 'Use when ...' clause, third-person, max 1024 chars.
        EVAL-STRUCT-01  Frontmatter has required 'name' and 'description' fields
        EVAL-STRUCT-02  Frontmatter 'name' matches the skill directory name
-       EVAL-STRUCT-03  Frontmatter 'description' contains 'Use when:' trigger
-       EVAL-STRUCT-04  Frontmatter 'description' contains 'Do not use when:' trigger
+       EVAL-STRUCT-03  Description contains a 'Use when' routing hint
+       EVAL-STRUCT-04  Description is <= 1024 chars (Anthropic spec hard limit)
 
 CAT-5  Cross-Skill Completeness
        Checks that skills reference each other correctly and that the
@@ -61,6 +63,15 @@ CAT-7  Manifest Version Consistency
        manifest files, preventing drift when version bumps miss a file.
        EVAL-VERSION-01  All four version fields match (3 files, 4 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
+
+CAT-8  Skill Token Budget (Anthropic Skills spec)
+       Anthropic's published skills loading model — Level 1 (frontmatter, always
+       loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
+       trigger) <5k tokens; Level 3 (`references/`, loaded on demand) unlimited.
+       EVAL-BUDGET-01  Frontmatter <= 200 tokens (Level 1, with headroom)
+       EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap)
+       EVAL-BUDGET-03  Skills with body > 4,000 tokens must have a `references/`
+                       subfolder (forces Level 3 split before Level 2 fills up)
 """
 
 import argparse
@@ -69,11 +80,30 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    import tiktoken
+    _ENCODER = tiktoken.get_encoding("cl100k_base")
+except ImportError:
+    _ENCODER = None
+
+
+def count_tokens(text):
+    """Token count using the cl100k_base encoder (matches Claude's input units).
+    Falls back to a 4-chars-per-token approximation if tiktoken is unavailable."""
+    if _ENCODER is not None:
+        return len(_ENCODER.encode(text))
+    return max(1, len(text) // 4)
+
 # Skills that intentionally have no Skill Boundaries table.
 NO_BOUNDARIES_EXEMPT = {"dv-overview", "dv-connect"}
 
-# Skills that intentionally have no 'Do not use when:' trigger (orchestration skills).
-NO_DO_NOT_USE_EXEMPT = {"dv-overview", "dv-connect"}
+# Skills exempt from CAT-8.3 (the references/ split nudge): orchestration / index
+# skills are loaded as one routing surface and don't have a natural "long workflow"
+# to extract. Hard cap (CAT-8.2) still applies.
+NO_REFERENCES_NUDGE_EXEMPT = {"dv-overview"}
+
+# Anthropic's Skills spec hard limit on the description field (per docs.claude.com).
+DESCRIPTION_CHAR_LIMIT = 1024
 
 
 def extract_fenced_blocks(text, lang="python"):
@@ -231,19 +261,22 @@ def check_structure(name, text):
                 f"does not match directory name '{name}'"
             )
 
-    # EVAL-STRUCT-03: 'Use when:' trigger present in description
-    if "Use when:" not in frontmatter:
+    # EVAL-STRUCT-03: 'Use when' routing hint present in description
+    desc_match = re.search(r"^description\s*:\s*(.+?)(?=^\w|\Z)", frontmatter, re.MULTILINE | re.DOTALL)
+    desc = desc_match.group(1).strip() if desc_match else ""
+    if "Use when" not in desc:
         failures.append(
-            f"EVAL-STRUCT-03 [{name}] frontmatter description missing 'Use when:' routing trigger"
+            f"EVAL-STRUCT-03 [{name}] description missing 'Use when' routing hint "
+            f"(per Anthropic's skill-authoring guidance, the description should "
+            f"include both what the skill does and when to use it)"
         )
 
-    # EVAL-STRUCT-04: 'Do not use when:' trigger present in description
-    if name not in NO_DO_NOT_USE_EXEMPT:
-        if "Do not use when:" not in frontmatter:
-            failures.append(
-                f"EVAL-STRUCT-04 [{name}] frontmatter description missing "
-                f"'Do not use when:' routing trigger"
-            )
+    # EVAL-STRUCT-04: description <= 1024 chars (Anthropic spec hard limit)
+    if len(desc) > DESCRIPTION_CHAR_LIMIT:
+        failures.append(
+            f"EVAL-STRUCT-04 [{name}] description is {len(desc)} chars, "
+            f"exceeds Anthropic's {DESCRIPTION_CHAR_LIMIT}-char limit"
+        )
 
     return failures
 
@@ -503,6 +536,59 @@ def check_version_consistency(repo_root):
 
 
 # ---------------------------------------------------------------------------
+# CAT-8  Skill Token Budget (Anthropic Skills spec)
+# ---------------------------------------------------------------------------
+
+FRONTMATTER_TOKEN_CAP = 200
+BODY_TOKEN_CAP = 5000
+BODY_TOKEN_REFERENCES_TRIGGER = 4000
+
+
+def check_token_budget(name, text, skill_dir):
+    """
+    EVAL-BUDGET-01: frontmatter <= FRONTMATTER_TOKEN_CAP tokens (Level 1)
+    EVAL-BUDGET-02: body <= BODY_TOKEN_CAP tokens (Level 2 — Anthropic spec)
+    EVAL-BUDGET-03: when body > BODY_TOKEN_REFERENCES_TRIGGER tokens, a
+                    `references/` subfolder must exist (forces Level 3 split)
+
+    Anchor: Anthropic's Skills loading model — Level 1 ~100 tok / Level 2 <5k tok / Level 3 unlimited.
+    """
+    failures = []
+    m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
+    if not m:
+        return failures  # CAT-4 already flags missing frontmatter
+    frontmatter, body = m.group(1), m.group(2)
+
+    fm_tokens = count_tokens(frontmatter)
+    if fm_tokens > FRONTMATTER_TOKEN_CAP:
+        failures.append(
+            f"EVAL-BUDGET-01 [{name}] frontmatter is {fm_tokens} tokens, "
+            f"exceeds cap of {FRONTMATTER_TOKEN_CAP} (Anthropic Level 1 — frontmatter "
+            f"is loaded into context for every interaction across all skills). "
+            f"Trim trigger phrases and over-long enumerations."
+        )
+
+    body_tokens = count_tokens(body)
+    if body_tokens > BODY_TOKEN_CAP:
+        failures.append(
+            f"EVAL-BUDGET-02 [{name}] body is {body_tokens} tokens, "
+            f"exceeds cap of {BODY_TOKEN_CAP} (Anthropic Level 2). "
+            f"Split long content into `references/<topic>.md` files."
+        )
+
+    if body_tokens > BODY_TOKEN_REFERENCES_TRIGGER and name not in NO_REFERENCES_NUDGE_EXEMPT:
+        if not (skill_dir / "references").is_dir():
+            failures.append(
+                f"EVAL-BUDGET-03 [{name}] body is {body_tokens} tokens "
+                f"(> {BODY_TOKEN_REFERENCES_TRIGGER} tokens) but no `references/` "
+                f"subfolder exists. Create `{skill_dir.name}/references/` and "
+                f"move long content there before the body hits the {BODY_TOKEN_CAP}-token cap."
+            )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -540,6 +626,7 @@ def main():
         all_failures.extend(check_structure(name, text))
         all_failures.extend(check_completeness(name, text, all_skill_names))
         all_failures.extend(check_allowlist(name, text))
+        all_failures.extend(check_token_budget(name, text, f.parent))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
@@ -568,7 +655,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"6 categories checked"
+            f"8 categories checked"
         )
 
 

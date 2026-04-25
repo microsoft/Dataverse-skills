@@ -1,13 +1,6 @@
 ---
 name: dv-overview
-description: >
-  Core rules and tool routing for all Dataverse tasks. Loaded automatically before other skills.
-  Use when: any request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions,
-  records, queries, CRM, metadata, plugins, SDK, Web API, PAC CLI, or environment operations.
-  Also use for: "how do I", "what tool", "which skill", "where do I start", "help with Dataverse",
-  "create table", "create column", "build solution", "query data", "bulk import", "sample data",
-  "support agent", "customer table", "ticket table".
-  This skill must be loaded before any other Dataverse skill.
+description: Core rules and tool routing for all Dataverse tasks; loaded before any other Dataverse skill. Use when handling any request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions, records, queries, metadata, plugins, the SDK, the Web API, PAC CLI, or environment operations.
 ---
 
 # Skill: Overview — What to Use and When

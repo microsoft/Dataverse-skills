@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install tiktoken (for CAT-8 token-budget evals)
+        run: pip install tiktoken
+
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
 
