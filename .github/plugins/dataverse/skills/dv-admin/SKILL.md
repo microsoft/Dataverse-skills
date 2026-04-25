@@ -1,6 +1,6 @@
 ---
 name: dv-admin
-description: Performs environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, and settings-definition overrides (37 allowlisted PPAC toggles). Use when bulk-deleting records, scheduling retention or archival, modifying org or OrgDB settings, configuring audit, or toggling the recycle bin.
+description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, or manage retention policies.
 ---
 
 # Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin

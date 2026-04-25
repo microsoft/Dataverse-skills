@@ -1,6 +1,6 @@
 ---
 name: dv-query
-description: Bulk reads, multi-page iteration, and analytics over Dataverse data via the Python SDK and Web API. Use when querying records, expanding lookups, joining across tables, aggregating with $apply, loading into pandas DataFrames, or analyzing data in notebooks.
+description: Bulk reads, multi-page iteration, and analytics over Dataverse data via the Python SDK and Web API. Use when the user wants to read, list, filter, aggregate, group, join, or analyze records — including pandas DataFrame workflows and notebook exploration.
 ---
 
 # Skill: Query — Read and Analyze Dataverse Records

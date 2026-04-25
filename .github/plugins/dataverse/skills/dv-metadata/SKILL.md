@@ -1,6 +1,6 @@
 ---
 name: dv-metadata
-description: Creates and modifies Dataverse tables, columns, relationships, forms, and views via the Python SDK and Web API. Use when adding columns, creating tables, adding relationships, building lookup columns, or creating or modifying forms and views.
+description: Dataverse schema authoring via the Python SDK and Web API — tables, columns, relationships, forms, and views. Use when the user wants to define or evolve the data model: add a column, create a table, set up a lookup, customize a form, or build a view.
 ---
 
 # Skill: Metadata — Making Changes

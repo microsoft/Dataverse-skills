@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Core rules and tool routing for all Dataverse tasks; loaded before any other Dataverse skill. Use when handling any request involving Dataverse, Dynamics 365, Power Platform, tables, columns, solutions, records, queries, metadata, plugins, the SDK, the Web API, PAC CLI, or environment operations.
+description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
 ---
 
 # Skill: Overview — What to Use and When
