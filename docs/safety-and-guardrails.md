@@ -129,16 +129,13 @@ For details on Dataverse auditing, see [Microsoft's auditing documentation](http
 
 ## Telemetry
 
-**The plugin does not phone home.** There is no active usage telemetry. No data about your usage, queries, or environment is transmitted to any external service beyond the Dataverse Web API calls to your own tenant.
+The plugin may add an application identifier to its outbound Dataverse requests so server-side dashboards can attribute traffic. The identifier carries plugin / version / skill / agent labels — application-level metadata, not personal data under [GDPR Article 4(1)](https://gdpr-info.eu/art-4-gdpr/). Server-side aggregation uses Entra `oid` / `tid` claims that Dataverse already logs on every authenticated request; counting distinct users / tenants is cardinality measurement, not individual tracking.
 
-Usage metrics are gathered passively through public GitHub repository signals (clone counts, stars, forks) only.
+The pattern matches Azure CLI, `gh`, and Azure SDKs (always-on, no consent prompt — tool-identifying metadata is convention, not telemetry).
 
-If telemetry is introduced in the future, it will be:
+**Not collected:** prompt bodies, tool arguments, record data, file contents, command strings.
 
-- **Opt-in**, not opt-out
-- Free of PII (no email, username, tenant ID, or environment URL)
-- Not in the authentication code path
-- Documented in the README before activation
+**Future telemetry surfaces.** If a separate telemetry payload pipeline is ever introduced — distinct from the application-identifying metadata above (for example, OTEL events or per-call timing) — it will be opt-in, free of PII, kept out of the authentication code path, and documented in the README before activation.
 
 ## Areas Under Exploration
 

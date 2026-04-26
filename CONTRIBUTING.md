@@ -32,7 +32,7 @@ We welcome new skill contributions! To add a new skill:
    - Clear step-by-step instructions
    - SDK-first approach: use `PowerPlatform-Dataverse-Client` for all supported operations, raw Web API only for gaps
    - Output formatting examples
-5. **Test locally** using `claude --plugin-dir` (see [README.md](README.md#local-development))
+5. **Test locally** using `claude --plugin-dir` (see [Local Development](#local-development) below)
 6. **Submit a pull request** with a clear description of what the skill does and why it's useful
 
 ### Improving Existing Skills
@@ -52,9 +52,57 @@ We welcome new skill contributions! To add a new skill:
 
 1. Update relevant documentation if your change affects usage
 2. Ensure your skill follows the existing formatting patterns
-3. Test your changes locally with `claude --plugin-dir`
+3. Test your changes locally with `claude --plugin-dir` (see [Local Development](#local-development) below)
 4. Your PR will be reviewed by maintainers
 5. Once approved, a maintainer will merge your contribution
+
+## Local Development
+
+Clone the repository first:
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+```
+
+### Testing with GitHub Copilot CLI
+
+To register the local plugin marketplace from the cloned repository and install the plugin:
+
+```bash
+copilot plugin marketplace add <path/to/repo>/Dataverse-skills
+copilot plugin install dataverse@dataverse-skills
+```
+
+To reinstall the plugin after pulling or making local changes:
+
+```bash
+copilot plugin uninstall dataverse@dataverse-skills
+copilot plugin install dataverse@dataverse-skills
+```
+
+To install the local version directly without marketplace registration:
+
+```bash
+copilot plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+### Testing with Claude Code
+
+Test the plugin locally without installing from a marketplace:
+
+```bash
+# 1. Create and cd into a fresh test folder
+mkdir my-test-project
+cd my-test-project
+
+# 2. Launch Claude Code with the plugin loaded from your local clone
+claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
+
+# 3. Start with a natural language prompt, e.g.:
+#    "Create a support ticket table with customer and agent lookups"
+```
+
+The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
 
 ## Legal
 
