@@ -17,7 +17,26 @@ One-step connection to Dataverse. Handles tool installation, authentication, env
 
 > **Environment-First Rule** — All metadata (solutions, columns, tables, forms, views) and plugin registrations are created **in the Dynamics environment** via API or scripts, then pulled into the repo. Never write or edit solution XML by hand to create new components.
 
-**Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal.
+**Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal. **Exception:** Step 0 below can short-circuit the entire flow if the workspace is already set up.
+
+---
+
+## Step 0: Detect existing setup (run this first)
+
+Before touching anything, check whether this workspace is already connected to a Dataverse environment. This matters a lot on `claude --continue` or any re-run — the whole flow takes several minutes, and repeating it on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
+
+Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
+
+1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
+2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
+3. **PAC CLI auth matches `.env`** — `pac auth list` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `pac org who` against that profile succeeds
+4. **Python SDK is importable** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas"` exits 0
+
+**If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
+
+> Example: "Detected existing Dataverse setup at `{DATAVERSE_URL}` (auth profile: `{PROFILE}`, MCP server: `dataverse-{orgid}`). Running verification only."
+
+**If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
 ---
 
@@ -218,18 +237,43 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 
 ## Step 7: Final verification
 
-After the editor/CLI restarts, verify MCP works.
+After the editor/CLI restarts, **both** of these must succeed before declaring the setup complete:
 
-**Programmatic check (preferred):**
+**Check 1: `claude mcp list` (or Copilot equivalent) shows ✓ Connected**
+```
+claude mcp list
+```
+This proves the MCP server process starts and speaks the MCP protocol. It does NOT by itself prove that data operations work — authentication, environment allowlisting, and endpoint reachability are only exercised on the first real tool call.
+
+**Check 2: Agent successfully calls `list_tables` and returns data**
+> "List the tables in my Dataverse environment."
+
+This proves end-to-end wiring: auth, tenant consent, environment allowlist, and endpoint reachability are all correct. If the agent falls back to PAC CLI or Web API, see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting.
+
+Only when **both** checks pass is the setup verified.
+
+**Interpreting failures:**
+
+- If Check 1 fails (server not ✓ Connected): the MCP server itself cannot start. Re-run Step 6 and check that `npx`/Node.js are installed and the MCP registration succeeded.
+- If Check 1 passes but Check 2 fails (server starts but `list_tables` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
+
+**Diagnostic — `--validate` (for failure investigation only):**
 ```
 npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
 ```
-This tests both GA and Preview endpoints, verifies authentication, and reports detailed errors without starting the server. If it passes, MCP is correctly configured.
+This exercises two Dataverse MCP endpoints with a fresh authentication handshake and reports detailed errors (auth, allowlist, consent, endpoint reachability):
 
-**Agent check (alternative):**
-> "Try asking: 'List the tables in my Dataverse environment.'"
+- **GA / Production endpoint** — `{DATAVERSE_URL}/api/mcp`. This is the one the plugin actually uses at runtime.
+- **Preview endpoint** — `{DATAVERSE_URL}/api/mcp_preview`. Opt-in per environment; not used by the plugin.
 
-If `list_tables` is called directly → MCP is connected. If the agent falls back to PAC CLI or Web API → see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting section.
+**Do not use `--validate` as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
+
+**How to read `--validate` output:**
+
+- **Look at the GA / Production endpoint (`/api/mcp`) result first.** If this passes, MCP will work for normal plugin usage regardless of what the Preview endpoint reports.
+- **A `403 Forbidden` on the Preview endpoint (`/api/mcp_preview`) is expected for most environments.** Preview is opt-in per environment; if your environment hasn't enabled it, the Preview check will always fail. This does not indicate a broken setup.
+- **Ignore the overall exit code and the `⚠ Partial success` warning in this case.** The validator returns exit code `1` (failure) unless BOTH `/api/mcp` and `/api/mcp_preview` pass. Because most environments don't enable the Preview endpoint, `--validate` will exit `1` even when MCP is fully functional via the GA endpoint. Focus on per-endpoint results, not the aggregate status.
+- **If the GA endpoint (`/api/mcp`) fails:** that's the real signal to investigate — auth, tenant consent, environment allowlist, or endpoint reachability.
 
 ### MCP Server Capabilities
 
