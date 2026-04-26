@@ -19,8 +19,7 @@ Browse [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) 
 
 ## Prerequisites
 
-- **Microsoft Dataverse** environment (included with Power Apps, Dynamics 365, or Power Platform)
-- **Python 3.10+** and **Node.js 18+**
+A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, or Power Platform plans, or via the free [Power Apps Developer Plan](https://learn.microsoft.com/en-us/power-platform/developer/plan).
 
 ## Install
 
@@ -59,10 +58,10 @@ After the connect flow finishes, describe what you want — the plugin picks MCP
 
 The plugin is designed around a least-privilege model — it cannot exceed the permissions of the authenticated user. Key safeguards:
 
-- **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly
-- **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions
+- **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly.
+- **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions.
 - **Application-level telemetry only** — outbound Dataverse requests may carry application metadata (plugin / version / skill / agent labels) so server-side dashboards can attribute traffic. No prompts, tool arguments, or record data are transmitted.
-- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services
+- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services.
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 

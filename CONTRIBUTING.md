@@ -58,51 +58,41 @@ We welcome new skill contributions! To add a new skill:
 
 ## Local Development
 
-Clone the repository first:
+Clone the repository:
 
 ```bash
 git clone https://github.com/microsoft/Dataverse-skills.git
 ```
 
+Then run the plugin against your local clone with the agent you're testing. The agents differ in how they load plugins from a local path: Claude Code reads the plugin directory on every launch, so edits are picked up automatically. Copilot copies the plugin into its store at install time, so refreshing after edits requires uninstall + reinstall.
+
 ### Testing with GitHub Copilot CLI
 
-To register the local plugin marketplace from the cloned repository and install the plugin:
-
-```bash
-copilot plugin marketplace add <path/to/repo>/Dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-To reinstall the plugin after pulling or making local changes:
-
-```bash
-copilot plugin uninstall dataverse@dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-To install the local version directly without marketplace registration:
+Install directly from your local plugin directory:
 
 ```bash
 copilot plugin install <path/to/repo>/.github/plugins/dataverse
 ```
 
-### Testing with Claude Code
-
-Test the plugin locally without installing from a marketplace:
+After making local changes (or pulling), uninstall and reinstall to refresh Copilot's copy:
 
 ```bash
-# 1. Create and cd into a fresh test folder
-mkdir my-test-project
-cd my-test-project
-
-# 2. Launch Claude Code with the plugin loaded from your local clone
-claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
-
-# 3. Start with a natural language prompt, e.g.:
-#    "Create a support ticket table with customer and agent lookups"
+copilot plugin uninstall dataverse@dataverse-skills
+copilot plugin install <path/to/repo>/.github/plugins/dataverse
 ```
 
-The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
+### Testing with Claude Code
+
+Launch Claude Code with the plugin loaded from your local clone — no install or uninstall needed; edits take effect on the next launch:
+
+```bash
+# In a fresh test folder
+mkdir my-test-project && cd my-test-project
+
+claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
+```
+
+Quote the path if it contains spaces or special characters; use an absolute path.
 
 ## Legal
 
