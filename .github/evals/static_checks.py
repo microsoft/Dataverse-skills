@@ -38,6 +38,9 @@ CAT-4  Skill Structure & Discoverability
        EVAL-STRUCT-02  Frontmatter 'name' matches the skill directory name
        EVAL-STRUCT-03  Description contains a 'Use when' routing hint
        EVAL-STRUCT-04  Description is <= 1024 chars (Anthropic spec hard limit)
+       EVAL-STRUCT-05  Frontmatter parses as valid YAML (catches unquoted colons,
+                       malformed mappings, and other syntax errors that break the
+                       skill manifest on GitHub and at plugin-load time)
 
 CAT-5  Cross-Skill Completeness
        Checks that skills reference each other correctly and that the
@@ -85,6 +88,12 @@ try:
     _ENCODER = tiktoken.get_encoding("cl100k_base")
 except ImportError:
     _ENCODER = None
+
+try:
+    import yaml
+    _YAML = yaml
+except ImportError:
+    _YAML = None
 
 
 def count_tokens(text):
@@ -277,6 +286,22 @@ def check_structure(name, text):
             f"EVAL-STRUCT-04 [{name}] description is {len(desc)} chars, "
             f"exceeds Anthropic's {DESCRIPTION_CHAR_LIMIT}-char limit"
         )
+
+    # EVAL-STRUCT-05: frontmatter must parse as valid YAML.
+    # Without this, descriptions with unquoted colons (e.g., "data model: add a
+    # column") render fine to a regex-extractor but break GitHub's YAML parser
+    # and any agent that loads the skill via a real YAML library.
+    if _YAML is not None:
+        try:
+            _YAML.safe_load(frontmatter)
+        except _YAML.YAMLError as e:
+            mark = getattr(e, "problem_mark", None)
+            loc = f" (line {mark.line + 1} col {mark.column + 1})" if mark else ""
+            failures.append(
+                f"EVAL-STRUCT-05 [{name}] frontmatter is not valid YAML{loc}: "
+                f"{getattr(e, 'problem', str(e))} -- "
+                f"common cause: an unquoted colon in the description value"
+            )
 
     return failures
 

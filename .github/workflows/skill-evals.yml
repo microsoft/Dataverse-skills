@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install tiktoken (for CAT-8 token-budget evals)
-        run: pip install tiktoken
+      - name: Install eval dependencies (tiktoken for CAT-8, pyyaml for CAT-4 STRUCT-05)
+        run: pip install tiktoken pyyaml
 
       - name: Run static eval suite
         run: python .github/evals/static_checks.py

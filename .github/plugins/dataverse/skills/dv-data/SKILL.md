@@ -7,25 +7,6 @@ description: Record-level CRUD and bulk operations via the Python SDK — create
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
 
-## Preview Before Running — Scope by Operation Type
-
-Two rules, different strictness:
-
-- **Destructive / stateful operations** (create, update, delete, bulk-import, upsert records) — preview the action in plain prose: which table, how many records, and which environment, using placeholders (`<ENV_URL>`) for anything unknown. Reference the documented snippet by name rather than pasting the full block inline. Ask for confirmation and missing values in the same turn.
-- **Read-only or scoped-reference operations** (schema inspection, looking up a record count, explaining what you'll run from a documented snippet) — a one-sentence prose preview is enough.
-
-**Key principle:** the user should be able to evaluate what's about to happen from your first response. A bare *"which environment?"* fails that test; a one-line prose preview passes it.
-
-### Examples
-
-**Generate N sample records (destructive — preview the snippet, ask for env):**
-- ❌ "Which environment should I target? Please provide the Dataverse URL."
-- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
-
-**Sample data on a custom entity (schema unknown — prose is enough):**
-- ❌ "I need more info about the entity. What are the required fields?"
-- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."
-
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
@@ -365,3 +346,13 @@ For the schema-driven `fake()` template, the `EntityDefinitions` query, and the 
 Key invariants:
 - Skip Lookup, Uniqueidentifier, State, Status, Owner, Customer fields unless the user explicitly provides values.
 - `UserLocalizedLabel` may be null — dereference safely.
+
+### Confirmation-flow examples
+
+**Generate N sample records (destructive — preview the snippet, ask for env):**
+- ❌ "Which environment should I target? Please provide the Dataverse URL."
+- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
+
+**Sample data on a custom entity (schema unknown — prose is enough):**
+- ❌ "I need more info about the entity. What are the required fields?"
+- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."
