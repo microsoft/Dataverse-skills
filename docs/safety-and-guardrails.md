@@ -129,16 +129,7 @@ For details on Dataverse auditing, see [Microsoft's auditing documentation](http
 
 ## Telemetry
 
-**The plugin does not phone home.** There is no active usage telemetry. No data about your usage, queries, or environment is transmitted to any external service beyond the Dataverse Web API calls to your own tenant.
-
-Usage metrics are gathered passively through public GitHub repository signals (clone counts, stars, forks) only.
-
-If telemetry is introduced in the future, it will be:
-
-- **Opt-in**, not opt-out
-- Free of PII (no email, username, tenant ID, or environment URL)
-- Not in the authentication code path
-- Documented in the README before activation
+The plugin may add an application identifier to its outbound Dataverse requests so server-side dashboards can attribute traffic. The identifier carries plugin / version / skill / agent labels — application-level metadata only, not personal data. Prompts, tool arguments, record data, file contents, and command strings are not transmitted.
 
 ## Areas Under Exploration
 

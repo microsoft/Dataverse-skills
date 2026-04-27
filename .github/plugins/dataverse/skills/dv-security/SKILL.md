@@ -1,14 +1,6 @@
 ---
 name: dv-security
-description: >
-  Assign security roles, manage user access, and handle admin self-elevation in Dataverse environments.
-  Use when: "assign role", "system admin", "security role", "give me admin role",
-  "assign system administrator", "role assignment", "make me admin",
-  "self-elevate", "admin access", "assign user", "application user",
-  "business unit", "who has access", "user permissions".
-  Do not use when: creating or modifying tables (use dv-metadata),
-  managing org settings or audit (use dv-admin),
-  tenant governance like DLP (use pac admin --help).
+description: Security-role assignment, user access, application users, business units, and admin self-elevation in Dataverse environments. Use when the user wants to give someone access, grant a role, become an admin, or add a service principal.
 ---
 
 # Skill: Security — Role Assignment and Self-Elevation
@@ -23,17 +15,13 @@ Role grants and self-elevate are destructive (they change security posture and a
 
 ### Examples
 
-<example operation="assign role (user given, env missing)">
-<user>Assign System Administrator role to user@contoso.com</user>
-<bad>Which environment should I target?</bad>
-<good>I'll assign **System Administrator** to `user@contoso.com` on `<ENV_URL>`. Confirm to proceed and provide the target environment URL (or "all" to list and batch).</good>
-</example>
+**Assign role (user given, env missing):**
+- ❌ "Which environment should I target?"
+- ✅ "I'll assign **System Administrator** to `user@contoso.com` on `<ENV_URL>`. Confirm to proceed and provide the target environment URL (or 'all' to list and batch)."
 
-<example operation="admin access across all environments">
-<user>Give me admin access on all my environments</user>
-<bad>Please provide your email address.</bad>
-<good>I'll list your environments, then assign **System Administrator** in parallel on each one for `<YOUR_UPN>`. If `assign-user` fails on any environment, I'll fall back to self-elevate (logged to Purview) for that one. Confirm to proceed and provide your UPN.</good>
-</example>
+**Admin access across all environments:**
+- ❌ "Please provide your email address."
+- ✅ "I'll list your environments, then assign **System Administrator** in parallel on each one for `<YOUR_UPN>`. If `assign-user` fails on any environment, I'll fall back to self-elevate (logged to Purview) for that one. Confirm to proceed and provide your UPN."
 
 ## Skill boundaries
 

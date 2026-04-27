@@ -32,7 +32,7 @@ We welcome new skill contributions! To add a new skill:
    - Clear step-by-step instructions
    - SDK-first approach: use `PowerPlatform-Dataverse-Client` for all supported operations, raw Web API only for gaps
    - Output formatting examples
-5. **Test locally** using `claude --plugin-dir` (see [README.md](README.md#local-development))
+5. **Test locally** using `claude --plugin-dir` (see [Local Development](#local-development) below)
 6. **Submit a pull request** with a clear description of what the skill does and why it's useful
 
 ### Improving Existing Skills
@@ -52,9 +52,47 @@ We welcome new skill contributions! To add a new skill:
 
 1. Update relevant documentation if your change affects usage
 2. Ensure your skill follows the existing formatting patterns
-3. Test your changes locally with `claude --plugin-dir`
+3. Test your changes locally with `claude --plugin-dir` (see [Local Development](#local-development) below)
 4. Your PR will be reviewed by maintainers
 5. Once approved, a maintainer will merge your contribution
+
+## Local Development
+
+Clone the repository:
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+```
+
+Then run the plugin against your local clone with the agent you're testing. The agents differ in how they load plugins from a local path: Claude Code reads the plugin directory on every launch, so edits are picked up automatically. Copilot copies the plugin into its store at install time, so refreshing after edits requires uninstall + reinstall.
+
+### Testing with GitHub Copilot CLI
+
+Install directly from your local plugin directory:
+
+```bash
+copilot plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+After making local changes (or pulling), uninstall and reinstall to refresh Copilot's copy:
+
+```bash
+copilot plugin uninstall dataverse@dataverse-skills
+copilot plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+### Testing with Claude Code
+
+Launch Claude Code with the plugin loaded from your local clone — no install or uninstall needed; edits take effect on the next launch:
+
+```bash
+# In a fresh test folder
+mkdir my-test-project && cd my-test-project
+
+claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
+```
+
+Quote the path if it contains spaces or special characters; use an absolute path.
 
 ## Legal
 

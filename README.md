@@ -2,22 +2,26 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Agent skills and MCP configuration for [Microsoft Dataverse](https://aka.ms/DVinWorkIQLearnMore) — works with Claude Code and GitHub Copilot. These skills teach AI agents how to build and manage Dataverse solutions using natural language.
+Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-platform-intro) through natural language. The plugin teaches AI coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — for everything from designing data models and answering CRM questions to deploying solutions across environments.
 
-Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) folder for the full catalog.
+| Skill | What it does |
+|---|---|
+| **dv-connect** | One-time setup that installs the Dataverse CLI, Python SDK, and PAC CLI; authenticates against your Dataverse environment; and registers the Dataverse MCP server with your agent. |
+| **dv-query** | Reads, filters, paginates, and aggregates Dataverse records. Handles natural-language questions like *"show me my open deals"*, multi-page result sets, and pandas DataFrame loading for notebook analysis. |
+| **dv-data** | Single-record CRUD plus bulk import — CSV loads, multi-table imports with foreign-key dependencies, upsert by alternate key, and AI-generated sample data. |
+| **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
+| **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
+| **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
+| **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
+| **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
+
+Browse [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) for the full source.
 
 ## Prerequisites
 
-- **Microsoft Dataverse** environment (included with Power Apps, Dynamics 365, or Power Platform)
-- **Python 3.10+** and **Node.js 18+**
+A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, or Power Platform plans, or via the free [Power Apps Developer Plan](https://learn.microsoft.com/en-us/power-platform/developer/plan).
 
-## Getting Started
-
-### Claude Code
-
-```bash
-/plugin install dataverse@claude-plugins-official
-```
+## Install
 
 ### GitHub Copilot
 
@@ -25,75 +29,45 @@ Browse the [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skill
 /plugin install dataverse@awesome-copilot
 ```
 
-## What's Included
-
-- **8 skills** covering connection setup, metadata authoring, solution management, data writes, queries/analytics, environment admin, security/role management, and tool routing
-- **MCP server** configuration for Dataverse Web API access
-- **Scripts** for authentication and MCP client enablement
-- **Templates** for CLAUDE.md project files
-
-## Local Development
-
-Clone the repository first:
+### Claude Code
 
 ```bash
-git clone https://github.com/microsoft/Dataverse-skills.git
+/plugin install dataverse@claude-plugins-official
 ```
 
-### Testing with Claude Code
+## Verify the install
 
-Test the plugin locally without installing from a marketplace:
+After installation, ask your agent:
 
-```bash
-# 1. Create and cd into a fresh test folder
-mkdir my-test-project
-cd my-test-project
+> "Connect to Dataverse"
 
-# 2. Launch Claude Code with the plugin loaded from your local clone
-claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
+The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server registered with your agent, and `pac auth list` should show your active environment.
 
-# 3. Start with a natural language prompt, e.g.:
-#    "Create a support ticket table with customer and agent lookups"
-```
+## Try these prompts
 
-The `--plugin-dir` path **must be in double quotes** if it contains spaces or special characters. Use the absolute path to the plugin directory in your local clone of this repo.
+After the connect flow finishes, describe what you want — the plugin picks MCP, the Dataverse CLI, the Python SDK, or PAC CLI for you.
 
-### Testing with GitHub Copilot CLI
-
-To register the local plugin marketplace from the cloned repository and install the plugin:
-
-```bash
-copilot plugin marketplace add <path/to/repo>/Dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-To reinstall the plugin after pulling or making local changes:
-
-```bash
-copilot plugin uninstall dataverse@dataverse-skills
-copilot plugin install dataverse@dataverse-skills
-```
-
-To install the local version directly without marketplace registration:
-
-```bash
-copilot plugin install <path/to/repo>/.github/plugins/dataverse
-```
+- *"Show me my open deals over $100K closing this quarter"*
+- *"Import this CSV into the contacts table"*
+- *"Create a customer feedback table with name, rating, and comment columns"*
+- *"Pull the schema and pack it into a solution"*
+- *"Bulk delete activities older than 2024"*
+- *"Add a teammate to the sales team on the dev environment"*
 
 ## Safety & Security
 
 The plugin is designed around a least-privilege model — it cannot exceed the permissions of the authenticated user. Key safeguards:
 
-- **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly
-- **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions
-- **No plugin telemetry** — the plugin does not collect or transmit usage analytics; data flows only to Dataverse within your tenant and to the AI host (Claude or Copilot) as part of normal operation
-- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services
+- **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly.
+- **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions.
+- **Application-level telemetry only** — outbound Dataverse requests may carry application metadata (plugin / version / skill / agent labels) so server-side dashboards can attribute traffic. No prompts, tool arguments, or record data are transmitted.
+- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services.
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 
 ## Contributing
 
-We welcome contributions — new skills, improvements to existing ones, and bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions — new skills, improvements to existing ones, and bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and local-development instructions.
 
 ## Trademarks
 

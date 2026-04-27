@@ -51,6 +51,37 @@ The one exception: Jupyter notebook blocks use `InteractiveBrowserCredential` di
 
 Every `python` fenced block must contain at least one executable line. Comment-only blocks (`# POST to ...`) must either be completed or removed. Use a plain (unlabelled) fence for non-executable fragments.
 
+### Frontmatter description
+
+Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
+
+Example: `Record-level CRUD and bulk operations via the Python SDK — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
+
+### Token budget — Anthropic Skills spec
+
+- **Frontmatter (Level 1, always loaded):** ≤ 200 tokens. Strive for ~100.
+- **SKILL.md body (Level 2, loaded on trigger):** ≤ 5,000 tokens.
+- **`references/<topic>.md` (Level 3, loaded on demand):** unlimited.
+
+When a skill body grows past ~4,000 tokens, split long content (Python snippets, edge-case tables, deep-dive workflows) into `references/<topic>.md`. The body keeps a Quick Reference + key invariants + a one-line pointer to the reference. Keep references one level deep — body links directly, references don't link to other references.
+
+### Critical safety callout
+
+For skills with destructive or irreversible operations (e.g., bulk delete, role assignment, env settings), surface the most-critical rules in a top-of-file callout block right after the H1, not buried mid-body:
+
+```markdown
+> ## ⚠️ Critical safety rules — read first
+> 1. <hard-stop rule that's destructive and irreversible>
+> 2. <allowlist refusal directive, if any>
+> ...
+```
+
+The body still contains the full enforcement detail; the callout exists so the rules are visible even if a reader doesn't scroll.
+
+### Anti-hallucination tables
+
+For command-heavy skills (PAC CLI, etc.), include a Wrong/Correct mapping table. Eval data on this plugin showed flag hallucination drop from ~58% to ~2.5% with these tables present. One per command group is enough.
+
 ### Skill boundaries
 
 Every skill except `dv-overview` and `dv-connect` must have a `## Skill boundaries` section listing what it does not cover and which skill to use instead. This is the primary routing signal for the agent when it hits an out-of-scope request.
@@ -78,9 +109,19 @@ Then describe a task that exercises the changed skill in plain English. The agen
 
 ## Commit and PR Conventions
 
-- Prefix commits with `feat:`, `fix:`, `refactor:`, `add:`, or `docs:`
+- Prefix commits with `feat:`, `fix:`, `refactor:`, `add:`, or `docs:`. Plain prefix only — no scopes (`feat(skills):` etc.) — the `Validate PR title and body` check rejects them.
 - PR descriptions: lead with the theme of the change, not a per-line changelog
 - Run `python .github/evals/static_checks.py` and confirm it passes before opening a PR
+
+### Branch protection (enforced)
+
+`main` requires:
+- 2 approvals, **both** from `@microsoft/dataverse-skills-maintainers`
+- Status checks: `Static skill checks`, `Validate PR title and body`, `CodeQL`, `license/cla`
+- Last-push approval (any new commit voids prior approvals)
+- Stale-review dismissal on push
+
+Contributors who aren't on the maintainers team need two team members to review. Drive-by approvals from non-maintainers don't count toward the merge requirement.
 
 ## Version Bumping
 
@@ -117,11 +158,11 @@ It compares your branch to `main` and flags common mistakes — e.g., adding a n
 - New keywords or metadata fields
 - Expanding skill boundaries to cover new scenarios
 
-**PATCH (z)** — Backward-compatible fixes:
+**PATCH (z)** — Backward-compatible fixes and refactors with no user-visible change:
 - Bug fixes in code examples
 - Typo and grammar corrections
 - Clarifying prose without changing behavior
 - Updating links or references
-- Minor refactors that don't change skill routing
+- Refactors that preserve every routing trigger and behavior (e.g., splitting a long body into `references/`, deduplicating tables, rewording a description while preserving the same triggers)
 
 **Note:** No need to update the `version` field in the [awesome-copilot marketplace](https://github.com/github/awesome-copilot/blob/main/plugins/external.json). The entry there tracks the default branch of this repo, so version updates propagate automatically. The `version` field in awesome-copilot is cosmetic-only.

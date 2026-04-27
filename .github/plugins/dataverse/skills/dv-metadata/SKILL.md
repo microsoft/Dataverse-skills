@@ -1,12 +1,6 @@
 ---
 name: dv-metadata
-description: >
-  Create and modify Dataverse tables, columns, relationships, forms, and views using the Python SDK and Web API.
-  Use when: "add column", "create table", "add relationship", "lookup column", "create form",
-  "create view", "modify form", "FormXml", "SavedQuery", "option set", "picklist",
-  "MetadataService", "EntityDefinitions".
-  Do not use when: writing data records (use dv-data), reading or querying records (use dv-query),
-  exporting solutions (use dv-solution).
+description: Dataverse schema authoring via the Python SDK and Web API — tables, columns, relationships, forms, and views. Use when the user wants to define or evolve the data model — add a column, create a table, set up a lookup, customize a form, or build a view.
 ---
 
 # Skill: Metadata — Making Changes
@@ -315,205 +309,22 @@ body = {
 
 ---
 
-## Forms
+## Forms and Views
 
-Neither the MCP server nor the Python SDK supports forms. Use the Web API directly.
+The MCP server and Python SDK do not support forms or views — both require raw Web API calls (`urllib`).
 
-### Create a form
+**Quick reference:**
+- **Create form:** `POST /api/data/v9.2/systemforms` with `formxml` (form type: `2`=Main, `7`=Quick Create, `6`=Quick View, `11`=Card).
+- **Modify form:** `GET` filtered by `objecttypecode` + `type`, edit `formxml`, `PATCH` back, then publish.
+- **Publish:** `POST /api/data/v9.2/PublishXml` with `<importexportxml><entities><entity>...` — required for forms to take effect.
+- **Create view:** `POST /api/data/v9.2/savedqueries` with `fetchxml` + `layoutxml` (querytype: `0`=standard, `1`=advanced find default, `2`=associated, `4`=quick find).
 
-```python
-# POST /api/data/v9.2/systemforms
-import os, sys, json, urllib.request
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK does not support forms
+For full code samples, the form-XML templates, the control `classid` table for editing existing forms, and the publish workflow, see [`references/forms-and-views.md`](references/forms-and-views.md).
 
-load_env()
-env = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-
-form_xml = """<form type="7" name="Project Budget" id="{FORM-GUID}">
-  <tabs>
-    <tab name="{TAB-GUID}" id="{TAB-GUID}" expanded="true" showlabel="true">
-      <labels><label description="General" languagecode="1033" /></labels>
-      <columns><column width="100%">
-        <sections>
-          <section name="{SEC-GUID}" id="{SEC-GUID}" showlabel="false" showbar="false" columns="111">
-            <labels><label description="General" languagecode="1033" /></labels>
-            <rows>
-              <row>
-                <cell id="{CELL-GUID-1}" showlabel="true">
-                  <labels><label description="Name" languagecode="1033" /></labels>
-                  <control id="new_name" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}"
-                           datafieldname="new_name" disabled="false" />
-                </cell>
-              </row>
-            </rows>
-          </section>
-        </sections>
-      </column></columns>
-    </tab>
-  </tabs>
-  <header><rows /></header><footer><rows /></footer>
-</form>"""
-
-body = {
-    "name": "Project Budget Quick Create",
-    "objecttypecode": "new_projectbudget",
-    "type": 7,           # 7 = quick create, 2 = main
-    "formxml": form_xml,
-    "iscustomizable": {"Value": True}
-}
-
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/systemforms",
-    data=json.dumps(body).encode(),
-    headers={"Authorization": f"Bearer {token}",
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0",
-             "OData-Version": "4.0"},
-    method="POST"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Created. FormId: {resp.headers.get('OData-EntityId')}")
-```
-
-**Form type codes:** `2` = Main, `7` = Quick Create, `6` = Quick View, `11` = Card
-
-### Retrieve and modify an existing form
-
-```python
-# env and token must be initialized (see form creation setup above)
-import json, urllib.request  # SDK does not support forms — raw Web API required
-
-# Step 1: GET the form
-url = (f"{env}/api/data/v9.2/systemforms"
-       f"?$filter=objecttypecode eq 'new_projectbudget' and type eq 2"
-       f"&$select=formid,name,formxml")
-req = urllib.request.Request(url, headers={
-    "Authorization": f"Bearer {token}",
-    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
-})
-with urllib.request.urlopen(req) as resp:
-    forms = json.loads(resp.read()).get("value", [])
-
-if not forms:
-    raise ValueError("Form not found")
-
-form_id = forms[0]["formid"]
-form_xml = forms[0]["formxml"]
-
-# Step 2: Modify form_xml string as needed (e.g., add a control, reorder fields)
-# form_xml = form_xml.replace(...)
-
-# Step 3: PATCH the form back
-patch_body = json.dumps({"formxml": form_xml}).encode()
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/systemforms({form_id})",
-    data=patch_body,
-    headers={"Authorization": f"Bearer {token}",
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
-    method="PATCH"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Updated. Status: {resp.status}")
-# Then publish (see Publish section below)
-```
-
-### Publish forms after create/modify
-
-Forms must be published to take effect. Do this immediately after creating or modifying a form. `env` and `token` come from the form creation setup block above — if publishing standalone, re-initialize them:
-```python
-# env and token must be initialized (see form creation setup above)
-# SDK does not support form publishing — raw Web API required
-body = json.dumps({
-    "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"
-}).encode()
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/PublishXml",
-    data=body,
-    headers={"Authorization": f"Bearer {token}",
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
-    method="POST"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Published. Status: {resp.status}")
-```
-Replace `new_projectbudget` with the logical name of the entity whose form you modified.
-
----
-
-## Views
-
-Neither the MCP server nor the Python SDK supports views. Use the Web API directly.
-
-### Create a view
-
-```python
-# POST /api/data/v9.2/savedqueries
-fetch_xml = """<fetch version="1.0" output-format="xml-platform" mapping="logical">
-  <entity name="new_projectbudget">
-    <attribute name="new_name" />
-    <attribute name="new_amount" />
-    <attribute name="new_status" />
-    <order attribute="new_name" descending="false" />
-    <filter type="and">
-      <condition attribute="statecode" operator="eq" value="0" />
-      <condition attribute="ownerid" operator="eq-userid" />
-    </filter>
-  </entity>
-</fetch>"""
-
-layout_xml = """<grid name="resultset" jump="new_name" select="1" icon="1" preview="1">
-  <row name="result" id="new_projectbudgetid">
-    <cell name="new_name" width="200" />
-    <cell name="new_amount" width="125" />
-    <cell name="new_status" width="125" />
-  </row>
-</grid>"""
-
-body = {
-    "name": "My Open Budgets",
-    "returnedtypecode": "new_projectbudget",
-    "querytype": 0,       # 0 = standard view
-    "fetchxml": fetch_xml,
-    "layoutxml": layout_xml,
-    "isdefault": False,
-    "isprivate": False,
-    "isquickfindquery": False,
-}
-# POST to /api/data/v9.2/savedqueries
-```
-
-**querytype values:** `0` = standard view, `1` = advanced find default, `2` = associated view, `4` = quick find
-
----
-
-## When to Edit Existing Form XML Directly
-
-If the form is already in the repo (pulled via `pac solution unpack`), targeted edits are acceptable — e.g., reordering fields, changing a label, adding a control to an existing section. For these cases, use this control classid reference:
-
-| Field type | Control classid |
-|---|---|
-| Text (nvarchar) | `{4273EDBD-AC1D-40d3-9FB2-095C621B552D}` |
-| Currency (money) | `{533B9108-5A8B-42cb-BD37-52D1B8E7C741}` |
-| Choice (picklist) | `{3EF39988-22BB-4f0b-BBBE-64B5A3748AEE}` |
-| Lookup | `{270BD3DB-D9AF-4782-9025-509E298DEC0A}` |
-| Date/Time | `{5B773807-9FB2-42db-97C3-7A91EFF8ADFF}` |
-| Whole Number | `{C6D124CA-7EDA-4a60-AEA9-7FB8D318B68F}` |
-| Decimal | `{C3EFE0C3-0EC6-42be-8349-CBD9079C5A6F}` |
-| Toggle (boolean) | `{67FAC785-CD58-4f9f-ABB3-4B7DDC6ED5ED}` |
-| Subgrid | `{E7A81278-8635-4d9e-8D4D-59480B391C5B}` |
-| Multiline Text (memo) | `{E0DECE4B-6FC8-4a8f-A065-082708572369}` |
-
-All `id` attributes in form XML must be unique GUIDs. Generate them inside your Python script:
-```python
-import uuid
-guid = str(uuid.uuid4()).upper()
-```
-
-**Do not use `python -c` for GUID generation on Windows** — multiline `python -c` commands break in Git Bash due to quoting differences. Always write a `.py` script instead.
+Key invariants:
+- All `id` attributes in form XML must be unique GUIDs (`str(uuid.uuid4()).upper()`).
+- Do not use `python -c` for GUID generation on Windows — write a `.py` file.
+- Forms must be published after every create or modify, otherwise changes are invisible to users.
 
 ---
 
@@ -575,52 +386,17 @@ Always translate error codes to plain English before presenting them to the user
 
 ## Metadata Propagation Delays and Lock Contention
 
-After creating tables, columns, or alternate keys, Dataverse runs internal metadata operations (index building, cache propagation) that can take 3-30 seconds. Submitting another metadata operation while these are still running causes lock contention errors ("another operation is running").
+After creating tables / columns / alternate keys, Dataverse runs internal metadata operations (index build, cache propagation) for 3–30 seconds. Submitting another metadata operation while these run causes lock-contention errors.
 
-**Common symptoms:**
-- Picklist columns fail with `0x80040216` immediately after table creation
-- Lookup `@odata.bind` operations fail with "Invalid property" shortly after column creation
+**Mitigation — phased creation, not interleaved.** Create ALL tables → wait 15–30s → create ALL alternate keys → wait 15–30s → create ALL lookups. Do NOT interleave operations on the same table.
+
+**Symptoms** (any of these means propagation isn't done):
+- Picklist column creation fails with `0x80040216`
+- Lookup `@odata.bind` fails with "Invalid property"
 - `update_table` (MCP) fails with "EntityId not found in MetadataCache"
-- Alternate key creation fails with lock contention after table creation
-- Lookup creation fails with "another customization operation is running"
+- Lookup or alternate-key creation fails with "another customization operation is running"
 
-**Mitigation — use phased creation, not interleaved:**
-
-When creating many tables with alternate keys and lookups (e.g., multi-table import schema), create them in phases rather than interleaving operations on the same table:
-
-1. **Phase 1: Create ALL tables** (5-8s delay between each)
-2. **Wait 15-30s** for metadata propagation
-3. **Phase 2: Create ALL alternate keys** (3s delay between each)
-4. **Wait 15-30s** for index building
-5. **Phase 3: Create ALL lookups** (3s delay between each)
-
-Do NOT interleave: `create table A → create key A → create table B → create key B`. This causes lock contention because key A's index build blocks table B's creation.
-
-**Retry pattern:** Wrap all metadata operations with retry for transient lock errors:
-
-```python
-import time
-
-def retry_metadata(fn, description, max_attempts=5):
-    for attempt in range(max_attempts):
-        try:
-            return fn()
-        except Exception as e:
-            err = str(e)
-            if "already exists" in err.lower() or "0x80040237" in err:
-                print(f"  {description}: already exists, skipping")
-                return None
-            if "another" in err.lower() and "running" in err.lower():
-                wait = 10 * (attempt + 1)
-                print(f"  {description}: lock contention, waiting {wait}s (attempt {attempt+1}/{max_attempts})...")
-                time.sleep(wait)
-                continue
-            raise
-    print(f"  WARNING: {description} failed after {max_attempts} attempts")
-    return None
-```
-
----
+For the `retry_metadata` helper that catches transient lock errors and the full phased-creation sequence, see [`references/metadata-propagation.md`](references/metadata-propagation.md).
 
 ## Session Closing: Pull to Repo
 
@@ -659,86 +435,15 @@ GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=Lo
 
 ## Alternate Keys (Required for Upsert)
 
-An alternate key tells Dataverse how to uniquely identify a record using a business column instead of the GUID primary key. This is required for `UpsertMultiple` — without it, Dataverse has no way to detect whether a record already exists.
+`UpsertMultiple` requires an alternate key on the column(s) Dataverse should use to identify existing records. Always create alternate keys on source-system ID columns (`prefix_Src*Id`) at schema-setup time so every import is idempotent.
 
-**When to create alternate keys:** Always create them on source-system ID columns (`prefix_Src*Id`) during schema setup, before data import. This makes every import idempotent from the start — re-running never creates duplicates.
+**Quick reference:**
+- SDK call: `client.tables.create_alternate_key(table, key_name, [columns], display_name=...)`. Composite keys: pass multiple columns.
+- Wrap in try/except for `HttpError` containing `"already exists"` or `0x80048d0b` to make the script re-runnable.
+- Index creation is **async** — for large tables, poll `client.tables.get_alternate_keys(table)` until `status == "Active"` before using.
+- Constraints: max 16 columns / 900 bytes / 10 keys per table; valid types are Integer / Decimal / String / DateTime / Lookup / OptionSet.
 
-**How the agent decides which column:**
-- **Database source (SQLite, SQL Server):** Read the schema to identify primary keys — this is unambiguous. The source PK column maps directly to the alternate key:
-  - Source `Country.Country_Id` (INTEGER PRIMARY KEY) → alternate key on `prefix_srccountryid`
-  - Source composite PK (`Order_Id, Line_No`) → composite alternate key on both columns
-- **Excel/CSV source:** Inspect the data for columns with all-unique values and naming conventions suggesting an ID (`*_ID`, `*_Code`). **Propose the candidate to the user and get confirmation** before creating the key — uniqueness in the current data doesn't guarantee it's the intended business key.
-- **No identifiable unique column:** Ask the user which column(s) uniquely identify each row. Do not guess.
-
-**SDK approach (preferred):**
-
-```python
-import os, sys
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
-
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
-
-# Single-column key (most common for imports)
-key = client.tables.create_alternate_key(
-    "prefix_Country",
-    "prefix_SrcCountryIdKey",
-    ["prefix_srccountryid"],
-    display_name="Source Country ID",
-)
-print(f"Key created: {key.schema_name} (status: {key.status})")
-
-# Composite key (for tables with multi-column PKs in the source)
-key = client.tables.create_alternate_key(
-    "prefix_OrderLine",
-    "prefix_OrderLineSourceKey",
-    ["prefix_srcorderid", "prefix_srclineno"],
-    display_name="Source Order Line Key",
-)
-```
-
-**Idempotent key creation** — catch "already exists" to make the script re-runnable:
-
-```python
-from PowerPlatform.Dataverse.core.errors import HttpError
-
-def ensure_alternate_key(table, key_name, columns, display_name):
-    try:
-        key = client.tables.create_alternate_key(table, key_name, columns, display_name=display_name)
-        print(f"  Key created: {key_name} on {table}")
-    except HttpError as e:
-        if "already exists" in str(e).lower() or "0x80048d0b" in str(e):
-            print(f"  Key already exists: {key_name}")
-        else:
-            raise
-
-# Create keys for all import tables
-ensure_alternate_key("prefix_Country", "prefix_SrcCountryIdKey",
-    ["prefix_srccountryid"], "Source Country ID")
-ensure_alternate_key("prefix_City", "prefix_SrcCityIdKey",
-    ["prefix_srccityid"], "Source City ID")
-```
-
-**Check key status** — index creation is async for tables with existing data:
-
-```python
-keys = client.tables.get_alternate_keys("prefix_Country")
-for k in keys:
-    print(f"  {k.schema_name}: {k.status}")  # Pending, Active, or Failed
-```
-
-**Constraints:**
-- Valid column types for keys: Integer, Decimal, String, DateTime, Lookup, OptionSet
-- Max 16 columns per key, 900 bytes total key size
-- Max 10 alternate keys per table
-- Index creation is **async** — Dataverse builds the index in the background. For small tables (<10K rows) this is near-instant. For large existing tables, check `EntityKeyIndexStatus` for Active/Failed before using the key.
-- If the key column has non-unique data, index creation **fails** (no data corruption — the key just stays in Failed state). Fix the data, then call `ReactivateEntityKey`.
-
-**Safety:** Creating an alternate key on a column with unique data is a non-destructive metadata operation. It adds a database index — it does not modify existing records. If the column data isn't actually unique, the key creation fails harmlessly.
-
----
+For SDK code samples (single + composite + idempotent + status-check), the agent decision rules for which column to pick (DB source vs Excel/CSV), and the failure-handling notes, see [`references/alternate-keys.md`](references/alternate-keys.md).
 
 ## EntityDefinitions Filter Limitation
 
