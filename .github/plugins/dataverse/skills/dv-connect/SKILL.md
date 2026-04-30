@@ -52,7 +52,7 @@ If any tool is missing, install it (see [tools-setup.md](references/tools-setup.
 
 After Python is confirmed:
 ```
-pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
+pip install --upgrade "azure-identity" "requests" "PowerPlatform-Dataverse-Client>=0.1.0b9" "pandas"
 ```
 
 After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
