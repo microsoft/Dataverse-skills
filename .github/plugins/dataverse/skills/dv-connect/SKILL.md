@@ -202,7 +202,7 @@ Both must succeed. Confirm the environment URL matches the intended target.
 ## Step 6: Configure MCP server
 
 **Skip this step** if MCP is already configured:
-- `.mcp.json` or `~/.copilot/mcp-config.json` or `.mcp/copilot/mcp.json` contains a Dataverse server entry
+- `.mcp.json` or `~/.copilot/mcp-config.json` contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server registered
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
