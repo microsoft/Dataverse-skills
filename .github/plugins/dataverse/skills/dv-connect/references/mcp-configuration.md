@@ -40,7 +40,7 @@ The options are:
 
 Based on the scope, set the `CONFIG_PATH` variable:
 - **Global**: `~/.copilot/mcp-config.json` (use the user's home directory)
-- **Project**: `.mcp/copilot/mcp.json` (relative to the current working directory)
+- **Project**: `.mcp.json` (relative to the current working directory)
 
 Store this path for use in steps 2 and 5.
 
@@ -233,21 +233,16 @@ This is the `SERVER_NAME`.
 
 **Update the configuration file:**
 
-1. If `CONFIG_PATH` is for a **project-scoped** configuration (`.mcp/copilot/mcp.json`), ensure the directory exists first:
-   ```bash
-   mkdir -p .mcp/copilot
-   ```
-
-2. Read the existing configuration file at `CONFIG_PATH`, or create a new empty config if it doesn't exist:
+1. Read the existing configuration file at `CONFIG_PATH`, or create a new empty config if it doesn't exist:
    ```json
    {}
    ```
 
-3. Determine which top-level key to use:
+2. Determine which top-level key to use:
    - If the config already has `"servers"`, use that
    - Otherwise, use `"mcpServers"`
 
-4. Add or update the server entry:
+3. Add or update the server entry:
    ```json
    {
      "mcpServers": {
@@ -259,7 +254,7 @@ This is the `SERVER_NAME`.
    }
    ```
 
-5. Write the updated configuration back to `CONFIG_PATH` with proper JSON formatting (2-space indentation).
+4. Write the updated configuration back to `CONFIG_PATH` with proper JSON formatting (2-space indentation).
 
 **Important notes:**
 - Do NOT overwrite other entries in the configuration file
@@ -414,7 +409,7 @@ If something goes wrong, help the user check:
   3. Verify the MCP Client ID appears under **Allowed clients**
 - If using the Preview endpoint, verify that the Preview MCP endpoint is also enabled in the same Features page
 - **If TOOL_TYPE is `copilot`:**
-  - For project-scoped configuration, ensure the `.mcp/copilot/mcp.json` file was created successfully
+  - For project-scoped configuration, ensure the `.mcp.json` file was created successfully
   - For global configuration, check permissions on the `~/.copilot/` directory
 - **If TOOL_TYPE is `claude`:**
   - Ensure the `claude` CLI is installed and available in their PATH
