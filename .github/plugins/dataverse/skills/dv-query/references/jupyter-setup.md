@@ -23,7 +23,7 @@ df.head()
 
 **Prerequisites:**
 ```bash
-pip install --upgrade PowerPlatform-Dataverse-Client pandas matplotlib seaborn azure-identity
+pip install --upgrade "PowerPlatform-Dataverse-Client>=0.1.0b9" "pandas" "matplotlib" "seaborn" "azure-identity"
 ```
 
 `pandas>=2.0.0` is a required dependency of the SDK (since b7) and is installed automatically with `--upgrade`.
