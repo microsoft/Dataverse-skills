@@ -158,15 +158,18 @@ client.records.delete("new_ticket", "<record-guid>")
 
 ---
 
-## Bulk Create (SDK uses CreateMultiple internally)
+## Bulk Create (loop-based for clarity)
 
 ```python
-records = [{"new_name": f"Ticket {i}", "new_priority": 100000000} for i in range(500)]
-guids = client.records.create("new_ticket", records)
+guids = []
+for i in range(500):
+    record = {"new_name": f"Ticket {i}", "new_priority": 100000000}
+    guid = client.records.create("new_ticket", record)
+    guids.append(guid)
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: MCP `create_record` for 1-10 records. SDK for 10+ records.
+Volume guidance: this is the simplest pattern for any volume — one record at a time.
 
 **Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse has no fixed record count limit — the constraints are payload size and request timeout (SDK default: 120s for POST). For larger datasets, you **must** chunk in your script. The `bulk_upsert` and `bulk_create` helpers below use adaptive chunking: start at 1,000, double on success (up to 4,000), halve on payload/timeout failure, and cap at the last successful size. Tables with few columns can handle larger chunks than tables with many columns.
 
