@@ -52,7 +52,7 @@ import requests                        # WRONG for SDK-supported ops
 - Record writes: create, update, delete
 - Record reads within write workflows (e.g., lookup resolution) — for standalone queries see **dv-query**
 - Upsert (with alternate key support)
-- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
+- Per-record operations only — call `client.records.create()` for each record in a loop
 - File column uploads (chunked for files >128MB)
 - Context manager with HTTP connection pooling
 
@@ -169,9 +169,9 @@ for i in range(500):
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: this is the simplest pattern for any volume — one record at a time.
+Volume guidance: this loop pattern is the simplest pattern for any volume — one record at a time. There is no batch API; just call `client.records.create()` per record.
 
-**Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse has no fixed record count limit — the constraints are payload size and request timeout (SDK default: 120s for POST). For larger datasets, you **must** chunk in your script. The `bulk_upsert` and `bulk_create` helpers below use adaptive chunking: start at 1,000, double on success (up to 4,000), halve on payload/timeout failure, and cap at the last successful size. Tables with few columns can handle larger chunks than tables with many columns.
+**Important:** Each record is sent in its own HTTP request. For larger datasets (hundreds of records), expect the operation to take proportionally longer. There is no chunking helper — write your own loop.
 
 ---
 
@@ -232,7 +232,7 @@ client.records.upsert("account", [
 | Volume | Tool | Why |
 |---|---|---|
 | 1–10 records | MCP `create_record` | Simple, no script |
-| 10+ records | SDK `client.records.create(table, list)` | Uses CreateMultiple; chunk large datasets (start at 1K, adapt) |
+| 10+ records | SDK `client.records.create(table, record)` in a for-loop | Per-record creates; one HTTP call per record |
 
 ```python
 import csv, os, sys
@@ -252,7 +252,10 @@ records = [{"new_name": row["name"], "new_email": row["email"]} for row in rows]
 # Start at 1000; for narrow tables (few columns) you can go higher
 chunk_size = 1000
 for i in range(0, len(records), chunk_size):
-    guids = client.records.create("new_customer", records[i:i + chunk_size])
+    chunk_guids = []
+    for record in records[i:i + chunk_size]:
+        chunk_guids.append(client.records.create("new_customer", record))
+    guids = chunk_guids
     print(f"Imported {i + len(guids)}/{len(records)} customers", flush=True)
 ```
 
@@ -279,7 +282,9 @@ for row in rows:
         "new_CustomerId@odata.bind": f"/new_customers({customer_guid})",  # verify entity set name via EntityDefinitions
     })
 
-guids = client.records.create("new_interaction", records)
+guids = []
+for record in records:
+    guids.append(client.records.create("new_interaction", record))
 ```
 
 ### Required field discovery for system tables
@@ -302,7 +307,7 @@ When importing data across multiple tables with foreign key relationships, the i
 3. Build source-ID → GUID maps by querying back (upsert doesn't return GUIDs).
 4. Repeat per dependency level — Level 1 needs Level 0's maps for `@odata.bind`.
 
-For the full pattern — adaptive `bulk_upsert` helper, composite-key handling, post-import verification, and the first-time `bulk_create` variant — see [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md).
+For the full pattern — composite-key handling and post-import verification — see [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md). All examples use the per-record `client.records.create()` pattern.
 
 Key invariants (apply even without reading the reference):
 
@@ -342,7 +347,7 @@ except HttpError as e:
 
 Generate realistic sample records inline — schema-driven, table-agnostic, PII-safe defaults (`@example.com` emails, `555-01xx` phones).
 
-**Quick reference:** confirm environment + count + table → query `EntityDefinitions(LogicalName='<table>')/Attributes?$filter=AttributeOf eq null` for required columns → dispatch by `AttributeType` (String / Memo / Integer / DateTime / Picklist / etc.) → `client.records.create()` (use `CreateMultiple` for count >= 10).
+**Quick reference:** confirm environment + count + table → query `EntityDefinitions(LogicalName='<table>')/Attributes?$filter=AttributeOf eq null` for required columns → dispatch by `AttributeType` (String / Memo / Integer / DateTime / Picklist / etc.) → `client.records.create()` per record in a for-loop.
 
 For the schema-driven `fake()` template, the `EntityDefinitions` query, and the safety rules, see [`references/sample-data-generation.md`](references/sample-data-generation.md).
 
@@ -354,8 +359,8 @@ Key invariants:
 
 **Generate N sample records (destructive — preview the snippet, ask for env):**
 - ❌ "Which environment should I target? Please provide the Dataverse URL."
-- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
+- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Loops `client.records.create()`, uses `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
 
 **Sample data on a custom entity (schema unknown — prose is enough):**
 - ❌ "I need more info about the entity. What are the required fields?"
-- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."
+- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", record)` once per record in a loop. Confirm to proceed, or tell me a different count."
