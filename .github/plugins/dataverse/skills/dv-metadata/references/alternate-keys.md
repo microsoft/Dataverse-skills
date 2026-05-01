@@ -40,25 +40,21 @@ key = client.tables.create_alternate_key(
 )
 ```
 
-**Idempotent key creation** — catch "already exists" to make the script re-runnable:
+**Idempotent key creation** — check first to make the script re-runnable:
 
 ```python
-from PowerPlatform.Dataverse.core.errors import HttpError
-
-def ensure_alternate_key(table, key_name, columns, display_name):
-    try:
-        key = client.tables.create_alternate_key(table, key_name, columns, display_name=display_name)
-        print(f"  Key created: {key_name} on {table}")
-    except HttpError as e:
-        if "already exists" in str(e).lower() or "0x80048d0b" in str(e):
-            print(f"  Key already exists: {key_name}")
-        else:
-            raise
+def ensure_alternate_key(client, table, key_name, columns, display_name):
+    existing = client.tables.get_alternate_keys(table)
+    if any(k.schema_name.lower() == key_name.lower() for k in existing):
+        print(f"  Key already exists: {key_name}")
+        return
+    key = client.tables.create_alternate_key(table, key_name, columns, display_name=display_name)
+    print(f"  Key created: {key_name} on {table}")
 
 # Create keys for all import tables
-ensure_alternate_key("prefix_Country", "prefix_SrcCountryIdKey",
+ensure_alternate_key(client, "prefix_Country", "prefix_SrcCountryIdKey",
     ["prefix_srccountryid"], "Source Country ID")
-ensure_alternate_key("prefix_City", "prefix_SrcCityIdKey",
+ensure_alternate_key(client, "prefix_City", "prefix_SrcCityIdKey",
     ["prefix_srccityid"], "Source City ID")
 ```
 

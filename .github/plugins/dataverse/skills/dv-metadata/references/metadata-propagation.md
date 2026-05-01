@@ -21,7 +21,7 @@ When creating many tables with alternate keys and lookups (e.g., multi-table imp
 
 Do NOT interleave: `create table A → create key A → create table B → create key B`. This causes lock contention because key A's index build blocks table B's creation.
 
-**Retry pattern:** Wrap all metadata operations with retry for transient lock errors:
+**Retry pattern:** Wrap metadata operations with retry for transient lock errors. Use check-first helpers (`ensure_table`, `ensure_alternate_key`) to handle "already exists" before calling this — the retry wrapper only handles lock contention:
 
 ```python
 import time
@@ -32,9 +32,6 @@ def retry_metadata(fn, description, max_attempts=5):
             return fn()
         except Exception as e:
             err = str(e)
-            if "already exists" in err.lower() or "0x80040237" in err:
-                print(f"  {description}: already exists, skipping")
-                return None
             if "another" in err.lower() and "running" in err.lower():
                 wait = 10 * (attempt + 1)
                 print(f"  {description}: lock contention, waiting {wait}s (attempt {attempt+1}/{max_attempts})...")
