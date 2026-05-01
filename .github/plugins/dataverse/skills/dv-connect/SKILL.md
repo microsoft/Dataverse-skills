@@ -22,7 +22,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
 2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
 3. **PAC CLI auth matches `.env`** — `pac auth list` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `pac org who` against that profile succeeds
-4. **Python SDK is importable** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas"` exits 0
+4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert v>='0.1.0b9', f'SDK {v} is outdated, need >=0.1.0b9'"` exits 0
 
 **If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
 
