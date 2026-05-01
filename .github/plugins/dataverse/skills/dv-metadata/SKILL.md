@@ -94,6 +94,7 @@ info = client.tables.create(
     {"new_Amount": "decimal", "new_Description": "string"},
     solution="MySolution",
     primary_column="new_Name",
+    display_name="Project Budget",  # human-readable name; plural auto-appends "s"
 )
 print(f"Created: {info['table_schema_name']}")
 ```
@@ -131,14 +132,10 @@ entity = {
 
 ## Column Naming: Avoid `*Id` Suffix Collisions
 
-**Never name a regular column with an `Id` suffix** (e.g., `prefix_CountryId`, `prefix_PlayerId`). When you later create a lookup relationship to another table, Dataverse auto-generates a navigation property with the `Id` suffix (e.g., `prefix_CountryId`). If a regular integer column with the same name already exists, the lookup creation fails with a schema name collision.
+**Never name a regular column with an `Id` suffix** (e.g., `prefix_CountryId`). Dataverse auto-generates a navigation property with the `Id` suffix when you create a lookup — if a regular column with that name exists, lookup creation fails with a schema name collision.
 
-**Pattern for source system IDs:**
-- WRONG: `prefix_DepartmentId` (int) — collides when lookup `prefix_DepartmentId` is created later
-- RIGHT: `prefix_SrcDepartmentId` (int) — `Src` prefix distinguishes source IDs from Dataverse lookups
-- RIGHT: `prefix_DepartmentSourceId` (int) — `SourceId` suffix is also safe
-
-This matters most in multi-table imports where you store the source system's integer FK as a column and then create a Dataverse lookup relationship for the same reference.
+- WRONG: `prefix_DepartmentId` (int) — collides with auto-generated lookup
+- RIGHT: `prefix_SrcDepartmentId` or `prefix_DepartmentSourceId`
 
 ---
 
