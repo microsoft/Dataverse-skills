@@ -1,0 +1,32 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Connect",
+  "description": "Phase 0 baseline: minimal connect test. Verifies the plugin's auth pattern is mentioned when asked to connect.",
+  "enabled_evaluators": [
+    {
+      "name": "dataverse_eval_judge.md",
+      "passing_score": 1,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "connect_001",
+      "prompt": "Write a Python script that authenticates to my Dataverse environment and prints the URL. Use the plugin's standard auth helper.",
+      "expected_response": "Agent uses scripts/auth.py with get_credential() and DataverseClient. Reads DATAVERSE_URL from .env.",
+      "category": "connect",
+      "description": "Plugin auth pattern is reachable",
+      "priority": 1,
+      "tags": ["independent", "requires-plugin", "connect"],
+      "custom_metadata": {"skill": "dv-connect", "tool_routing": "SDK"},
+      "assertions": [
+        "PRIORITY_1: Agent demonstrates the canonical Dataverse-skills connect path — references scripts/auth.py (or 'from auth import' / 'auth.py') as the source of credentials/tokens AND uses one of the documented credential helpers (get_credential / get_token / DataverseClient / a documented wrapper like create_client). Hand-rolled OAuth or hardcoded tokens = FAIL.",
+        "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell). The plugin is Python-only by design. Inline JS/TS examples shown for comparison or contrast purposes are fine; the actual recommended/produced code must be Python.",
+        "PRIORITY_2: CONTAINS: DATAVERSE_URL",
+        "PRIORITY_2: Agent acquires credentials via the documented helper rather than constructing tokens manually. Acceptable: get_credential / get_token / load_env from scripts/auth.py, or a wrapper that calls them. Manual MSAL / urllib token-endpoint POSTs = lower quality.",
+        "PRIORITY_2: SKILL_LOADED: dv-connect"
+      ],
+      "mode": "simulated"
+    }
+  ]
+}

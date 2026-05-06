@@ -1,0 +1,233 @@
+# DataversePluginEvals_PR — PR Eval Pipeline (Simulated + Live)
+#
+# Runs on every PR to microsoft/Dataverse-skills.
+# 3-stage pipeline: Scope → Execute (sim ∥ live) → Summary
+#
+# Simulated: always runs (ubuntu, 4 workers)
+# Live: runs when mode=live/both or auto-detected from auth/MCP changes
+#       (windows, Aurora org provisioning, cert install, MCP enable, SPN auth)
+#
+# Aurora org provisioning uses AuroraBAPEnviornmentCheckout@1 + cert install.
+# Copilot CLI connects to the production MCP endpoint ({orgUrl}/api/mcp).
+# AuroraReleaseTask@1 cleans up the org.
+#
+# Target: <15 min simulated-only, <30 min with live
+#
+# Trigger: Webhook from GitHub (via trigger-pr-eval.yml dispatch)
+#          or manual run from ADO UI.
+#
+# Output: Eval_PR_Simulated + Eval_PR_Live artifacts with eval-report.html
+
+trigger: none
+pr: none
+
+appendCommitMessageToRunName: false
+name: '$(Date:yyyyMMdd).$(Rev:r)'
+
+parameters:
+
+- name: prBranch
+  displayName: "PR branch name in the plugin repo"
+  type: string
+  default: ""
+
+- name: prTitle
+  displayName: "PR title (shown in build name)"
+  type: string
+  default: ""
+
+- name: prNumber
+  displayName: "PR number (e.g. 46)"
+  type: string
+  default: ""
+
+- name: tests
+  displayName: "Test file filter (empty = auto-scope from diff + safety)"
+  type: string
+  default: ""
+
+- name: testIds
+  displayName: "Individual test IDs (e.g. safety_001,data_005 — filters within loaded files)"
+  type: string
+  default: ""
+
+- name: liveTests
+  displayName: "Live test override (empty = use same scope as simulated; run_eval.ps1 mode-filters at runtime)"
+  type: string
+  default: ""
+
+- name: mode
+  displayName: "Eval mode"
+  type: string
+  default: "simulated"
+  values: ["simulated", "live", "both"]
+
+- name: parallel
+  displayName: "Parallel workers per test file (simulated)"
+  type: number
+  default: 8
+
+- name: liveParallel
+  displayName: "Parallel workers (live — keep at 1 for data/metadata tests to avoid org conflicts)"
+  type: number
+  default: 1
+
+- name: mainModel
+  displayName: "Main agent model"
+  type: string
+  default: "claude-sonnet-4.6"
+
+- name: judgeModel
+  displayName: "Judge model"
+  type: string
+  default: "claude-opus-4.6"
+
+- name: counterPromptThreshold
+  displayName: "Counter-prompt threshold (judge interviews agent for scores ≤ this; 0 = disabled). Reflection enrichment runs as additive HTML (does not gate)."
+  type: string
+  default: "0"
+
+- name: skillsBranch
+  displayName: "Plugin repo branch to test (overrides prBranch for checkout)"
+  type: string
+  default: ""
+
+- name: llmRefine
+  displayName: "LLM test refinement (analyzes diff to narrow test scope — saves live eval time)"
+  type: boolean
+  default: true
+
+- name: releaseAuroraOrg
+  displayName: "Release Aurora org after eval (disable to keep org for debugging)"
+  type: boolean
+  default: true
+
+- name: azureServiceConnection
+  displayName: "Azure service connection (SPN creds for Dataverse auth in live mode)"
+  type: string
+  default: "LocalEvalResources-MI-ServiceConnection-OneAgile"
+
+resources:
+  repositories:
+  # Internal eval infra — templates, scripts, prompts (GHE)
+  - repository: evalRunner
+    type: github
+    endpoint: bic-proxima-shared-stamp
+    name: bic/LocalEvalRunner
+    ref: refs/heads/main
+
+variables:
+  - group: CopilotCliTest_Secrets
+  - group: EvalToolAutomation_AuroraUser_Secrets
+  # EvalRunnerDir: LocalEvalRunner checkout (templates + scripts + prompts)
+  - name: EvalRunnerDir
+    value: '$(Build.SourcesDirectory)/LocalEvalRunner'
+  # PluginDir: Dataverse-skills plugin (self checkout)
+  - name: PluginDir
+    value: '$(Build.SourcesDirectory)/Dataverse-skills/.github/plugins/dataverse'
+  # TestsDir: test files live in self (Dataverse-skills)
+  - name: TestsDir
+    value: '$(Build.SourcesDirectory)/Dataverse-skills/evals/tests'
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3-Stage Pipeline: Scope → Execute → Summary
+# Templates + scripts in LocalEvalRunner (evalsV0/), tests in self (evals/)
+# ═══════════════════════════════════════════════════════════════════════════
+stages:
+
+# ── Stage 1: Scope — determine tests + mode from git diff ──────────────
+- template: evalsV0/templates/stage-scope.yaml@evalRunner
+  parameters:
+    tests: ${{ parameters.tests }}
+    testIds: ${{ parameters.testIds }}
+    liveTests: ${{ parameters.liveTests }}
+    mode: ${{ parameters.mode }}
+    llmRefine: ${{ parameters.llmRefine }}
+    prBranch: ${{ parameters.prBranch }}
+    prNumber: ${{ parameters.prNumber }}
+    prTitle: ${{ parameters.prTitle }}
+    skillsBranch: ${{ parameters.skillsBranch }}
+
+# ── Stage 2: Execute — parallel Simulated + Live ───────────────────────
+- stage: Execute
+  displayName: '🧪 Execute Evals'
+  dependsOn: Scope
+  variables:
+    TestScope: $[stageDependencies.Scope.PlanScope.outputs['scope.TestScope']]
+    TestMatrix: $[stageDependencies.Scope.PlanScope.outputs['scope.TestMatrix']]
+    FinalMode: $[stageDependencies.Scope.PlanScope.outputs['scope.FinalMode']]
+    ScopeTestIds: $[stageDependencies.Scope.PlanScope.outputs['scope.TestIds']]
+    OptimalOrgs: $[stageDependencies.Scope.PlanScope.outputs['scope.OptimalOrgs']]
+    Org1Tests: $[stageDependencies.Scope.PlanScope.outputs['scope.Org1Tests']]
+    Org2Tests: $[stageDependencies.Scope.PlanScope.outputs['scope.Org2Tests']]
+    Org3Tests: $[stageDependencies.Scope.PlanScope.outputs['scope.Org3Tests']]
+  jobs:
+  # ── Simulated — dynamic matrix (one job per test file, parallel) ────
+  - template: evalsV0/templates/job-simulated.yaml@evalRunner
+    parameters:
+      parallel: ${{ parameters.parallel }}
+      mainModel: ${{ parameters.mainModel }}
+      judgeModel: ${{ parameters.judgeModel }}
+      counterPromptThreshold: ${{ parameters.counterPromptThreshold }}
+      testIds: ${{ parameters.testIds }}
+      prNumber: ${{ parameters.prNumber }}
+      prTitle: ${{ parameters.prTitle }}
+      prBranch: ${{ parameters.prBranch }}
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Live jobs — up to 3 parallel Aurora orgs (DAG-aware from Scope stage)
+  # Each org: Aurora checkout → cert → SPN bridge → run tests → release
+  # Org 1 always runs. Org 2/3 conditional on compute_org_count.py output.
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── Live Org 1 (always runs for live/both) ──────────────────────────
+  - template: evalsV0/templates/job-live-org.yaml@evalRunner
+    parameters:
+      orgIndex: 1
+      mainModel: ${{ parameters.mainModel }}
+      judgeModel: ${{ parameters.judgeModel }}
+      counterPromptThreshold: ${{ parameters.counterPromptThreshold }}
+      liveParallel: ${{ parameters.liveParallel }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
+      releaseAuroraOrg: ${{ parameters.releaseAuroraOrg }}
+      prNumber: ${{ parameters.prNumber }}
+      prTitle: ${{ parameters.prTitle }}
+      prBranch: ${{ parameters.prBranch }}
+      testIds: ${{ parameters.testIds }}
+      liveTests: ${{ parameters.liveTests }}
+
+  # ── Live Org 2 (conditional: DAG needs ≥2 orgs) ────────────────────
+  - template: evalsV0/templates/job-live-org.yaml@evalRunner
+    parameters:
+      orgIndex: 2
+      mainModel: ${{ parameters.mainModel }}
+      judgeModel: ${{ parameters.judgeModel }}
+      counterPromptThreshold: ${{ parameters.counterPromptThreshold }}
+      liveParallel: ${{ parameters.liveParallel }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
+      releaseAuroraOrg: ${{ parameters.releaseAuroraOrg }}
+      prNumber: ${{ parameters.prNumber }}
+      prTitle: ${{ parameters.prTitle }}
+      prBranch: ${{ parameters.prBranch }}
+      testIds: ${{ parameters.testIds }}
+      liveTests: ${{ parameters.liveTests }}
+
+  # ── Live Org 3 (conditional: DAG needs ≥3 orgs) ────────────────────
+  - template: evalsV0/templates/job-live-org.yaml@evalRunner
+    parameters:
+      orgIndex: 3
+      mainModel: ${{ parameters.mainModel }}
+      judgeModel: ${{ parameters.judgeModel }}
+      counterPromptThreshold: ${{ parameters.counterPromptThreshold }}
+      liveParallel: ${{ parameters.liveParallel }}
+      azureServiceConnection: ${{ parameters.azureServiceConnection }}
+      releaseAuroraOrg: ${{ parameters.releaseAuroraOrg }}
+      prNumber: ${{ parameters.prNumber }}
+      prTitle: ${{ parameters.prTitle }}
+      prBranch: ${{ parameters.prBranch }}
+      testIds: ${{ parameters.testIds }}
+      liveTests: ${{ parameters.liveTests }}
+
+# ── Stage 3: Summary — aggregate results from both stages ─────────────
+- template: evalsV0/templates/stage-summary.yaml@evalRunner
+

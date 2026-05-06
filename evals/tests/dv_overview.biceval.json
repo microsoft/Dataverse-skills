@@ -1,0 +1,31 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Overview",
+  "description": "Phase 0 baseline: minimal overview test. Verifies skill routing works when asked about combined Dataverse operations.",
+  "enabled_evaluators": [
+    {
+      "name": "dataverse_eval_judge.md",
+      "passing_score": 1,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "overview_001",
+      "prompt": "I want to read some records AND create a new table in my Dataverse environment in the same session. Which skills and tools should I use for each?",
+      "expected_response": "Agent loads dv-overview, mentions dv-query for reads and dv-metadata for table creation. Recommends Python SDK for both.",
+      "category": "overview",
+      "description": "Skill routing for combined Dataverse operations",
+      "priority": 1,
+      "tags": ["independent", "requires-plugin", "overview"],
+      "custom_metadata": {"skill": "dv-overview", "tool_routing": "skill"},
+      "assertions": [
+        "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell).",
+        "PRIORITY_1: Agent correctly partitions the work across two skills — routes record reads to dv-query and table creation to dv-metadata, NOT both to a single skill. The agent should explicitly call out that these are separate concerns handled by separate skill files, demonstrating the plugin's skill-routing model rather than treating Dataverse as one monolithic surface.",
+        "PRIORITY_2: SKILL_LOADED: dv-overview",
+        "PRIORITY_2: CONTAINS_ANY: SDK, DataverseClient, Python"
+      ],
+      "mode": "both"
+    }
+  ]
+}
