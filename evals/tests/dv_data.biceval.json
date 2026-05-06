@@ -4,8 +4,18 @@
   "description": "Phase 0 baseline: minimal data test. Verifies SDK pattern for record creation in a Dataverse table.",
   "enabled_evaluators": [
     {
-      "name": "dataverse_eval_judge.md",
-      "passing_score": 1,
+      "name": "CortexConfigurations:Common/DVSkillsPlugin/tool_appropriateness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/DVSkillsPlugin/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/DVSkillsPlugin/hallucination_detector.prompty",
+      "passing_score": 3,
       "priority": 1
     }
   ],

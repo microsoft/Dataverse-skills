@@ -8,7 +8,7 @@ Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` con
 {
   "suite": "dv_<skill>",
   "enabled_evaluators": [
-    { "name": "CortexConfigurations:Common/DVSkillsPlugin/tool_appropriateness", "passingScore": 3 }
+    { "name": "CortexConfigurations:Common/DVSkillsPlugin/tool_appropriateness.prompty", "passingScore": 3 }
   ],
   "tests": [
     {
