@@ -114,7 +114,7 @@ resources:
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
-    ref: refs/heads/main
+    ref: refs/heads/users/sbadenkal/evals-infra
 
 variables:
   - group: CopilotCliTest_Secrets
