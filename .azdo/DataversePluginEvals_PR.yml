@@ -90,8 +90,7 @@ extends:
           $ErrorActionPreference = 'Stop'
           $testFile = '${{ parameters.testFile }}'
           $sourceTest = Join-Path "$(Build.SourcesDirectory)" "evals/tests/$testFile"
-          $workDir = '${{ parameters.workingDirectory }}'
-          if ([string]::IsNullOrWhiteSpace($workDir)) { $workDir = "$(Agent.TempDirectory)/eval-workspace" }
+          $workDir = "$(Agent.TempDirectory)/eval-workspace"
 
           # Copy test file to working directory
           Copy-Item $sourceTest $workDir -Force
