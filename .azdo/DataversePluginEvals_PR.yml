@@ -76,7 +76,9 @@ extends:
     - template: .pipelines/templates/BicEval-CI-CD-OfficialTemplate.yml@BicEvalRunner
       parameters:
         sourceRepoTestFilePath: 'evals/tests/${{ parameters.testFile }}'
-        agentType: 'CopilotCliAgent'
+        # CopilotCliAgent not yet in OfficialTemplate agentType enum.
+        # Use NoneAgent + cliAgent + customExecutionScript to invoke it.
+        agentType: 'NoneAgent'
         cliAgent: 'copilot'
         azureServiceConnection: ${{ parameters.azureServiceConnection }}
         concurrency: ${{ parameters.concurrency }}
@@ -84,3 +86,46 @@ extends:
         serviceName: 'DataverseSkillsPlugin'
         continueOnError: false
         enableStatSig: false
+        customExecutionScript: |
+          $ErrorActionPreference = 'Stop'
+          $testFile = '${{ parameters.testFile }}'
+          $sourceTest = Join-Path "$(Build.SourcesDirectory)" "evals/tests/$testFile"
+          $workDir = '${{ parameters.workingDirectory }}'
+          if ([string]::IsNullOrWhiteSpace($workDir)) { $workDir = "$(Agent.TempDirectory)/eval-workspace" }
+
+          # Copy test file to working directory
+          Copy-Item $sourceTest $workDir -Force
+          Set-Location $workDir
+
+          # Create CopilotCliAgent config co-located with test
+          $pluginDir = Join-Path "$(Build.SourcesDirectory)" ".github/plugins/dataverse"
+          @{
+            command = "copilot"
+            model = "claude-sonnet-4.6"
+            pluginDir = $pluginDir
+            transcriptDir = "transcripts/"
+            logDir = "logs/"
+            logLevel = "all"
+            timeoutSeconds = 600
+            agentInstanceName = "Dataverse Plugin (ADO)"
+            agentInstanceType = "CopilotCliAgent"
+          } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
+
+          # Run localevalrunner with CopilotCliAgent
+          $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+          Write-Host "##vso[task.setvariable variable=runId;isOutput=true]$runId"
+
+          $cmd = "localevalrunner `"$testFile`" --copilotcliagent copilot_agent_config.json --output reports --concurrency ${{ parameters.concurrency }} --runid $runId --service DataverseSkillsPlugin"
+          Write-Host "Running: $cmd"
+          Invoke-Expression $cmd
+
+          # Emit result variables
+          $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($report) {
+            $r = Get-Content $report -Raw | ConvertFrom-Json
+            $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
+            $total = $r.TestResults.Count
+            Write-Host "##vso[task.setvariable variable=EvalTestsPassed]$passed"
+            Write-Host "##vso[task.setvariable variable=EvalTestsTotal]$total"
+            Write-Host "Results: $passed/$total passed"
+          }
