@@ -1,15 +1,15 @@
 #################################################################################
-#        Dataverse Skills Plugin — BIC Offline Eval Pipeline                    #
+#        Dataverse Skills Plugin — Offline Eval Pipeline                        #
 #                                                                               #
-# Runs BIC offline evaluations for the Dataverse Skills Plugin using            #
+# Runs offline evaluations for the Dataverse Skills Plugin using                #
 # LocalEvalRunner with CopilotCliAgent.                                         #
 #                                                                               #
-# ADO: dynamicscrm/OneCRM — \DV Skills Plugin\DVSkillsPlugin-Evals-PR            #
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)                 #
 #                                                                               #
-# Uses 1ES.Unofficial template (like DV-Python-SDK pipeline 29922) instead of   #
-# OneBranch.NonOfficial because CopilotCliAgent requires npm install which is   #
-# blocked by OneBranch's network isolation in Windows containers.               #
+# Prerequisites:                                                                #
+#  - LocalEvalTool-ResourceAccess (Contributor) in CoreIdentity                 #
+#  - Azure service connection with access to shared AI resources                #
+#  - GitHub Enterprise service connection for LocalEvalRunner repo              #
 #################################################################################
 
 trigger: none
@@ -17,7 +17,7 @@ pr: none
 
 parameters:
   - name: azureServiceConnection
-    displayName: 'Azure managed-identity service connection (for CAPI)'
+    displayName: 'Azure service connection for AI model access'
     type: string
     default: 'LocalEvalResources-MI-ServiceConnection'
 
@@ -76,7 +76,7 @@ extends:
           displayName: 'Checkout Dataverse-skills'
 
         - checkout: BicEvalRunner
-          displayName: 'Checkout LocalEvalRunner templates'
+          displayName: 'Checkout eval runner repo'
 
         - task: UseDotNet@2
           inputs:
