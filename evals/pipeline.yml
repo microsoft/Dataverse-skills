@@ -31,7 +31,7 @@ resources:
   repositories:
   - repository: dataverseSkills
     type: github
-    endpoint: Github-DataverseEvals-ServiceConnection
+    endpoint: 'microsoft (8)'
     name: microsoft/Dataverse-skills
     ref: refs/heads/${{ parameters.skillsBranch }}
 
