@@ -1,5 +1,5 @@
 # Dataverse Skills Plugin Eval Pipeline
-# Phase 2: Checkout + .NET + LocalEvalRunner install
+# Phase 2b: Checkout + .NET + NuGetAuthenticate + LocalEvalRunner install
 #
 # ADO: dynamicscrm/OneCRM  Pipeline ID: 32007
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)
@@ -21,38 +21,29 @@ steps:
     version: '8.x'
   displayName: 'Install .NET 8'
 
-- script: |
-    echo "=== Installing LocalEvalRunner from NuGet ==="
-    dotnet nuget add source \
-      "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" \
-      --name XrmSolutions \
-      --username "az" \
-      --password "$(System.AccessToken)" \
-      --store-password-in-clear-text || echo "Source may already exist"
+- task: NuGetAuthenticate@1
+  displayName: 'Authenticate with Azure Artifacts'
 
-    dotnet tool install --global localevalrunner \
-      --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" \
-      --version "*"
+- pwsh: |
+    dotnet tool install --global LocalEvalRunner `
+      --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
+      --ignore-failed-sources
 
-    echo "=== Verifying install ==="
-    export PATH="$PATH:$HOME/.dotnet/tools"
-    localevalrunner --version || localevalrunner --help || echo "localevalrunner binary installed"
-  displayName: 'Install LocalEvalRunner'
-  env:
-    DOTNET_SYSTEM_NET_HTTP_USESOCKETSHTTPHANDLER: 0
+    # Verify installation
+    localevalrunner --help | Select-Object -First 5
+  displayName: 'Install LocalEvalRunner from feed'
 
 - script: |
     echo "=== Smoke test ==="
-    echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
-    echo "Build.SourceBranch:     $(Build.SourceBranch)"
+    echo "Build.SourceBranch: $(Build.SourceBranch)"
     echo ""
     echo "=== Skill files ==="
-    find $(Build.SourcesDirectory)/.github/plugins -name "SKILL.md" 2>/dev/null || echo "No skills found"
+    find $(Build.SourcesDirectory)/.github/plugins -name "SKILL.md" 2>/dev/null
     echo ""
     echo "=== Eval test files ==="
-    find $(Build.SourcesDirectory)/evals -name "*.biceval.json" 2>/dev/null || echo "No eval files found"
+    find $(Build.SourcesDirectory)/evals -name "*.biceval.json" 2>/dev/null
     echo ""
     export PATH="$PATH:$HOME/.dotnet/tools"
-    echo "=== LocalEvalRunner installed ==="
-    which localevalrunner && echo "PASS" || echo "FAIL: localevalrunner not on PATH"
+    echo "=== LocalEvalRunner ==="
+    which localevalrunner && localevalrunner --help | head -3 && echo "PASS" || echo "FAIL"
   displayName: 'Smoke test — verify checkout + tools'
