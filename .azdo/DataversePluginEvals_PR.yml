@@ -1,9 +1,10 @@
 # Dataverse Skills Plugin Eval Pipeline
-# Phase 2b: Checkout + .NET + NuGetAuthenticate + LocalEvalRunner install
+# Checkout github.com/microsoft/Dataverse-skills + install LocalEvalRunner
 #
-# ADO: dynamicscrm/OneCRM  Pipeline ID: 32007
+# ADO: dynamicscrm/OneCRM  Pipeline ID: 32010
+# Folder: \DV Skills Plugin
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)
-# Endpoint: github.com_microsoft (1) — bb7c410e-b316-4680-b682-31d4017fef13
+# Endpoint: github.com_microsoft (1) — GitHub App (InstallationToken)
 
 trigger: none
 pr: none
