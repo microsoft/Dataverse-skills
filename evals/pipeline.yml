@@ -1,0 +1,186 @@
+# Dataverse Skills Plugin Eval Pipeline
+# Runs LocalEvalRunner with CopilotCliAgent against the plugin skills.
+#
+# Source: microsoft/Dataverse-skills
+# Tests: evals/tests/*.biceval.json
+# Evaluators: CortexConfigurations:Common/DVSkillsPlugin/*.prompty
+#
+# This pipeline installs localevalrunner from NuGet and runs it directly.
+# No LER template dependency — self-contained YAML.
+
+trigger: none
+pr: none
+
+parameters:
+- name: skillsBranch
+  displayName: "Plugin branch to test (e.g. main, demo/break-bulk-create-guidance)"
+  type: string
+  default: "main"
+
+- name: testFile
+  displayName: "Test file"
+  type: string
+  default: "dv_data.biceval.json"
+
+- name: azureServiceConnection
+  displayName: "Azure service connection"
+  type: string
+  default: "LocalEvalResources-MI-ServiceConnection-OneAgile"
+
+resources:
+  repositories:
+  - repository: dataverseSkills
+    type: github
+    endpoint: Github-DataverseEvals-ServiceConnection
+    name: microsoft/Dataverse-skills
+    ref: refs/heads/${{ parameters.skillsBranch }}
+
+variables:
+  - group: CopilotCliTest_Secrets
+
+pool:
+  name: Azure-Pipelines-1ESPT-ExDShared
+  image: ubuntu-latest
+  os: linux
+
+stages:
+- stage: Evaluate
+  displayName: 'Evaluate Plugin Skills'
+  jobs:
+  - job: RunEvals
+    displayName: 'Run ${{ parameters.testFile }}'
+    timeoutInMinutes: 30
+    steps:
+
+    # 1. Checkout plugin repo (PR branch)
+    - checkout: dataverseSkills
+      path: 'dataverse-skills'
+
+    # 2. Install .NET
+    - task: UseDotNet@2
+      inputs:
+        version: '8.x'
+      displayName: 'Install .NET 8'
+
+    # 3. Install localevalrunner from NuGet
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        addSpnToEnvironment: true
+        inlineScript: |
+          dotnet tool install --global localevalrunner `
+            --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
+            --version "*"
+          Write-Host "Installed: $(localevalrunner --version 2>&1)"
+      displayName: 'Install LocalEvalRunner'
+
+    # 4. Install Copilot CLI
+    - script: |
+        npm install -g @anthropic-ai/copilot-cli || npm install -g copilot-cli || echo "Copilot CLI install skipped"
+        which copilot || echo "copilot not in PATH"
+      displayName: 'Install Copilot CLI'
+      env:
+        GH_TOKEN: $(COPILOT_GH_PAT)
+
+    # 5. Initialize workspace
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        addSpnToEnvironment: true
+        inlineScript: |
+          $workspace = "$(Agent.TempDirectory)/eval-workspace"
+          New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+          Set-Location $workspace
+
+          # Init LER workspace (creates CustomEvaluators/, appsettings, etc.)
+          localevalrunner init
+
+          # Copy test files from plugin repo
+          $testSrc = "$(Pipeline.Workspace)/dataverse-skills/evals/tests"
+          Copy-Item "$testSrc/*" . -Recurse -Force
+          Write-Host "Test files:"
+          Get-ChildItem *.biceval.json
+
+          # Create agent config
+          $pluginDir = "$(Pipeline.Workspace)/dataverse-skills/.github/plugins/dataverse"
+          @{
+            command = "copilot"
+            model = "claude-sonnet-4.6"
+            pluginDir = $pluginDir
+            transcriptDir = "transcripts/"
+            logDir = "logs/"
+            logLevel = "all"
+            timeoutSeconds = 600
+            agentInstanceName = "Dataverse Plugin (ADO dry-run)"
+            agentInstanceType = "CopilotCliAgent"
+          } | ConvertTo-Json | Set-Content "agent_config.json" -Encoding UTF8
+
+          # Create skill-content replacements
+          $skillPath = Join-Path $pluginDir "skills/dv-data/SKILL.md"
+          if (Test-Path $skillPath) {
+            $content = Get-Content $skillPath -Raw
+            $match = [regex]::Match($content, '(?ms)(## Bulk Create.*?)(?=\n## )')
+            if ($match.Success) {
+              $section = $match.Groups[1].Value.Trim()
+              $escaped = $section.Replace('\', '\\').Replace('"', '\"').Replace("`n", '\n').Replace("`r", '')
+              @{ loaded_skill_content = $escaped } | ConvertTo-Json | Set-Content "replacements.json" -Encoding UTF8
+              Write-Host "Skill section injected ($($section.Length) chars)"
+            }
+          }
+
+          Write-Host "Workspace ready: $workspace"
+          Get-ChildItem
+      displayName: 'Set up workspace'
+
+    # 6. Run evaluation
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        addSpnToEnvironment: true
+        workingDirectory: '$(Agent.TempDirectory)/eval-workspace'
+        inlineScript: |
+          $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+          $testFile = "${{ parameters.testFile }}"
+
+          $args = @(
+            $testFile,
+            "--copilotcliagent", "agent_config.json",
+            "--output", "reports",
+            "--concurrency", "1",
+            "--runid", $runId,
+            "--service", "DataverseSkillsPlugin"
+          )
+
+          if (Test-Path "replacements.json") {
+            $args += "--replacements", "replacements.json"
+          }
+
+          Write-Host "localevalrunner $($args -join ' ')"
+          localevalrunner @args
+
+          Write-Host "##vso[task.setvariable variable=runId]$runId"
+      displayName: 'Run eval - ${{ parameters.testFile }}'
+      env:
+        GH_TOKEN: $(COPILOT_GH_PAT)
+        COPILOT_GH_PAT: $(COPILOT_GH_PAT)
+
+    # 7. Publish results
+    - task: PublishTestResults@2
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
+        testRunTitle: 'Dataverse Plugin Eval - ${{ parameters.testFile }}'
+      displayName: 'Publish test results'
+
+    - task: PublishBuildArtifacts@1
+      condition: succeededOrFailed()
+      inputs:
+        pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
+        artifactName: 'EvalReports'
+      displayName: 'Publish eval reports'
