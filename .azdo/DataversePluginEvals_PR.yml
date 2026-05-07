@@ -62,6 +62,9 @@ extends:
         name: Azure-Pipelines-1ESPT-ExDShared
         image: windows-latest
         os: windows
+      sourceRepositoriesToScan:
+        exclude:
+        - repository: BicEvalRunner
 
     stages:
     - stage: Evaluate
