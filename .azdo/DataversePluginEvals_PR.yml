@@ -1,27 +1,21 @@
 #################################################################################
 #        Dataverse Skills Plugin — BIC Offline Eval Pipeline                    #
 #                                                                               #
-# Runs BIC standard offline evaluations for the Dataverse Skills Plugin         #
-# against the shared CAPI resource, using the LocalEvalRunner BIC               #
-# pipeline template.                                                            #
+# Runs BIC offline evaluations for the Dataverse Skills Plugin using            #
+# LocalEvalRunner with CopilotCliAgent.                                         #
 #                                                                               #
 # ADO: dynamicscrm/OneCRM  Pipeline ID: 32010                                  #
 # Folder: \DV Skills Plugin                                                     #
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)                 #
 # Template: bic/LocalEvalRunner (via bic-proxima-shared-stamp)                  #
 #                                                                               #
-# Prereqs (one-time, see BIC Offline Pipeline Onboarding wiki):                 #
-#  - LocalEvalTool-ResourceAccess (Contributor) in CoreIdentity                 #
-#  - TM-PowerAIML group membership                                              #
-#  - bic-proxima-shared-stamp endpoint on dynamicscrm ADO                       #
+# Uses 1ES.Unofficial template (like DV-Python-SDK pipeline 29922) instead of   #
+# OneBranch.NonOfficial because CopilotCliAgent requires npm install which is   #
+# blocked by OneBranch's network isolation in Windows containers.               #
 #################################################################################
 
 trigger: none
 pr: none
-
-variables:
-  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2022/vse2022:latest'
-  CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)]
 
 parameters:
   - name: azureServiceConnection
@@ -46,10 +40,10 @@ parameters:
 
 resources:
   repositories:
-  - repository: templates
+  - repository: 1ESPipelineTemplates
     type: git
-    name: OneBranch.Pipelines/GovernedTemplates
-    ref: refs/heads/main
+    name: 1ESPipelineTemplates/1ESPipelineTemplates
+    ref: refs/tags/release
   - repository: BicEvalRunner
     type: github
     endpoint: bic-proxima-shared-stamp
@@ -57,74 +51,115 @@ resources:
     ref: refs/heads/main
 
 extends:
-  template: v2/OneBranch.NonOfficial.CrossPlat.yml@templates
+  template: v1/1ES.Unofficial.PipelineTemplate.yml@1ESPipelineTemplates
   parameters:
-    featureFlags:
-      WindowsHostVersion:
-        Version: 2022
-    cloudvault:
-      enabled: false
-    globalSdl:
-      tsa:
-        enabled: false
-      binskim:
-        break: true
-      policheck:
-        break: true
+    pool:
+      name: Azure-Pipelines-1ESPT-ExDShared
+      image: ubuntu-latest
+      os: linux
+    sdl:
+      sourceAnalysisPool:
+        name: Azure-Pipelines-1ESPT-ExDShared
+        image: windows-latest
+        os: windows
 
     stages:
-    - template: .pipelines/templates/BicEval-CI-CD-OfficialTemplate.yml@BicEvalRunner
-      parameters:
-        sourceRepoTestFilePath: 'evals/tests/${{ parameters.testFile }}'
-        # CopilotCliAgent not yet in OfficialTemplate agentType enum.
-        # Use NoneAgent + cliAgent + customExecutionScript to invoke it.
-        agentType: 'NoneAgent'
-        cliAgent: 'copilot'
-        azureServiceConnection: ${{ parameters.azureServiceConnection }}
-        concurrency: ${{ parameters.concurrency }}
-        iterations: ${{ parameters.iterations }}
-        serviceName: 'DataverseSkillsPlugin'
-        continueOnError: false
-        enableStatSig: false
-        customExecutionScript: |
-          $ErrorActionPreference = 'Stop'
-          $testFile = '${{ parameters.testFile }}'
-          $sourceTest = Join-Path "$(Build.SourcesDirectory)" "evals/tests/$testFile"
-          $workDir = "$(Agent.TempDirectory)/eval-workspace"
+    - stage: Evaluate
+      displayName: 'Run Dataverse Skills Plugin Evals'
+      jobs:
+      - job: RunEvals
+        displayName: 'Execute Evaluation'
+        timeoutInMinutes: 45
+        steps:
+        - checkout: self
+          displayName: 'Checkout Dataverse-skills'
 
-          # Copy test file to working directory
-          Copy-Item $sourceTest $workDir -Force
-          Set-Location $workDir
+        - checkout: BicEvalRunner
+          displayName: 'Checkout LocalEvalRunner templates'
 
-          # Create CopilotCliAgent config co-located with test
-          $pluginDir = Join-Path "$(Build.SourcesDirectory)" ".github/plugins/dataverse"
-          @{
-            command = "copilot"
-            model = "claude-sonnet-4.6"
-            pluginDir = $pluginDir
-            transcriptDir = "transcripts/"
-            logDir = "logs/"
-            logLevel = "all"
-            timeoutSeconds = 600
-            agentInstanceName = "Dataverse Plugin (ADO)"
-            agentInstanceType = "CopilotCliAgent"
-          } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
+        - task: UseDotNet@2
+          inputs:
+            version: '8.x'
+          displayName: 'Install .NET 8'
 
-          # Run localevalrunner with CopilotCliAgent
-          $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-          Write-Host "##vso[task.setvariable variable=runId;isOutput=true]$runId"
+        - task: NuGetAuthenticate@1
+          displayName: 'Authenticate with Azure Artifacts'
 
-          $cmd = "localevalrunner `"$testFile`" --copilotcliagent copilot_agent_config.json --output reports --concurrency ${{ parameters.concurrency }} --runid $runId --service DataverseSkillsPlugin"
-          Write-Host "Running: $cmd"
-          Invoke-Expression $cmd
+        - pwsh: |
+            dotnet tool install --global LocalEvalRunner `
+              --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
+              --ignore-failed-sources
+            localevalrunner --help | Select-Object -First 3
+          displayName: 'Install LocalEvalRunner from feed'
 
-          # Emit result variables
-          $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if ($report) {
-            $r = Get-Content $report -Raw | ConvertFrom-Json
-            $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
-            $total = $r.TestResults.Count
-            Write-Host "##vso[task.setvariable variable=EvalTestsPassed]$passed"
-            Write-Host "##vso[task.setvariable variable=EvalTestsTotal]$total"
-            Write-Host "Results: $passed/$total passed"
-          }
+        - script: |
+            curl -fsSL https://gh.io/copilot-install | bash
+            copilot --version || echo "Copilot CLI installed"
+          displayName: 'Install Copilot CLI'
+
+        - task: AzureCLI@2
+          displayName: 'Run evaluation'
+          inputs:
+            azureSubscription: ${{ parameters.azureServiceConnection }}
+            scriptType: 'pscore'
+            scriptLocation: 'inlineScript'
+            addSpnToEnvironment: true
+            inlineScript: |
+              $ErrorActionPreference = 'Stop'
+              $testFile = '${{ parameters.testFile }}'
+              $sourceDir = "$(Build.SourcesDirectory)/Dataverse-skills"
+              $sourceTest = Join-Path $sourceDir "evals/tests/$testFile"
+
+              # Create working directory
+              $workDir = "$(Agent.TempDirectory)/eval-workspace"
+              New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+              Set-Location $workDir
+
+              # Init LER workspace
+              localevalrunner init
+
+              # Copy test file
+              Copy-Item $sourceTest . -Force
+
+              # Create CopilotCliAgent config
+              $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
+              @{
+                command = "copilot"
+                model = "claude-sonnet-4.6"
+                pluginDir = $pluginDir
+                transcriptDir = "transcripts/"
+                logDir = "logs/"
+                logLevel = "all"
+                timeoutSeconds = 600
+                agentInstanceName = "Dataverse Plugin (ADO)"
+                agentInstanceType = "CopilotCliAgent"
+              } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
+
+              # Run localevalrunner
+              $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+              $cmd = "localevalrunner `"$testFile`" --copilotcliagent copilot_agent_config.json --output reports --concurrency ${{ parameters.concurrency }} --runid $runId --service DataverseSkillsPlugin"
+              Write-Host "Running: $cmd"
+              Invoke-Expression $cmd
+
+              # Report results
+              $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+              if ($report) {
+                $r = Get-Content $report -Raw | ConvertFrom-Json
+                $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
+                $total = $r.TestResults.Count
+                Write-Host "Results: $passed/$total passed"
+              }
+
+        - task: PublishTestResults@2
+          condition: succeededOrFailed()
+          inputs:
+            testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
+            testRunTitle: 'Dataverse Plugin Eval — ${{ parameters.testFile }}'
+          displayName: 'Publish test results'
+
+        - task: PublishBuildArtifacts@1
+          condition: succeededOrFailed()
+          inputs:
+            pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
+            artifactName: 'EvalReports'
+          displayName: 'Publish eval reports'
