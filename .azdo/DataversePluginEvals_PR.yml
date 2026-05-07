@@ -4,10 +4,8 @@
 # Runs BIC offline evaluations for the Dataverse Skills Plugin using            #
 # LocalEvalRunner with CopilotCliAgent.                                         #
 #                                                                               #
-# ADO: dynamicscrm/OneCRM  Pipeline ID: 32010                                  #
-# Folder: \DV Skills Plugin                                                     #
+# ADO: dynamicscrm/OneCRM — \DV Skills Plugin\DVSkillsPlugin-Evals-PR            #
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)                 #
-# Template: bic/LocalEvalRunner (via bic-proxima-shared-stamp)                  #
 #                                                                               #
 # Uses 1ES.Unofficial template (like DV-Python-SDK pipeline 29922) instead of   #
 # OneBranch.NonOfficial because CopilotCliAgent requires npm install which is   #
