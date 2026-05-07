@@ -1,132 +1,34 @@
 # Dataverse Skills Plugin Eval Pipeline
-# Runs LocalEvalRunner with CopilotCliAgent against the plugin skills.
+# Phase 1: Minimal pipeline proving github.com checkout + basic execution
 #
-# ADO: dynamicscrm/OneCRM/DVSkillsPlugin
+# ADO: dynamicscrm/OneCRM  Pipeline ID: 32006
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)
-# Tests: evals/tests/*.biceval.json
-# Pattern: same as Agents-SDK-Python-PullRequest-CI (ID 25636)
+# Endpoint: github.com_microsoft (1) — bb7c410e-b316-4680-b682-31d4017fef13
 
 trigger: none
 pr: none
 
-parameters:
-- name: testFile
-  displayName: "Test file"
-  type: string
-  default: "dv_data.biceval.json"
-
-- name: azureServiceConnection
-  displayName: "Azure service connection"
-  type: string
-  default: "LocalEvalResources-MI-ServiceConnection-OneAgile"
-
-variables:
-- group: CopilotCliTest_Secrets
-
 pool:
-  name: Azure-Pipelines-1ESPT-ExDShared
-  image: ubuntu-latest
-  os: linux
+  vmImage: 'ubuntu-latest'
 
-stages:
-- stage: Evaluate
-  displayName: 'Evaluate Plugin Skills'
-  jobs:
-  - job: RunEvals
-    displayName: 'Run ${{ parameters.testFile }}'
-    timeoutInMinutes: 30
-    steps:
+steps:
+- checkout: self
+  displayName: 'Checkout Dataverse-skills'
 
-    # 1. Checkout self (microsoft/Dataverse-skills)
-    - checkout: self
-
-    # 2. Install .NET
-    - task: UseDotNet@2
-      inputs:
-        version: '8.x'
-      displayName: 'Install .NET 8'
-
-    # 3. Install localevalrunner from NuGet
-    - task: AzureCLI@2
-      inputs:
-        azureSubscription: ${{ parameters.azureServiceConnection }}
-        scriptType: 'pscore'
-        scriptLocation: 'inlineScript'
-        addSpnToEnvironment: true
-        inlineScript: |
-          dotnet tool install --global localevalrunner `
-            --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
-            --version "*"
-          Write-Host "Installed localevalrunner"
-      displayName: 'Install LocalEvalRunner'
-
-    # 4. Install Copilot CLI
-    - script: |
-        npm install -g copilot-cli || echo "Copilot CLI install attempt done"
-        which copilot || echo "copilot not found"
-      displayName: 'Install Copilot CLI'
-      env:
-        GH_TOKEN: $(COPILOT_GH_PAT)
-
-    # 5. Set up workspace and run eval
-    - task: AzureCLI@2
-      inputs:
-        azureSubscription: ${{ parameters.azureServiceConnection }}
-        scriptType: 'pscore'
-        scriptLocation: 'inlineScript'
-        addSpnToEnvironment: true
-        inlineScript: |
-          $workspace = "$(Agent.TempDirectory)/eval-workspace"
-          New-Item -ItemType Directory -Path $workspace -Force | Out-Null
-          Set-Location $workspace
-
-          # Init LER workspace
-          localevalrunner init
-
-          # Copy test files from self-checkout
-          $repoRoot = "$(Build.SourcesDirectory)"
-          Copy-Item "$repoRoot/evals/tests/*" . -Recurse -Force
-          Write-Host "Test files:"; Get-ChildItem *.biceval.json
-
-          # Create agent config
-          $pluginDir = Join-Path $repoRoot ".github/plugins/dataverse"
-          @{
-            command = "copilot"
-            model = "claude-sonnet-4.6"
-            pluginDir = $pluginDir
-            transcriptDir = "transcripts/"
-            logDir = "logs/"
-            logLevel = "all"
-            timeoutSeconds = 600
-            agentInstanceName = "Dataverse Plugin (ADO eval)"
-            agentInstanceType = "CopilotCliAgent"
-          } | ConvertTo-Json | Set-Content "agent_config.json" -Encoding UTF8
-
-          # Run evaluation
-          $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-          Write-Host "Running: localevalrunner ${{ parameters.testFile }}"
-          localevalrunner "${{ parameters.testFile }}" `
-            --copilotcliagent agent_config.json `
-            --output reports `
-            --concurrency 1 `
-            --runid $runId `
-            --service DataverseSkillsPlugin
-      displayName: 'Run eval'
-      env:
-        GH_TOKEN: $(COPILOT_GH_PAT)
-        COPILOT_GH_PAT: $(COPILOT_GH_PAT)
-
-    # 6. Publish results
-    - task: PublishTestResults@2
-      condition: succeededOrFailed()
-      inputs:
-        testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
-        testRunTitle: 'Dataverse Plugin Eval'
-      displayName: 'Publish test results'
-
-    - task: PublishBuildArtifacts@1
-      condition: succeededOrFailed()
-      inputs:
-        pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
-        artifactName: 'EvalReports'
-      displayName: 'Publish eval reports'
+- script: |
+    echo "=== Pipeline smoke test ==="
+    echo "Build.SourcesDirectory: $(Build.SourcesDirectory)"
+    echo "Build.BuildNumber:      $(Build.BuildNumber)"
+    echo "Build.SourceBranch:     $(Build.SourceBranch)"
+    echo ""
+    echo "=== Repo contents ==="
+    ls -la $(Build.SourcesDirectory)
+    echo ""
+    echo "=== Skill files ==="
+    find $(Build.SourcesDirectory)/.github/plugins -name "SKILL.md" 2>/dev/null || echo "No skills found"
+    echo ""
+    echo "=== Eval test files ==="
+    find $(Build.SourcesDirectory)/evals -name "*.biceval.json" 2>/dev/null || echo "No eval files found"
+    echo ""
+    echo "=== SUCCESS: Pipeline can checkout and execute ==="
+  displayName: 'Smoke test — verify checkout'
