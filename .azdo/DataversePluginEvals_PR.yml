@@ -157,9 +157,23 @@ extends:
             testRunTitle: 'Dataverse Plugin Eval — ${{ parameters.testFile }}'
           displayName: 'Publish test results'
 
-        - task: PublishBuildArtifacts@1
+        - pwsh: |
+            $src = "$(Agent.TempDirectory)/eval-workspace/reports"
+            $dest = "$(Build.ArtifactStagingDirectory)/EvalReports"
+            if (Test-Path $src) {
+              Copy-Item $src $dest -Recurse -Force
+              Write-Host "Copied reports to staging"
+            } else {
+              New-Item -ItemType Directory -Path $dest -Force | Out-Null
+              Write-Host "No reports to copy"
+            }
           condition: succeededOrFailed()
-          inputs:
-            pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
-            artifactName: 'EvalReports'
+          displayName: 'Stage eval reports for publishing'
+
+      templateContext:
+        outputs:
+        - output: pipelineArtifact
+          targetPath: '$(Build.ArtifactStagingDirectory)/EvalReports'
+          artifactName: 'EvalReports'
+          condition: succeededOrFailed()
           displayName: 'Publish eval reports'
