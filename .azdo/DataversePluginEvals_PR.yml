@@ -55,7 +55,7 @@ steps:
   parameters:
     agentConfigFile: ''
 
-# Pre-execution: copy test file and create CopilotCliAgent config
+# Pre-execution: copy test file, evaluators, and create CopilotCliAgent config
 - pwsh: |
     $sourceDir = "$(Build.SourcesDirectory)"
     $workDir = "$(Agent.TempDirectory)/eval-workspace"
@@ -63,6 +63,15 @@ steps:
 
     # Copy test file from source repo to LER workspace
     Copy-Item (Join-Path $sourceDir "evals/tests/$testFile") $workDir -Force
+
+    # Copy evaluator prompty files to LER CustomEvaluators path
+    $evalSrc = Join-Path $sourceDir "evals/evaluators"
+    $evalDst = Join-Path $workDir "CustomEvaluators/CortexConfigurations"
+    if (Test-Path $evalSrc) {
+      Copy-Item $evalSrc $evalDst -Recurse -Force
+      Write-Host "Copied evaluators to $evalDst"
+      Get-ChildItem $evalDst -Recurse -Filter "*.prompty" | ForEach-Object { Write-Host "  $_" }
+    }
 
     # Create CopilotCliAgent config pointing to plugin skills
     $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
