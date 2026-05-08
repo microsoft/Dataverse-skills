@@ -11,6 +11,8 @@
 trigger: none
 pr: none
 
+name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.testFile }}
+
 pool:
   name: 'Azure Pipelines'
   vmImage: 'ubuntu-latest'
@@ -37,7 +39,7 @@ resources:
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
-    ref: refs/heads/main
+    ref: refs/heads/users/sbadenkal/deterministic-assertions
 
 steps:
 - checkout: self

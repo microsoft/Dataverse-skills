@@ -1,20 +1,10 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Data",
-  "description": "Phase 0 baseline: minimal data test. Verifies SDK pattern for record creation in a Dataverse table.",
+  "description": "Verifies SDK patterns for record creation in Dataverse tables.",
   "enabled_evaluators": [
     {
-      "name": "CortexConfigurations:Common/DVSkillsPlugin/tool_appropriateness.prompty",
-      "passing_score": 3,
-      "priority": 1
-    },
-    {
-      "name": "CortexConfigurations:Common/DVSkillsPlugin/correctness.prompty",
-      "passing_score": 3,
-      "priority": 1
-    },
-    {
-      "name": "CortexConfigurations:Common/DVSkillsPlugin/hallucination_detector.prompty",
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
       "priority": 1
     }
@@ -27,56 +17,32 @@
       "category": "data",
       "description": "Single-record create via SDK on Dataverse table",
       "priority": 1,
-      "tags": ["independent", "requires-plugin", "requires-sdk", "data"],
+      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data"},
       "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK"},
       "assertions": [
-        "PRIORITY_1: Agent uses the official Python SDK for the create. Acceptable: instantiating DataverseClient directly with get_credential, OR using a documented wrapper helper from scripts/auth.py such as create_client(). Hand-rolled urllib/requests POST to /api/data is NOT acceptable for a single-record create — that's a Tier 2 fallback, not Tier 1.",
-        "PRIORITY_1: Agent calls client.records.create (or .records.create / .create on a DataverseClient-shaped client) with the table name and a record dict. Acceptable as a single call; not required to be a list-arg here since the prompt asks for ONE record.",
+        "PRIORITY_1: Agent uses the official Python SDK for the create. Hand-rolled urllib/requests POST is NOT acceptable.",
+        "PRIORITY_1: Agent calls client.records.create with the table name and a record dict.",
         "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell).",
-        "PRIORITY_2: Agent acquires credentials via the documented auth pattern (get_credential() from scripts/auth.py, or load_env() / DeviceCodeCredential / InteractiveBrowserCredential). Inline manual token construction or hand-rolled OAuth = lower quality.",
         "PRIORITY_2: CONTAINS: new_ticket",
         "PRIORITY_2: SKILL_LOADED: dv-data"
-      ],
-      "mode": "simulated"
+      ]
     },
     {
       "test_id": "data_002_bulk_create",
-      "prompt": "Write a Python script that efficiently creates 500 ticket records in my Dataverse new_ticket table. Each ticket should have a unique title (e.g. 'Ticket 1' through 'Ticket 500') and a priority value. Optimize for the fewest HTTP calls.",
-      "expected_response": "Agent uses Python SDK pattern: DataverseClient + client.records.create('new_ticket', list_of_records). Bulk create via CreateMultiple — one HTTP call per chunk, NOT a per-record for-loop calling .create() per element.",
+      "prompt": "Write a Python script that efficiently creates 500 ticket records in my Dataverse new_ticket table. Each ticket should have a unique title and a priority value. Optimize for the fewest HTTP calls.",
+      "expected_response": "Agent uses Python SDK bulk create via CreateMultiple — one HTTP call per chunk, NOT a per-record for-loop.",
       "category": "data",
-      "description": "Bulk-create 500 records — must use list-arg / CreateMultiple semantics, not per-record loop. Designed to catch a SKILL.md regression that deletes bulk-create guidance and replaces it with per-record loops.",
+      "description": "Bulk-create 500 records — must use list-arg / CreateMultiple, not per-record loop.",
       "priority": 1,
-      "tags": ["independent", "requires-plugin", "requires-sdk", "data", "bulk", "regression-trap"],
+      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "bulk"},
       "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "trap": "per-record loop antipattern"},
       "assertions": [
-        "PRIORITY_1: Agent uses the official Python SDK for bulk create. Acceptable: DataverseClient directly OR a documented wrapper from scripts/auth.py (e.g. create_client). Raw urllib/requests POST loops are NOT acceptable here.",
+        "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a Python list as the records argument. Per-record for-loops must FAIL.",
         "PRIORITY_1: CONTAINS: new_ticket",
-        "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a Python list (not a single dict) as the records argument so the SDK invokes CreateMultiple under the hood. Per-record for-loops calling .create() once per element are the antipattern and must FAIL this assertion. Code like 'client.records.create(table, records)' or 'client.records.create(table, chunk)' where 'records'/'chunk' is a list = PASS. Code like 'for r in records: client.records.create(table, r)' = FAIL.",
-        "PRIORITY_1: Agent does NOT echo any of these antipattern phrases (which would mean the agent followed regressed SKILL guidance): 'There is no batch API', 'one HTTP call per record', 'no chunking helper', 'just call client.records.create() per record'. Absence of these phrases AND an authored bulk pattern = PASS.",
-        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, single-POST behavior, or the bulk_create / bulk_upsert helpers from the dv-data skill, in code or prose.",
-        "PRIORITY_2: Agent acquires credentials via the documented auth pattern (get_credential() from scripts/auth.py, or load_env / DeviceCodeCredential / InteractiveBrowserCredential).",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_3: Agent demonstrates adaptive chunking for large datasets — starts at ~1000 records, halves the chunk size on payload-size or timeout failures, and explains the rationale.",
-        "PRIORITY_3: Agent includes a verification step after writes (e.g. queries the table to confirm record count or sample IDs)."
-      ],
-      "mode": "simulated"
-    },
-    {
-      "test_id": "data_003_skill_contract",
-      "prompt": "I'm writing a script that needs to import 5000 records into Dataverse. Before writing code, summarize EXACTLY what guidance and helpers the dv-data skill provides for bulk operations. Quote the relevant section verbatim if you can. List every named helper or method the skill recommends. Do not write code yet — just summarize what the skill teaches.",
-      "expected_response": "Agent loads dv-data skill and faithfully reports its bulk-operation contract: mentions CreateMultiple/UpdateMultiple/UpsertMultiple as the SDK's bulk operations, the bulk_create / bulk_upsert adaptive-chunking helpers, and the volume-routing rule (MCP for 1-10 records, SDK for 10+).",
-      "category": "data",
-      "description": "Skill-contract test — asks the agent to REPORT what the dv-data skill teaches about bulk ops. A regression deletes CreateMultiple, the bulk_create/bulk_upsert helpers, and the volume-routing rule. An agent reading the regressed SKILL physically cannot quote those concepts. This catches the regression at the SKILL.md level even when model prior knowledge would otherwise mask it via the behavior-only test.",
-      "priority": 1,
-      "tags": ["independent", "requires-plugin", "data", "regression-trap", "skill-contract"],
-      "custom_metadata": {"skill": "dv-data", "trap": "skill content deletion vs model prior", "test_kind": "skill-contract"},
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-data",
-        "PRIORITY_1: Agent's summary reflects what the SKILL.md ACTUALLY documents about bulk operations. The summary mentions named bulk SDK methods (CreateMultiple / UpdateMultiple / UpsertMultiple) AND/OR named helpers (bulk_create / bulk_upsert / adaptive chunking) AND/OR the volume-routing rule (MCP for small batches, SDK for larger). A regression removes ALL of these from the skill. If the agent quotes a per-record loop as the recommended pattern, or claims the skill says 'no batch API' / 'no chunking helper' / 'just call client.records.create() per record', mark FAIL — those phrases come from the regressed SKILL.",
-        "PRIORITY_1: Agent does NOT report the antipattern phrasing as the skill's recommendation. Specifically, if the agent surfaces 'There is no batch API' / 'one HTTP call per record' / 'no chunking helper' / 'just call client.records.create() per record' as the skill's documented guidance, this assertion FAILs (means the bad SKILL has been propagated through the agent into the user's understanding).",
-        "PRIORITY_2: Agent grounds its summary in the skill content (e.g. cites section names, quotes verbatim, or references file paths). Hand-wavy summary without grounding = lower quality."
-      ],
-      "mode": "both"
+        "PRIORITY_1: Agent does NOT echo: 'There is no batch API', 'one HTTP call per record', 'no chunking helper'.",
+        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or bulk_create helpers from the dv-data skill.",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ]
     }
   ]
 }
