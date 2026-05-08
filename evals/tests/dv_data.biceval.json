@@ -43,6 +43,23 @@
         "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or bulk_create helpers from the dv-data skill.",
         "PRIORITY_2: SKILL_LOADED: dv-data"
       ]
+    },
+    {
+      "test_id": "data_003_skill_contract",
+      "prompt": "Before writing any code, tell me exactly what the dv-data skill says about creating multiple records. Quote or closely paraphrase the specific method calls, patterns, and helpers it documents for bulk operations. Do not use your own knowledge — only report what the loaded skill teaches.",
+      "expected_response": "Agent reports skill content: CreateMultiple, bulk_create helper, list-arg to client.records.create, adaptive chunking. A regressed skill would instead teach per-record loops.",
+      "category": "data",
+      "description": "Skill-contract test — agent must report what the skill ACTUALLY teaches, not generate code from prior knowledge.",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "skill-contract"},
+      "custom_metadata": {"skill": "dv-data", "test_kind": "skill-contract", "trap": "agent echoes regressed skill content verbatim"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-data",
+        "PRIORITY_1: NOT_CONTAINS: per-record operations only",
+        "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
+        "PRIORITY_1: Agent's summary mentions bulk/batch SDK methods (CreateMultiple, UpdateMultiple, or UpsertMultiple) OR bulk helpers (bulk_create, bulk_upsert) OR passing a list to client.records.create. If the agent says the skill recommends per-record loops or says there is no batch API, this FAILS.",
+        "PRIORITY_2: CONTAINS: CreateMultiple"
+      ]
     }
   ]
 }
