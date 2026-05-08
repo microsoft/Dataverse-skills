@@ -90,7 +90,7 @@ steps:
     $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
     @{
       command = "copilot"
-      model = "claude-sonnet-4-6"
+      model = "claude-sonnet-4.6"
       pluginDir = $pluginDir
       transcriptDir = "transcripts/"
       logDir = "logs/"
