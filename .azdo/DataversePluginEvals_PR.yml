@@ -54,10 +54,19 @@ resources:
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
     ref: refs/heads/users/sbadenkal/deterministic-assertions
+  - repository: BicEvalsService
+    type: github
+    endpoint: bic-proxima-shared-stamp
+    name: bic/BIC-Evaluations-Service
+    ref: refs/heads/users/claude/dvskills-evaluators
 
 steps:
 - checkout: self
   displayName: 'Checkout Dataverse-skills'
+
+- checkout: BicEvalsService
+  displayName: 'Checkout evaluator prompts'
+  fetchDepth: 1
 
 # Set Copilot CLI auth token for all subsequent steps
 - script: |
@@ -80,21 +89,24 @@ steps:
 
 # Pre-execution: copy test file, evaluators, and create CopilotCliAgent config
 - pwsh: |
-    $sourceDir = "$(Build.SourcesDirectory)"
+    $sourceDir = "$(Build.SourcesDirectory)/Dataverse-skills"
     $workDir = "$(Agent.TempDirectory)/eval-workspace"
     $testFile = '${{ parameters.testFile }}'
 
     # Copy test file from source repo to LER workspace
     Copy-Item (Join-Path $sourceDir "evals/tests/$testFile") $workDir -Force
 
-    # Copy evaluator prompty files to LER CustomEvaluators path
-    $evalSrc = Join-Path $sourceDir "evals/evaluators/*"
+    # Copy evaluator prompty files from BIC-Evaluations-Service checkout
+    $besDir = "$(Build.SourcesDirectory)/BIC-Evaluations-Service/src/BicEvalsService.BusinessLogic/Prompts"
     $evalDst = Join-Path $workDir "CustomEvaluators/CortexConfigurations"
     New-Item -ItemType Directory -Path $evalDst -Force | Out-Null
-    if (Test-Path (Join-Path $sourceDir "evals/evaluators")) {
-      Copy-Item $evalSrc $evalDst -Recurse -Force
-      Write-Host "Copied evaluators to $evalDst"
+    if (Test-Path $besDir) {
+      Copy-Item "$besDir/*" $evalDst -Recurse -Force
+      Write-Host "Copied evaluators from BIC-Evaluations-Service"
       Get-ChildItem $evalDst -Recurse -Filter "*.prompty" | ForEach-Object { Write-Host "  $($_.FullName)" }
+    } else {
+      Write-Host "##[error]BIC-Evaluations-Service Prompts directory not found at $besDir"
+      exit 1
     }
 
     # Create CopilotCliAgent config pointing to plugin skills
