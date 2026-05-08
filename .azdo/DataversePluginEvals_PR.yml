@@ -68,19 +68,11 @@ steps:
   displayName: 'Checkout evaluator prompts'
   fetchDepth: 1
 
-# Set Copilot CLI auth token for all subsequent steps
-- script: |
-    echo "##vso[task.setvariable variable=GH_TOKEN;issecret=true]$COPILOT_GH_PAT"
-    echo "##vso[task.setvariable variable=COPILOT_GITHUB_TOKEN;issecret=true]$COPILOT_GH_PAT"
-    echo "Copilot auth token configured (${#COPILOT_GH_PAT} chars)"
-  displayName: 'Configure Copilot CLI auth'
-  env:
-    COPILOT_GH_PAT: $(COPILOT_GH_PAT)
-
-# Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, init workspace
+# Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, auth token
 - template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@LocalEvalRunner
   parameters:
     cliAgent: 'copilot'
+    cliAgentTokenVariable: 'COPILOT_GH_PAT'
 
 # Configure: merge replacements, prepare agent config
 - template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@LocalEvalRunner
