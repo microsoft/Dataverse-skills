@@ -65,12 +65,13 @@ steps:
     Copy-Item (Join-Path $sourceDir "evals/tests/$testFile") $workDir -Force
 
     # Copy evaluator prompty files to LER CustomEvaluators path
-    $evalSrc = Join-Path $sourceDir "evals/evaluators"
+    $evalSrc = Join-Path $sourceDir "evals/evaluators/*"
     $evalDst = Join-Path $workDir "CustomEvaluators/CortexConfigurations"
-    if (Test-Path $evalSrc) {
+    New-Item -ItemType Directory -Path $evalDst -Force | Out-Null
+    if (Test-Path (Join-Path $sourceDir "evals/evaluators")) {
       Copy-Item $evalSrc $evalDst -Recurse -Force
       Write-Host "Copied evaluators to $evalDst"
-      Get-ChildItem $evalDst -Recurse -Filter "*.prompty" | ForEach-Object { Write-Host "  $_" }
+      Get-ChildItem $evalDst -Recurse -Filter "*.prompty" | ForEach-Object { Write-Host "  $($_.FullName)" }
     }
 
     # Create CopilotCliAgent config pointing to plugin skills
