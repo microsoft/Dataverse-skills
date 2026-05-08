@@ -138,7 +138,7 @@ steps:
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@BicEvalRunner
   parameters:
-    sourceRepoTestFilePath: 'evals/tests/${{ parameters.testFile }}'
+    sourceRepoTestFilePath: 'Dataverse-skills/evals/tests/${{ parameters.testFile }}'
     agentType: 'CopilotCliAgent'
     agentConfigFile: 'copilot_agent_config.json'
     azureServiceConnection: ${{ parameters.azureServiceConnection }}
