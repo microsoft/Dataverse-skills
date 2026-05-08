@@ -9,11 +9,14 @@
 # Prerequisites:                                                                #
 #  - LocalEvalTool-ResourceAccess (Contributor) in CoreIdentity                 #
 #  - Azure service connection with access to shared AI resources                #
-#  - GitHub Enterprise service connection for LocalEvalRunner repo              #
 #################################################################################
 
 trigger: none
 pr: none
+
+pool:
+  name: 'Azure Pipelines'
+  vmImage: 'ubuntu-latest'
 
 parameters:
   - name: azureServiceConnection
@@ -26,155 +29,102 @@ parameters:
     type: string
     default: 'dv_data.biceval.json'
 
-  - name: iterations
-    displayName: 'Number of iterations'
-    type: number
-    default: 1
-
   - name: concurrency
     displayName: 'Concurrent evaluations'
     type: number
     default: 1
 
-resources:
-  repositories:
-  - repository: 1ESPipelineTemplates
-    type: git
-    name: 1ESPipelineTemplates/1ESPipelineTemplates
-    ref: refs/tags/release
-  - repository: BicEvalRunner
-    type: github
-    endpoint: bic-proxima-shared-stamp
-    name: bic/LocalEvalRunner
-    ref: refs/heads/main
+steps:
+- checkout: self
+  displayName: 'Checkout Dataverse-skills'
 
-extends:
-  template: v1/1ES.Unofficial.PipelineTemplate.yml@1ESPipelineTemplates
-  parameters:
-    pool:
-      name: Azure-Pipelines-1ESPT-ExDShared
-      image: ubuntu-latest
-      os: linux
-    sdl:
-      sourceAnalysisPool:
-        name: Azure-Pipelines-1ESPT-ExDShared
-        image: windows-latest
-        os: windows
-      sourceRepositoriesToScan:
-        exclude:
-        - repository: BicEvalRunner
+- task: UseDotNet@2
+  inputs:
+    version: '8.x'
+  displayName: 'Install .NET 8'
 
-    stages:
-    - stage: Evaluate
-      displayName: 'Run Dataverse Skills Plugin Evals'
-      jobs:
-      - job: RunEvals
-        displayName: 'Execute Evaluation'
-        timeoutInMinutes: 45
-        steps:
-        - checkout: self
-          displayName: 'Checkout Dataverse-skills'
+- task: NuGetAuthenticate@1
+  displayName: 'Authenticate with Azure Artifacts'
 
-        - checkout: BicEvalRunner
-          displayName: 'Checkout eval runner repo'
+- pwsh: |
+    dotnet tool install --global LocalEvalRunner `
+      --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
+      --ignore-failed-sources
+    localevalrunner --help | Select-Object -First 3
+  displayName: 'Install LocalEvalRunner'
 
-        - task: UseDotNet@2
-          inputs:
-            version: '8.x'
-          displayName: 'Install .NET 8'
+- script: |
+    curl -fsSL https://gh.io/copilot-install | bash
+    copilot --version || echo "Copilot CLI installed"
+  displayName: 'Install Copilot CLI'
 
-        - task: NuGetAuthenticate@1
-          displayName: 'Authenticate with Azure Artifacts'
+- task: AzureCLI@2
+  displayName: 'Run evaluation'
+  inputs:
+    azureSubscription: ${{ parameters.azureServiceConnection }}
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    addSpnToEnvironment: true
+    inlineScript: |
+      $ErrorActionPreference = 'Stop'
+      $testFile = '${{ parameters.testFile }}'
+      $sourceDir = "$(Build.SourcesDirectory)"
+      $sourceTest = Join-Path $sourceDir "evals/tests/$testFile"
 
-        - pwsh: |
-            dotnet tool install --global LocalEvalRunner `
-              --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
-              --ignore-failed-sources
-            localevalrunner --help | Select-Object -First 3
-          displayName: 'Install LocalEvalRunner from feed'
+      # Create working directory
+      $workDir = "$(Agent.TempDirectory)/eval-workspace"
+      New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+      Set-Location $workDir
 
-        - script: |
-            curl -fsSL https://gh.io/copilot-install | bash
-            copilot --version || echo "Copilot CLI installed"
-          displayName: 'Install Copilot CLI'
+      # Init LER workspace
+      localevalrunner init
 
-        - task: AzureCLI@2
-          displayName: 'Run evaluation'
-          inputs:
-            azureSubscription: ${{ parameters.azureServiceConnection }}
-            scriptType: 'pscore'
-            scriptLocation: 'inlineScript'
-            addSpnToEnvironment: true
-            inlineScript: |
-              $ErrorActionPreference = 'Stop'
-              $testFile = '${{ parameters.testFile }}'
-              $sourceDir = "$(Build.SourcesDirectory)/Dataverse-skills"
-              $sourceTest = Join-Path $sourceDir "evals/tests/$testFile"
+      # Copy test file
+      Copy-Item $sourceTest . -Force
 
-              # Create working directory
-              $workDir = "$(Agent.TempDirectory)/eval-workspace"
-              New-Item -ItemType Directory -Path $workDir -Force | Out-Null
-              Set-Location $workDir
+      # Create CopilotCliAgent config pointing to plugin skills
+      $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
+      @{
+        command = "copilot"
+        model = "claude-sonnet-4.6"
+        pluginDir = $pluginDir
+        transcriptDir = "transcripts/"
+        logDir = "logs/"
+        logLevel = "all"
+        timeoutSeconds = 600
+        agentInstanceName = "Dataverse Plugin Eval"
+        agentInstanceType = "CopilotCliAgent"
+      } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
 
-              # Init LER workspace
-              localevalrunner init
+      # Run evaluation
+      $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+      localevalrunner "$testFile" `
+        --copilotcliagent copilot_agent_config.json `
+        --output reports `
+        --concurrency ${{ parameters.concurrency }} `
+        --runid $runId `
+        --service DataverseSkillsPlugin
 
-              # Copy test file
-              Copy-Item $sourceTest . -Force
+      # Report results
+      $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+      if ($report) {
+        $r = Get-Content $report -Raw | ConvertFrom-Json
+        $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
+        $total = $r.TestResults.Count
+        Write-Host "Results: $passed/$total passed"
+      }
 
-              # Create CopilotCliAgent config
-              $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
-              @{
-                command = "copilot"
-                model = "claude-sonnet-4.6"
-                pluginDir = $pluginDir
-                transcriptDir = "transcripts/"
-                logDir = "logs/"
-                logLevel = "all"
-                timeoutSeconds = 600
-                agentInstanceName = "Dataverse Plugin (ADO)"
-                agentInstanceType = "CopilotCliAgent"
-              } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
+- task: PublishTestResults@2
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
+    testRunTitle: 'Dataverse Plugin Eval — ${{ parameters.testFile }}'
+  displayName: 'Publish test results'
 
-              # Run localevalrunner
-              $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-              $cmd = "localevalrunner `"$testFile`" --copilotcliagent copilot_agent_config.json --output reports --concurrency ${{ parameters.concurrency }} --runid $runId --service DataverseSkillsPlugin"
-              Write-Host "Running: $cmd"
-              Invoke-Expression $cmd
-
-              # Report results
-              $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-              if ($report) {
-                $r = Get-Content $report -Raw | ConvertFrom-Json
-                $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
-                $total = $r.TestResults.Count
-                Write-Host "Results: $passed/$total passed"
-              }
-
-        - task: PublishTestResults@2
-          condition: succeededOrFailed()
-          inputs:
-            testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
-            testRunTitle: 'Dataverse Plugin Eval — ${{ parameters.testFile }}'
-          displayName: 'Publish test results'
-
-        - pwsh: |
-            $src = "$(Agent.TempDirectory)/eval-workspace/reports"
-            $dest = "$(Build.ArtifactStagingDirectory)/EvalReports"
-            if (Test-Path $src) {
-              Copy-Item $src $dest -Recurse -Force
-              Write-Host "Copied reports to staging"
-            } else {
-              New-Item -ItemType Directory -Path $dest -Force | Out-Null
-              Write-Host "No reports to copy"
-            }
-          condition: succeededOrFailed()
-          displayName: 'Stage eval reports for publishing'
-
-      templateContext:
-        outputs:
-        - output: pipelineArtifact
-          targetPath: '$(Build.ArtifactStagingDirectory)/EvalReports'
-          artifactName: 'EvalReports'
-          condition: succeededOrFailed()
-          displayName: 'Publish eval reports'
+- task: PublishBuildArtifacts@1
+  condition: succeededOrFailed()
+  inputs:
+    pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
+    artifactName: 'EvalReports'
+  displayName: 'Publish eval reports'
