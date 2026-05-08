@@ -49,7 +49,7 @@ parameters:
 
 resources:
   repositories:
-  - repository: BicEvalRunner
+  - repository: LocalEvalRunner
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
@@ -78,12 +78,12 @@ steps:
     COPILOT_GH_PAT: $(COPILOT_GH_PAT)
 
 # Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, init workspace
-- template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@BicEvalRunner
+- template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@LocalEvalRunner
   parameters:
     cliAgent: 'copilot'
 
 # Configure: merge replacements, prepare agent config
-- template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@BicEvalRunner
+- template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@LocalEvalRunner
   parameters:
     agentConfigFile: ''
 
@@ -136,7 +136,7 @@ steps:
   displayName: 'Prepare test file and agent config'
 
 # Execute: run localevalrunner with CopilotCliAgent
-- template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@BicEvalRunner
+- template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
   parameters:
     sourceRepoTestFilePath: 'Dataverse-skills/evals/tests/${{ parameters.testFile }}'
     agentType: 'CopilotCliAgent'
@@ -146,4 +146,4 @@ steps:
     serviceName: 'DataverseSkillsPlugin'
 
 # Publish: test results + artifacts
-- template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@BicEvalRunner
+- template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@LocalEvalRunner
