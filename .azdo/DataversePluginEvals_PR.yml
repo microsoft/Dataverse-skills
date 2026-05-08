@@ -17,6 +17,9 @@ pool:
   name: 'Azure Pipelines'
   vmImage: 'ubuntu-latest'
 
+variables:
+- group: DVSkillsPlugin_Secrets
+
 parameters:
   - name: azureServiceConnection
     displayName: 'Azure service connection for AI model access'
@@ -97,6 +100,15 @@ steps:
       }
       $cfg | ConvertTo-Json -Depth 10 | Set-Content $appSettings -Encoding UTF8
       Write-Host "Judge model set to claude-opus-4-6 on CAPI entries"
+    }
+
+    # Set GH_TOKEN for Copilot CLI auth (read from variable group secret)
+    $ghToken = "$(COPILOT_GH_PAT)"
+    if ($ghToken -and $ghToken -ne '$(COPILOT_GH_PAT)') {
+      Write-Host "##vso[task.setvariable variable=GH_TOKEN;issecret=true]$ghToken"
+      Write-Host "GH_TOKEN set from COPILOT_GH_PAT"
+    } else {
+      Write-Host "WARNING: COPILOT_GH_PAT not found — Copilot CLI will fail to authenticate"
     }
   displayName: 'Prepare test file and agent config'
 
