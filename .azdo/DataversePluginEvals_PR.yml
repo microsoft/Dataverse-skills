@@ -88,17 +88,15 @@ steps:
       agentInstanceType = "CopilotCliAgent"
     } | ConvertTo-Json | Set-Content (Join-Path $workDir "copilot_agent_config.json") -Encoding UTF8
 
-    # Override evaluator model to use Claude Opus as judge via CAPI
+    # Override evaluator model to use Claude Opus as judge (keeps existing CAPI endpoint from LER config)
     $appSettings = Join-Path $workDir "appsettings.json"
     if (Test-Path $appSettings) {
       $cfg = Get-Content $appSettings -Raw | ConvertFrom-Json
-      $cfg.EvaluatorSettings.Models = @(
-        @{ ModelProvider = "CAPI"; ModelEndpoint = "https://capi-resourceproxy.us-il002.gateway.test.island.powerapps.com/"; ModelName = "claude-opus-4-6" }
-      )
+      foreach ($m in $cfg.EvaluatorSettings.Models) {
+        if ($m.ModelProvider -eq 'CAPI') { $m.ModelName = 'claude-opus-4-6' }
+      }
       $cfg | ConvertTo-Json -Depth 10 | Set-Content $appSettings -Encoding UTF8
-      Write-Host "Judge model set to Claude Opus via CAPI"
-    } else {
-      Write-Host "WARNING: appsettings.json not found in workspace, using default judge model"
+      Write-Host "Judge model set to claude-opus-4-6 on CAPI entries"
     }
   displayName: 'Prepare test file and agent config'
 
