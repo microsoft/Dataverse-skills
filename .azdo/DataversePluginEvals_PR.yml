@@ -48,6 +48,15 @@ steps:
 - checkout: self
   displayName: 'Checkout Dataverse-skills'
 
+# Set Copilot CLI auth token for all subsequent steps
+- script: |
+    echo "##vso[task.setvariable variable=GH_TOKEN;issecret=true]$COPILOT_GH_PAT"
+    echo "##vso[task.setvariable variable=COPILOT_GITHUB_TOKEN;issecret=true]$COPILOT_GH_PAT"
+    echo "Copilot auth token configured (${#COPILOT_GH_PAT} chars)"
+  displayName: 'Configure Copilot CLI auth'
+  env:
+    COPILOT_GH_PAT: $(COPILOT_GH_PAT)
+
 # Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, init workspace
 - template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@BicEvalRunner
   parameters:
