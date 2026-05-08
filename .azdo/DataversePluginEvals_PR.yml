@@ -122,17 +122,6 @@ steps:
       agentInstanceName = "Dataverse Plugin Eval"
       agentInstanceType = "CopilotCliAgent"
     } | ConvertTo-Json | Set-Content (Join-Path $workDir "copilot_agent_config.json") -Encoding UTF8
-
-    # Override evaluator model to use Claude Opus as judge (keeps existing CAPI endpoint from LER config)
-    $appSettings = Join-Path $workDir "appsettings.json"
-    if (Test-Path $appSettings) {
-      $cfg = Get-Content $appSettings -Raw | ConvertFrom-Json
-      foreach ($m in $cfg.EvaluatorSettings.Models) {
-        if ($m.ModelProvider -eq 'CAPI') { $m.ModelName = 'claude-opus-4-6' }
-      }
-      $cfg | ConvertTo-Json -Depth 10 | Set-Content $appSettings -Encoding UTF8
-      Write-Host "Judge model set to claude-opus-4-6 on CAPI entries"
-    }
   displayName: 'Prepare test file and agent config'
 
 # Execute: run localevalrunner with CopilotCliAgent
