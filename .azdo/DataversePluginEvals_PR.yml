@@ -2,13 +2,10 @@
 #        Dataverse Skills Plugin — Offline Eval Pipeline                        #
 #                                                                               #
 # Runs offline evaluations for the Dataverse Skills Plugin using                #
-# LocalEvalRunner with CopilotCliAgent.                                         #
+# LocalEvalRunner step templates with CopilotCliAgent.                          #
 #                                                                               #
 # Source: github.com/microsoft/Dataverse-skills (self-checkout)                 #
-#                                                                               #
-# Prerequisites:                                                                #
-#  - LocalEvalTool-ResourceAccess (Contributor) in CoreIdentity                 #
-#  - Azure service connection with access to shared AI resources                #
+# Templates: LocalEvalRunner step templates (Setup, Execute, Publish)           #
 #################################################################################
 
 trigger: none
@@ -34,97 +31,61 @@ parameters:
     type: number
     default: 1
 
+resources:
+  repositories:
+  - repository: BicEvalRunner
+    type: github
+    endpoint: bic-proxima-shared-stamp
+    name: bic/LocalEvalRunner
+    ref: refs/heads/main
+
 steps:
 - checkout: self
   displayName: 'Checkout Dataverse-skills'
 
-- task: UseDotNet@2
-  inputs:
-    version: '8.x'
-  displayName: 'Install .NET 8'
+# Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, init workspace
+- template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@BicEvalRunner
+  parameters:
+    cliAgent: 'copilot'
 
-- task: NuGetAuthenticate@1
-  displayName: 'Authenticate with Azure Artifacts'
+# Configure: merge replacements, prepare agent config
+- template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@BicEvalRunner
+  parameters:
+    agentConfigFile: ''
 
+# Pre-execution: copy test file and create CopilotCliAgent config
 - pwsh: |
-    dotnet tool install --global LocalEvalRunner `
-      --add-source "https://pkgs.dev.azure.com/dynamicscrm/_packaging/XrmSolutions/nuget/v3/index.json" `
-      --ignore-failed-sources
-    localevalrunner --help | Select-Object -First 3
-  displayName: 'Install LocalEvalRunner'
+    $sourceDir = "$(Build.SourcesDirectory)"
+    $workDir = "$(Agent.TempDirectory)/eval-workspace"
+    $testFile = '${{ parameters.testFile }}'
 
-- script: |
-    curl -fsSL https://gh.io/copilot-install | bash
-    copilot --version || echo "Copilot CLI installed"
-  displayName: 'Install Copilot CLI'
+    # Copy test file from source repo to LER workspace
+    Copy-Item (Join-Path $sourceDir "evals/tests/$testFile") $workDir -Force
 
-- task: AzureCLI@2
-  displayName: 'Run evaluation'
-  inputs:
-    azureSubscription: ${{ parameters.azureServiceConnection }}
-    scriptType: 'pscore'
-    scriptLocation: 'inlineScript'
-    addSpnToEnvironment: true
-    inlineScript: |
-      $ErrorActionPreference = 'Stop'
-      $testFile = '${{ parameters.testFile }}'
-      $sourceDir = "$(Build.SourcesDirectory)"
-      $sourceTest = Join-Path $sourceDir "evals/tests/$testFile"
+    # Create CopilotCliAgent config pointing to plugin skills
+    $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
+    @{
+      command = "copilot"
+      model = "claude-sonnet-4.6"
+      pluginDir = $pluginDir
+      transcriptDir = "transcripts/"
+      logDir = "logs/"
+      logLevel = "all"
+      timeoutSeconds = 600
+      agentInstanceName = "Dataverse Plugin Eval"
+      agentInstanceType = "CopilotCliAgent"
+    } | ConvertTo-Json | Set-Content (Join-Path $workDir "copilot_agent_config.json") -Encoding UTF8
+  displayName: 'Prepare test file and agent config'
 
-      # Create working directory
-      $workDir = "$(Agent.TempDirectory)/eval-workspace"
-      New-Item -ItemType Directory -Path $workDir -Force | Out-Null
-      Set-Location $workDir
+# Execute: run localevalrunner with CopilotCliAgent
+- template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@BicEvalRunner
+  parameters:
+    sourceRepoTestFilePath: 'evals/tests/${{ parameters.testFile }}'
+    agentType: 'CopilotCliAgent'
+    agentConfigFile: 'copilot_agent_config.json'
+    azureServiceConnection: ${{ parameters.azureServiceConnection }}
+    concurrency: ${{ parameters.concurrency }}
+    serviceName: 'DataverseSkillsPlugin'
 
-      # Init LER workspace
-      localevalrunner init
-
-      # Copy test file
-      Copy-Item $sourceTest . -Force
-
-      # Create CopilotCliAgent config pointing to plugin skills
-      $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
-      @{
-        command = "copilot"
-        model = "claude-sonnet-4.6"
-        pluginDir = $pluginDir
-        transcriptDir = "transcripts/"
-        logDir = "logs/"
-        logLevel = "all"
-        timeoutSeconds = 600
-        agentInstanceName = "Dataverse Plugin Eval"
-        agentInstanceType = "CopilotCliAgent"
-      } | ConvertTo-Json | Set-Content "copilot_agent_config.json" -Encoding UTF8
-
-      # Run evaluation
-      $runId = "dv_$(Build.BuildNumber)_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-      localevalrunner "$testFile" `
-        --copilotcliagent copilot_agent_config.json `
-        --output reports `
-        --concurrency ${{ parameters.concurrency }} `
-        --runid $runId `
-        --service DataverseSkillsPlugin
-
-      # Report results
-      $report = Get-ChildItem reports/evaluation_report_*.json -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-      if ($report) {
-        $r = Get-Content $report -Raw | ConvertFrom-Json
-        $passed = ($r.TestResults | Where-Object { $_.Passed }).Count
-        $total = $r.TestResults.Count
-        Write-Host "Results: $passed/$total passed"
-      }
-
-- task: PublishTestResults@2
-  condition: succeededOrFailed()
-  inputs:
-    testResultsFiles: '$(Agent.TempDirectory)/eval-workspace/reports/*.trx'
-    testRunTitle: 'Dataverse Plugin Eval — ${{ parameters.testFile }}'
-  displayName: 'Publish test results'
-
-- task: PublishBuildArtifacts@1
-  condition: succeededOrFailed()
-  inputs:
-    pathToPublish: '$(Agent.TempDirectory)/eval-workspace/reports'
-    artifactName: 'EvalReports'
-  displayName: 'Publish eval reports'
+# Publish: test results + artifacts
+- template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@BicEvalRunner
