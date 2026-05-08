@@ -87,42 +87,14 @@ steps:
   parameters:
     agentConfigFile: ''
 
-# Pre-execution: copy test file, evaluators, and create CopilotCliAgent config
-- pwsh: |
-    $sourceDir = "$(Build.SourcesDirectory)/Dataverse-skills"
-    $workDir = "$(Agent.TempDirectory)/eval-workspace"
-    $testFile = '${{ parameters.testFile }}'
-
-    # Copy test file from source repo to LER workspace
-    Copy-Item (Join-Path $sourceDir "evals/tests/$testFile") $workDir -Force
-
-    # Copy evaluator prompty files from BIC-Evaluations-Service checkout
-    $besDir = "$(Build.SourcesDirectory)/BIC-Evaluations-Service/src/BicEvalsService.BusinessLogic/Prompts"
-    $evalDst = Join-Path $workDir "CustomEvaluators/CortexConfigurations"
-    New-Item -ItemType Directory -Path $evalDst -Force | Out-Null
-    if (Test-Path $besDir) {
-      Copy-Item "$besDir/*" $evalDst -Recurse -Force
-      Write-Host "Copied evaluators from BIC-Evaluations-Service"
-      Get-ChildItem $evalDst -Recurse -Filter "*.prompty" | ForEach-Object { Write-Host "  $($_.FullName)" }
-    } else {
-      Write-Host "##[error]BIC-Evaluations-Service Prompts directory not found at $besDir"
-      exit 1
-    }
-
-    # Create CopilotCliAgent config pointing to plugin skills
-    $pluginDir = Join-Path $sourceDir ".github/plugins/dataverse"
-    @{
-      command = "copilot"
-      model = "claude-sonnet-4.6"
-      pluginDir = $pluginDir
-      transcriptDir = "transcripts/"
-      logDir = "logs/"
-      logLevel = "all"
-      timeoutSeconds = 600
-      agentInstanceName = "Dataverse Plugin Eval"
-      agentInstanceType = "CopilotCliAgent"
-    } | ConvertTo-Json | Set-Content (Join-Path $workDir "copilot_agent_config.json") -Encoding UTF8
-  displayName: 'Prepare test file and agent config'
+# Prepare: copy test file + evaluators, generate CopilotCliAgent config
+- template: .pipelines/templates/steps/BicEval-PrepareTemplate.yml@LocalEvalRunner
+  parameters:
+    sourceRepoName: 'Dataverse-skills'
+    testFilePath: 'evals/tests/${{ parameters.testFile }}'
+    evaluatorRepoName: 'BIC-Evaluations-Service'
+    pluginDir: '.github/plugins/dataverse'
+    agentModel: 'claude-sonnet-4.6'
 
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
