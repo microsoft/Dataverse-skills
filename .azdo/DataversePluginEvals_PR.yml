@@ -103,34 +103,6 @@ steps:
     }
   displayName: 'Prepare test file and agent config'
 
-# Set GH_TOKEN and verify Copilot CLI can authenticate
-- script: |
-    echo "=== Copilot CLI auth check ==="
-    export GH_TOKEN="$COPILOT_GH_PAT"
-    if [ -z "$GH_TOKEN" ]; then
-      echo "##[error]COPILOT_GH_PAT is empty — Copilot CLI cannot authenticate"
-      exit 1
-    fi
-    echo "GH_TOKEN set (${#GH_TOKEN} chars)"
-
-    # Smoke test: verify copilot can respond
-    REPLY=$(echo "Reply with exactly: SMOKE_TEST_OK" | copilot -p - 2>&1 || true)
-    echo "Copilot reply: $REPLY"
-    if echo "$REPLY" | grep -q "SMOKE_TEST_OK"; then
-      echo "=== Copilot CLI smoke test PASSED ==="
-    elif echo "$REPLY" | grep -qi "authentication"; then
-      echo "##[error]Copilot CLI authentication failed"
-      exit 1
-    else
-      echo "=== Copilot CLI responded (smoke test inconclusive but auth works) ==="
-    fi
-
-    # Persist GH_TOKEN for subsequent steps
-    echo "##vso[task.setvariable variable=GH_TOKEN;issecret=true]$GH_TOKEN"
-  displayName: 'Verify Copilot CLI auth'
-  env:
-    COPILOT_GH_PAT: $(COPILOT_GH_PAT)
-
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@BicEvalRunner
   parameters:
