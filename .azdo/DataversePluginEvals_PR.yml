@@ -11,7 +11,7 @@
 trigger: none
 pr: none
 
-name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.testFile }}
+name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.mode }} • ${{ parameters.label }} • ${{ parameters.testFile }}
 
 pool:
   name: 'Azure Pipelines'
@@ -21,6 +21,17 @@ variables:
 - group: DVSkillsPlugin_Secrets
 
 parameters:
+  - name: mode
+    displayName: 'Eval mode'
+    type: string
+    default: 'dry-run'
+    values: ['dry-run', 'live']
+
+  - name: label
+    displayName: 'Run label (branch or PR description)'
+    type: string
+    default: 'plugin-main'
+
   - name: azureServiceConnection
     displayName: 'Azure service connection for AI model access'
     type: string
