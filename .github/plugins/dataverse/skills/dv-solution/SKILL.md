@@ -33,11 +33,9 @@ Every solution belongs to a publisher. The publisher's `customizationprefix` (e.
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+client = get_client("dv-solution")
 
 # 1. Query for existing non-Microsoft publishers
 pages = client.records.get(
@@ -79,11 +77,9 @@ Use the SDK to create the solution record (preferred over raw Web API):
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+client = get_client("dv-solution")
 
 # Create the solution record
 solution_id = client.records.create("solution", {

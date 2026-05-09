@@ -83,11 +83,9 @@ The only time you write files directly is when editing something that already ex
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+client = get_client("dv-metadata")
 
 info = client.tables.create(
     "new_ProjectBudget",

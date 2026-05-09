@@ -128,11 +128,29 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
+Also set plugin attribution variables for User-Agent tagging:
+- `DATAVERSE_PLUGIN_VERSION` — use `1.5.0` (the current plugin version; update when the plugin version is bumped)
+- `DATAVERSE_PLUGIN_AGENT` — detect from environment: `CLAUDECODE` env var → `claude-code`, `CURSOR_TRACE_DIR` → `cursor`, `VSCODE_PID` (without Cursor) → `copilot`, else `unknown`
+
 ```python
+import os
+
+# Detect agent host
+if os.environ.get("CLAUDECODE"):
+    agent_host = "claude-code"
+elif os.environ.get("CURSOR_TRACE_DIR"):
+    agent_host = "cursor"
+elif os.environ.get("VSCODE_PID"):
+    agent_host = "copilot"
+else:
+    agent_host = "unknown"
+
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
     f.write(f"TENANT_ID={tenant_id}\n")
     f.write(f"MCP_CLIENT_ID={mcp_client_id}\n")
+    f.write(f"DATAVERSE_PLUGIN_VERSION={plugin_version}\n")
+    f.write(f"DATAVERSE_PLUGIN_AGENT={agent_host}\n")
     f.write(f"SOLUTION_NAME={solution_name}\n")
     f.write(f"PUBLISHER_PREFIX=\n")  # filled in when solution is created
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
@@ -213,6 +231,14 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 4. Default to GA endpoint (`/api/mcp`)
 5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command)
 6. Handle admin consent and environment allowlist (one-time per tenant/environment)
+
+**Plugin attribution for MCP:** When registering the stdio MCP server, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on all outbound requests. Build the value from `.env`:
+
+```
+DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};agent={DATAVERSE_PLUGIN_AGENT}
+```
+
+For Claude Code (`claude mcp add`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object.
 
 **Important:** MCP configuration requires an editor/CLI restart.
 
