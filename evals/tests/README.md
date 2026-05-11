@@ -6,22 +6,39 @@ Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` con
 
 ```jsonc
 {
-  "suite": "dv_<skill>",
+  "group": "DataverseSkills",           // Required — groups related test files
+  "scenarioName": "Data",               // Required — scenario within the group
+  "description": "...",                  // Optional — what this test file covers
   "enabled_evaluators": [
-    { "name": "CortexConfigurations:Common/Skills/correctness.prompty", "passingScore": 3 }
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,               // 1-5 scale, ≥ this = pass
+      "priority": 1                     // Optional — evaluator priority level
+    }
   ],
   "tests": [
     {
-      "test_id": "<skill>_001",
-      "prompt": "<what the agent is asked to do>",
-      "expected_response": "<what a correct answer looks like>",
+      "test_id": "<skill>_001",         // Required — unique within the file
+      "prompt": "...",                   // Required — what the agent is asked to do
+      "expected_response": "...",        // Required — what a correct answer looks like
+      "category": "data",               // Optional — test category
+      "description": "...",             // Optional — human-readable test description
+      "priority": 1,                    // Optional — test priority (1 = highest)
+      "tags": {                         // Optional — key-value pairs (NOT arrays)
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data"
+      },
+      "custom_metadata": {              // Optional — passed to evaluator as context
+        "skill": "dv-data",
+        "tool_routing": "SDK"
+      },
       "assertions": [
         "PRIORITY_1: <semantic assertion graded by LLM judge>",
         "PRIORITY_1: CONTAINS: <deterministic substring check>",
+        "PRIORITY_1: NOT_CONTAINS: <phrase that must NOT appear>",
         "PRIORITY_2: SKILL_LOADED: dv-<skill>"
-      ],
-      "priority": 1,
-      "custom_metadata": { "skill": "dv-<skill>" }
+      ]
     }
   ]
 }

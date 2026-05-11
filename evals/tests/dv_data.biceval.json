@@ -39,7 +39,9 @@
       "assertions": [
         "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a Python list as the records argument. Per-record for-loops must FAIL.",
         "PRIORITY_1: CONTAINS: new_ticket",
-        "PRIORITY_1: Agent does NOT echo: 'There is no batch API', 'one HTTP call per record', 'no chunking helper'.",
+        "PRIORITY_1: NOT_CONTAINS: There is no batch API",
+        "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
+        "PRIORITY_1: NOT_CONTAINS: no chunking helper",
         "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or bulk_create helpers from the dv-data skill.",
         "PRIORITY_2: SKILL_LOADED: dv-data"
       ]
