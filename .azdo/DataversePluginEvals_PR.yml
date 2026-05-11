@@ -53,7 +53,7 @@ resources:
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
-    ref: refs/heads/users/sbadenkal/deterministic-assertions
+    ref: refs/heads/main
   - repository: BicEvalsService
     type: github
     endpoint: bic-proxima-shared-stamp
