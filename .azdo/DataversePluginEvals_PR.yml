@@ -58,7 +58,7 @@ resources:
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/BIC-Evaluations-Service
-    ref: refs/heads/users/claude/dvskills-evaluators
+    ref: refs/heads/main
 
 steps:
 - checkout: self
