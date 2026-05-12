@@ -8,8 +8,11 @@
 # Templates: LocalEvalRunner step templates (Setup, Execute, Publish)           #
 #################################################################################
 
-trigger: none
-pr: none
+trigger:
+- main
+
+pr:
+- main
 
 name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.mode }} • ${{ parameters.label }} • ${{ parameters.testFile }}
 
