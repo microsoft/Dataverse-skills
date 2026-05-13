@@ -70,12 +70,12 @@ This template is **table-agnostic by design**. It reads the `attrs` list from St
 ```python
 import os, sys, random, datetime
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-client = DataverseClient(base_url=env_url, credential=get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-data")
 
 TABLE = "account"   # any table logical name from Step 1
 COUNT = 5           # confirmed with user

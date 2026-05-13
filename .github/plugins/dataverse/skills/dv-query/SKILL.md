@@ -70,6 +70,9 @@ import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_client
 
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
 client = get_client("dv-query")
 ```
 
