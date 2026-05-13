@@ -89,7 +89,6 @@ steps:
     testFilePath: 'evals/tests/${{ parameters.testFile }}'
     evaluatorRepoName: 'BIC-Evaluations-Service'
     pluginDir: '.github/plugins/dataverse'
-    agentModel: 'claude-sonnet-4.6'
 
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
