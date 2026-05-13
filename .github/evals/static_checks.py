@@ -479,16 +479,27 @@ def check_readme_skill_count(skills_dir, all_skill_names):
 SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
+def _extract_dv_connect_plugin_version(repo_root):
+    """Extract the hardcoded plugin_version from dv-connect SKILL.md Step 3 code block."""
+    skill_path = repo_root / ".github/plugins/dataverse/skills/dv-connect/SKILL.md"
+    if not skill_path.exists():
+        return None
+    import re
+    match = re.search(r'plugin_version\s*=\s*"([^"]+)"', skill_path.read_text(encoding="utf-8"))
+    return match.group(1) if match else None
+
+
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All four version fields match across manifest files.
+    EVAL-VERSION-01: All five version fields match across manifest and skill files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The four version fields live in three files:
+    The five version fields live in four files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
       4. .github/plugins/dataverse/.github/plugin/plugin.json -- version
+      5. .github/plugins/dataverse/skills/dv-connect/SKILL.md -- plugin_version = "x.y.z"
     """
     failures = []
 
@@ -544,6 +555,20 @@ def check_version_consistency(repo_root):
         if not SEMVER_PATTERN.match(version):
             failures.append(
                 f"EVAL-VERSION-02 [{rel_path}] '{field}' = '{version}' "
+                f"does not match semver format x.y.z"
+            )
+
+    # Check 5th location: dv-connect SKILL.md hardcoded plugin_version
+    dv_connect_version = _extract_dv_connect_plugin_version(repo_root)
+    if dv_connect_version is not None:
+        found.append((
+            ".github/plugins/dataverse/skills/dv-connect/SKILL.md",
+            'plugin_version = "x.y.z"',
+            dv_connect_version,
+        ))
+        if not SEMVER_PATTERN.match(dv_connect_version):
+            failures.append(
+                f"EVAL-VERSION-02 [dv-connect/SKILL.md] plugin_version = '{dv_connect_version}' "
                 f"does not match semver format x.y.z"
             )
 
