@@ -33,17 +33,19 @@ All code examples in skill files must be Python. No JavaScript, TypeScript, Powe
 
 ### Auth pattern
 
-Every standalone Python block that imports from `auth` must use this exact pattern:
+Every standalone Python block that imports from `auth` must use one of these patterns:
 
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env   # SDK operations
+from auth import get_client                 # PREFERRED — SDK with plugin attribution
+# OR
+from auth import get_credential, load_env   # SDK without attribution (context manager, notebooks)
 # OR
 from auth import get_token, load_env        # Raw Web API only
 ```
 
-`get_credential()` is for SDK (`DataverseClient`) operations. `get_token()` is only for raw Web API calls (forms, views, `$apply`, N:N `$expand`) that the SDK does not support. Never use `get_token()` in a block containing `DataverseClient(`.
+`get_client(skill)` is the preferred entry point — it handles auth, environment URL, and plugin attribution (User-Agent tagging) in one call. `get_credential()` is for advanced cases that need the raw credential (e.g., context manager pattern). `get_token()` is only for raw Web API calls (forms, views, `$apply`, N:N `$expand`) that the SDK does not support. Never use `get_token()` in a block containing `DataverseClient(`.
 
 The one exception: Jupyter notebook blocks use `InteractiveBrowserCredential` directly (no `scripts/` directory in a notebook environment). Mark this exception explicitly in prose above the block.
 

@@ -135,6 +135,8 @@ Also set plugin attribution variables for User-Agent tagging:
 ```python
 import os
 
+plugin_version = "1.5.0"
+
 # Detect agent host
 if os.environ.get("CLAUDECODE"):
     agent_host = "claude-code"
