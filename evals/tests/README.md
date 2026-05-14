@@ -1,6 +1,6 @@
 # evals/tests/ — Eval Test Files
 
-Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` contains one or more tests that are consumed by [LocalEvalRunner](https://microsoft.ghe.com/bic/LocalEvalRunner) to grade AI agent responses when the plugin is loaded.
+Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` contains one or more tests that are consumed by LocalEvalRunner to grade AI agent responses when the plugin is loaded.
 
 ## File Structure
 
