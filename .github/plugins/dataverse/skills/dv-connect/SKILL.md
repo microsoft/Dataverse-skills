@@ -253,8 +253,6 @@ DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};agen
 
 For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry.
 
-Note: if a future agent connects directly to the HTTP-streamable MCP endpoint (`{url}/api/mcp`) without the stdio proxy, use an `X-Dataverse-Plugin` header in the MCP client's `headers` config block instead — env vars don't apply when there's no local subprocess.
-
 **Important:** MCP configuration requires an editor/CLI restart.
 
 **For Copilot:** Write the JSON config, then:
