@@ -129,13 +129,24 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
 Also set plugin attribution variables for User-Agent tagging:
-- `DATAVERSE_PLUGIN_VERSION` — use `1.5.0` (the current plugin version; update when the plugin version is bumped)
+- `DATAVERSE_PLUGIN_VERSION` — read from `.github/plugins/dataverse/.claude-plugin/plugin.json` (the canonical version source)
 - `DATAVERSE_PLUGIN_AGENT` — detect from environment: `CLAUDECODE` env var → `claude-code`, `CURSOR_TRACE_DIR` → `cursor`, `VSCODE_PID` (without Cursor) → `copilot`, else `unknown`
 
 ```python
-import os
+import json, os
 
-plugin_version = "1.5.0"
+# Read plugin version from the canonical source
+plugin_json_candidates = [
+    os.path.join(".github", "plugins", "dataverse", ".claude-plugin", "plugin.json"),
+    os.path.join(".github", "plugin", "marketplace.json"),
+]
+plugin_version = "unknown"
+for pj in plugin_json_candidates:
+    if os.path.exists(pj):
+        with open(pj) as f:
+            data = json.load(f)
+            plugin_version = data.get("version") or data.get("metadata", {}).get("version", "unknown")
+        break
 
 # Detect agent host
 if os.environ.get("CLAUDECODE"):
@@ -234,13 +245,15 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command)
 6. Handle admin consent and environment allowlist (one-time per tenant/environment)
 
-**Plugin attribution for MCP:** When registering the stdio MCP server, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on all outbound requests. Build the value from `.env`:
+**Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`) — the CLI runs as a local subprocess and proxies requests to the Dataverse MCP HTTP endpoint. When registering the stdio proxy, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI reads it at startup and appends it to its User-Agent on all outbound HTTP requests to `/api/mcp`. Build the value from `.env`:
 
 ```
 DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};agent={DATAVERSE_PLUGIN_AGENT}
 ```
 
-For Claude Code (`claude mcp add`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object.
+For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry.
+
+Note: if a future agent connects directly to the HTTP-streamable MCP endpoint (`{url}/api/mcp`) without the stdio proxy, use an `X-Dataverse-Plugin` header in the MCP client's `headers` config block instead — env vars don't apply when there's no local subprocess.
 
 **Important:** MCP configuration requires an editor/CLI restart.
 
