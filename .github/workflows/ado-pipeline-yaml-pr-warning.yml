@@ -1,0 +1,54 @@
+name: Warn when ADO pipeline YAML file changes
+
+on:
+  pull_request:
+    paths:
+    - ".azdo/DataversePluginEvals_PR.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  warn:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Emit warning in logs
+        run: |
+          echo "::warning file=.azdo/DataversePluginEvals_PR.yml::This PR changes .azdo/DataversePluginEvals_PR.yml. After merge, Azure DevOps may disable/require approval for the PR pipeline YAML until it is re-enabled/approved."
+          echo "ADO pipeline: DVSkillsPlugin-Evals-PR (definitionId=32010)"
+          echo "https://dev.azure.com/dynamicscrm/OneCRM/_build?definitionId=32010"
+
+      - name: Add workflow summary
+        run: |
+          {
+            echo "## ADO PR pipeline YAML change detected"
+            echo ""
+            echo "**File changed:** \`.azdo/DataversePluginEvals_PR.yml\`"
+            echo ""
+            echo "**Why this matters:** After this is merged, Azure DevOps may disable/require approval for the PR pipeline YAML."
+            echo ""
+            echo "**Action required (post-merge):** Re-enable / approve the updated YAML for:"
+            echo "- **DVSkillsPlugin-Evals-PR** (definitionId=32010)"
+            echo "- https://dev.azure.com/dynamicscrm/OneCRM/_build?definitionId=32010"
+            echo ""
+            echo "Then trigger a run to confirm PR validation works."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post resolvable PR review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -n \
+            --arg sha "${{ github.event.pull_request.head.sha }}" \
+            '{
+              path: ".azdo/DataversePluginEvals_PR.yml",
+              subject_type: "file",
+              commit_id: $sha,
+              body: "> [!WARNING]\n> **ADO PR pipeline YAML change detected**\n>\n> This PR modifies `.azdo/DataversePluginEvals_PR.yml`. After merge, Azure DevOps may disable or require approval for the PR validation pipeline.\n>\n> **Action required (post-merge):** Re-enable / approve the updated YAML for:\n> - **DVSkillsPlugin-Evals-PR** (definitionId=32010)\n> - https://dev.azure.com/dynamicscrm/OneCRM/_build?definitionId=32010\n>\n> Please resolve this comment after completing the post-merge steps."
+            }' | \
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments \
+            --input -
