@@ -1,0 +1,104 @@
+#################################################################################
+#        Dataverse Skills Plugin — Offline Eval Pipeline                        #
+#                                                                               #
+# Runs offline evaluations for the Dataverse Skills Plugin using                #
+# LocalEvalRunner step templates with CopilotCliAgent.                          #
+#                                                                               #
+# Source: github.com/microsoft/Dataverse-skills (self-checkout)                 #
+# Templates: LocalEvalRunner step templates (Setup, Execute, Publish)           #
+#################################################################################
+
+trigger:
+- main
+
+pr:
+- main
+
+name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.mode }} • ${{ parameters.label }} • ${{ parameters.testFile }}
+
+pool:
+  name: 'Azure Pipelines'
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: DVSkillsPlugin_Secrets
+
+parameters:
+  - name: mode
+    displayName: 'Eval mode'
+    type: string
+    default: 'dry-run'
+    values: ['dry-run', 'live']
+
+  - name: label
+    displayName: 'Run label (branch or PR description)'
+    type: string
+    default: 'plugin-main'
+
+  - name: azureServiceConnection
+    displayName: 'Azure service connection for AI model access'
+    type: string
+    default: 'LocalEvalResources-MI-ServiceConnection'
+
+  - name: testFile
+    displayName: 'Test file (relative to evals/tests/)'
+    type: string
+    default: 'dv_data.biceval.json'
+
+  - name: concurrency
+    displayName: 'Concurrent evaluations'
+    type: number
+    default: 1
+
+resources:
+  repositories:
+  - repository: LocalEvalRunner
+    type: github
+    endpoint: bic-proxima-shared-stamp
+    name: bic/LocalEvalRunner
+    ref: refs/heads/main
+  - repository: BicEvalsService
+    type: github
+    endpoint: bic-proxima-shared-stamp
+    name: bic/BIC-Evaluations-Service
+    ref: refs/heads/main
+
+steps:
+- checkout: self
+  displayName: 'Checkout Dataverse-skills'
+
+- checkout: BicEvalsService
+  displayName: 'Checkout evaluator prompts'
+  fetchDepth: 1
+
+# Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, auth token
+- template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@LocalEvalRunner
+  parameters:
+    cliAgent: 'copilot'
+    cliAgentTokenVariable: 'COPILOT_GH_PAT'
+
+# Configure: merge replacements, prepare agent config
+- template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@LocalEvalRunner
+  parameters:
+    agentConfigFile: ''
+
+# Prepare: copy test file + evaluators, generate CopilotCliAgent config
+- template: .pipelines/templates/steps/BicEval-PrepareTemplate.yml@LocalEvalRunner
+  parameters:
+    sourceRepoName: 'Dataverse-skills'
+    testFilePath: 'evals/tests/${{ parameters.testFile }}'
+    evaluatorRepoName: 'BIC-Evaluations-Service'
+    pluginDir: '.github/plugins/dataverse'
+
+# Execute: run localevalrunner with CopilotCliAgent
+- template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
+  parameters:
+    sourceRepoTestFilePath: 'Dataverse-skills/evals/tests/${{ parameters.testFile }}'
+    agentType: 'CopilotCliAgent'
+    agentConfigFile: 'copilot_agent_config.json'
+    azureServiceConnection: ${{ parameters.azureServiceConnection }}
+    concurrency: ${{ parameters.concurrency }}
+    serviceName: 'DataverseSkillsPlugin'
+
+# Publish: test results + artifacts
+- template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@LocalEvalRunner
