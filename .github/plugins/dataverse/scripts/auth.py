@@ -203,8 +203,40 @@ _CONTEXT_RE = re.compile(
 )
 
 
+# Host env vars that point at the loaded plugin root.
+# Adding a new agent host = one line here + one entry in _ALLOWED_AGENTS.
+_PLUGIN_ROOT_ENV_VARS = (
+    "CLAUDE_PLUGIN_ROOT",       # Claude Code
+    "COPILOT_PLUGIN_ROOT",      # GitHub Copilot CLI
+)
+
+
+def _read_version_from_manifest(plugin_root):
+    """Read version from plugin.json at the given plugin root. Returns None on miss."""
+    import json
+    pj = os.path.join(plugin_root, ".claude-plugin", "plugin.json")
+    if not os.path.exists(pj):
+        return None
+    try:
+        with open(pj) as f:
+            return json.load(f).get("version")
+    except (OSError, ValueError):
+        return None
+
+
 def _plugin_version():
-    """Read plugin version (set by dv-connect into .env)."""
+    """Resolve plugin version with two-tier lookup.
+
+    1. Live read from the plugin manifest via host-provided plugin root env var.
+       Survives plugin upgrades without re-running dv-connect.
+    2. Fall back to the value dv-connect baked into .env (offline / unknown host).
+    """
+    for env_var in _PLUGIN_ROOT_ENV_VARS:
+        root = os.environ.get(env_var)
+        if root:
+            ver = _read_version_from_manifest(root)
+            if ver:
+                return ver
     return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
 
 

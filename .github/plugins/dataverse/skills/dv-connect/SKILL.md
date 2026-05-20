@@ -128,35 +128,16 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
-Also set plugin attribution variables for User-Agent tagging:
-- `DATAVERSE_PLUGIN_VERSION` — read from `.github/plugins/dataverse/.claude-plugin/plugin.json` (the canonical version source)
-- `DATAVERSE_PLUGIN_AGENT` — detect from environment: `CLAUDECODE` env var → `claude-code`, `CURSOR_TRACE_DIR` → `cursor`, `VSCODE_PID` (without Cursor) → `copilot`, else `unknown`
+Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
+
+- `PLUGIN_VERSION` — the `version` field of your loaded plugin manifest (e.g. `"1.5.0"`). At runtime, `auth.py` re-reads this from the live manifest via host env vars; this `.env` entry is a fallback for offline cases.
+- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
 
 ```python
-import json, os
-
-# Read plugin version from the canonical source
-plugin_json_candidates = [
-    os.path.join(".github", "plugins", "dataverse", ".claude-plugin", "plugin.json"),
-    os.path.join(".github", "plugin", "marketplace.json"),
-]
-plugin_version = "unknown"
-for pj in plugin_json_candidates:
-    if os.path.exists(pj):
-        with open(pj) as f:
-            data = json.load(f)
-            plugin_version = data.get("version") or data.get("metadata", {}).get("version", "unknown")
-        break
-
-# Detect agent host
-if os.environ.get("CLAUDECODE"):
-    agent_host = "claude-code"
-elif os.environ.get("CURSOR_TRACE_DIR"):
-    agent_host = "cursor"
-elif os.environ.get("VSCODE_PID"):
-    agent_host = "copilot"
-else:
-    agent_host = "unknown"
+# Substitute these two literals from your loaded plugin context.
+# Do NOT leave the angle-bracket placeholders — replace with real values.
+plugin_version = "<plugin manifest version, e.g. 1.5.0>"
+agent_host = "<your host name: claude-code | copilot | cursor | codex | unknown>"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")

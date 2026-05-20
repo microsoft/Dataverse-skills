@@ -36,7 +36,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 from auth import get_client
 ```
 
-**Also correct** for scripts that need the credential directly (e.g., context manager):
+**Also correct** for scripts that need the raw credential for non-DataverseClient use (e.g., passing to another Azure SDK):
 ```
 from auth import get_credential, load_env
 ```
