@@ -33,12 +33,9 @@ rm ./solutions/{{SOLUTION_NAME}}.zip
 **Validate after push (using Python SDK):**
 
 ```python
-from PowerPlatform.Dataverse.client import DataverseClient
-from scripts.auth import get_credential, load_env
-import os
+from auth import get_client
 
-load_env()
-client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+client = get_client("dv-data")
 
 # Check table exists
 info = client.tables.get("<logical_name>")

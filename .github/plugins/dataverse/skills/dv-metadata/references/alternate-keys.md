@@ -16,11 +16,12 @@ An alternate key tells Dataverse how to uniquely identify a record using a busin
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-metadata")
 
 # Single-column key (most common for imports)
 key = client.tables.create_alternate_key(

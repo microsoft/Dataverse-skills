@@ -6,7 +6,7 @@
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK cannot do this
+from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK cannot do this
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -16,10 +16,9 @@ token = get_token()
 url = (f"{env}/api/data/v9.2/new_tickets"
        f"?$select=new_name"
        f"&$expand=new_ticket_kbarticle($select=new_title)")
-req = urllib.request.Request(url, headers={
-    "Authorization": f"Bearer {token}",
-    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
-})
+headers = get_plugin_headers("dv-query", token)
+headers.update({"OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json"})
+req = urllib.request.Request(url, headers=headers)
 with urllib.request.urlopen(req, timeout=150) as resp:
     data = json.loads(resp.read())
     for ticket in data["value"]:
@@ -45,19 +44,18 @@ with urllib.request.urlopen(req, timeout=150) as resp:
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK does not support $apply
+from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK does not support $apply
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
 token = get_token()
+_base_headers = get_plugin_headers("dv-query", token)
+_base_headers.update({"OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json"})
 
 def apply_query(entity_set, apply_expr):
     """Run a $apply aggregation query. Returns list of result dicts."""
     url = f"{env}/api/data/v9.2/{entity_set}?$apply={apply_expr}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {token}",
-        "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
-    })
+    req = urllib.request.Request(url, headers=_base_headers.copy())
     with urllib.request.urlopen(req, timeout=150) as resp:
         return json.loads(resp.read()).get("value", [])
 

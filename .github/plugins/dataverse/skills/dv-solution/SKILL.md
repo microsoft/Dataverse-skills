@@ -33,11 +33,12 @@ Every solution belongs to a publisher. The publisher's `customizationprefix` (e.
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-solution")
 
 # 1. Query for existing non-Microsoft publishers
 pages = client.records.get(
@@ -79,11 +80,12 @@ Use the SDK to create the solution record (preferred over raw Web API):
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-solution")
 
 # Create the solution record
 solution_id = client.records.create("solution", {
@@ -264,16 +266,15 @@ N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. 
 # Web API required — SDK does not support N:N $expand
 import os, sys, urllib.request, json
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK can't do this
+from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK can't do this
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
 token = get_token()
 url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
-req = urllib.request.Request(url, headers={
-    "Authorization": f"Bearer {token}",
-    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
-})
+headers = get_plugin_headers("dv-solution", token)
+headers.update({"OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json"})
+req = urllib.request.Request(url, headers=headers)
 with urllib.request.urlopen(req) as resp:
     users = json.loads(resp.read()).get("value", [])
 if users:

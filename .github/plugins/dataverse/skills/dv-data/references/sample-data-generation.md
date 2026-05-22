@@ -23,19 +23,22 @@ Use the EntityDefinitions metadata API to discover required columns and their ty
 ```python
 import os, sys, json, urllib.request, urllib.parse
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # SDK does not support EntityDefinitions metadata
+from auth import get_token, get_plugin_headers, load_env  # SDK does not support EntityDefinitions metadata
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
+token = get_token()
 TABLE = "account"   # or any other table logical name
 
 params = urllib.parse.urlencode({
     "$select": "LogicalName,AttributeType,RequiredLevel,DisplayName",
     "$filter": "AttributeOf eq null",
 })
+_headers = get_plugin_headers("dv-data", token)
+_headers["Accept"] = "application/json"
 req = urllib.request.Request(
     f"{env_url}/api/data/v9.2/EntityDefinitions(LogicalName='{TABLE}')/Attributes?{params}",
-    headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+    headers=_headers,
 )
 with urllib.request.urlopen(req) as resp:
     attrs = json.loads(resp.read())["value"]
@@ -70,12 +73,12 @@ This template is **table-agnostic by design**. It reads the `attrs` list from St
 ```python
 import os, sys, random, datetime
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-client = DataverseClient(base_url=env_url, credential=get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-data")
 
 TABLE = "account"   # any table logical name from Step 1
 COUNT = 5           # confirmed with user

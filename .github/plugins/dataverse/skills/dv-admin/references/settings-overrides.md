@@ -14,17 +14,18 @@ Allowlisted uniquenames (both `datatype=2` bool, stored as string `"true"`/`"fal
 ```python
 import os, sys, json, urllib.request, urllib.parse
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # SDK does not support settingdefinition/organizationsettings entities
+from auth import get_token, get_plugin_headers, load_env  # SDK does not support settingdefinition/organizationsettings entities
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-headers = {
-    "Authorization": f"Bearer {get_token()}",
+token = get_token()
+headers = get_plugin_headers("dv-admin", token)
+headers.update({
     "Accept": "application/json",
     "OData-MaxVersion": "4.0",
     "OData-Version": "4.0",
     "Content-Type": "application/json",
-}
+})
 
 UNIQUENAME = "PowerAppsAppLevelSecurityRolesEnabled"   # or PlanShareSecurityRolesEnabled
 

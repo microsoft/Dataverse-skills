@@ -128,11 +128,23 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
+Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
+
+- `PLUGIN_VERSION` — the `version` field of your loaded plugin manifest (e.g. `"1.5.0"`). At runtime, `auth.py` re-reads this from the live manifest via host env vars; this `.env` entry is a fallback for offline cases.
+- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
+
 ```python
+# Substitute these two literals from your loaded plugin context.
+# Do NOT leave the angle-bracket placeholders — replace with real values.
+plugin_version = "<plugin manifest version, e.g. 1.5.0>"
+agent_host = "<your host name: claude-code | copilot | cursor | codex | unknown>"
+
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
     f.write(f"TENANT_ID={tenant_id}\n")
     f.write(f"MCP_CLIENT_ID={mcp_client_id}\n")
+    f.write(f"DATAVERSE_PLUGIN_VERSION={plugin_version}\n")
+    f.write(f"DATAVERSE_PLUGIN_AGENT={agent_host}\n")
     f.write(f"SOLUTION_NAME={solution_name}\n")
     f.write(f"PUBLISHER_PREFIX=\n")  # filled in when solution is created
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
@@ -175,7 +187,7 @@ mkdir -p solutions plugins scripts
 
 Copy plugin scripts:
 ```
-cp .dataverse/scripts/auth.py scripts/
+cp .github/plugins/dataverse/scripts/auth.py scripts/
 ```
 
 Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeholders (`{{DATAVERSE_URL}}`, `{{SOLUTION_NAME}}`, `{{PUBLISHER_PREFIX}}`) with values from `.env`.
@@ -213,6 +225,14 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 4. Default to GA endpoint (`/api/mcp`)
 5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command)
 6. Handle admin consent and environment allowlist (one-time per tenant/environment)
+
+**Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`) — the CLI runs as a local subprocess and proxies requests to the Dataverse MCP HTTP endpoint. When registering the stdio proxy, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI reads it at startup and appends it to its User-Agent on all outbound HTTP requests to `/api/mcp`. Build the value from `.env`:
+
+```
+DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent={DATAVERSE_PLUGIN_AGENT}
+```
+
+For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry.
 
 **Important:** MCP configuration requires an editor/CLI restart.
 

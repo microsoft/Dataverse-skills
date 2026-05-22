@@ -14,7 +14,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(__file__))
-from auth import get_credential, load_env
+from auth import get_client
 
 
 def find_client(client, app_id):
@@ -29,19 +29,12 @@ def find_client(client, app_id):
 
 
 def main():
-    load_env()
-    env_url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
+    client = get_client("dv-connect")
     mcp_client_id = os.environ.get("MCP_CLIENT_ID")
 
-    if not env_url:
-        print("ERROR: DATAVERSE_URL not set in .env", flush=True)
-        sys.exit(1)
     if not mcp_client_id:
         print("ERROR: MCP_CLIENT_ID not set in .env", flush=True)
         sys.exit(1)
-
-    from PowerPlatform.Dataverse.client import DataverseClient
-    client = DataverseClient(base_url=env_url, credential=get_credential())
 
     print(f"Looking up MCP client {mcp_client_id}...", flush=True)
     record = find_client(client, mcp_client_id)
