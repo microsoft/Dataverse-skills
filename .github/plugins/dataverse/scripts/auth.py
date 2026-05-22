@@ -66,7 +66,7 @@ def load_env():
 _credential = None
 
 
-def __get_credential():
+def _get_credential():
     """
     Return an Azure Identity TokenCredential, creating one on first call.
 

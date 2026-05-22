@@ -9,7 +9,7 @@ Recycle bin settings live in the `recyclebinconfigs` entity, NOT in `orgdborgset
 ```python
 import os, sys, json, urllib.request, urllib.parse
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # SDK does not support recyclebinconfigs entity
+from auth import get_token, get_plugin_headers, load_env  # SDK does not support recyclebinconfigs entity
 
 load_env()
 env_url = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -17,13 +17,13 @@ token = get_token()
 
 ORGANIZATION_ENTITY_ID = "e1bd1119-6e9d-45a4-bc15-12051e65a0bd"
 
-headers = {
-    "Authorization": f"Bearer {token}",
+headers = get_plugin_headers("dv-admin", token)
+headers.update({
     "Accept": "application/json",
     "Content-Type": "application/json",
     "OData-MaxVersion": "4.0",
     "OData-Version": "4.0",
-}
+})
 
 # Fetch org-level config by extensionofrecordid (NOT by name)
 filter_q = urllib.parse.quote(f"_extensionofrecordid_value eq '{ORGANIZATION_ENTITY_ID}'")
