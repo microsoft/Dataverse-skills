@@ -14,9 +14,8 @@ Token caching:
 
 Functions:
   load_env()            — loads .env into os.environ
-  get_credential()      — returns a TokenCredential for use with DataverseClient
-  get_token(scope=None) — returns a raw access token string
   get_client(skill)     — returns a DataverseClient with plugin attribution
+  get_token(scope=None) — returns a raw access token string
   get_plugin_headers(skill, token) — returns headers dict for raw Web API calls
 
 Usage:
@@ -67,7 +66,7 @@ def load_env():
 _credential = None
 
 
-def get_credential():
+def __get_credential():
     """
     Return an Azure Identity TokenCredential, creating one on first call.
 
@@ -166,7 +165,7 @@ def get_token(scope=None):
     if not scope:
         scope = f"{dataverse_url}/.default"
 
-    credential = get_credential()
+    credential = _get_credential()
 
     try:
         from azure.identity import DeviceCodeCredential
@@ -190,7 +189,7 @@ def get_token(scope=None):
 
 
 _ALLOWED_SKILLS = frozenset({
-    "dv-connect", "dv-data", "dv-query",
+    "dv-overview", "dv-connect", "dv-data", "dv-query",
     "dv-metadata", "dv-solution", "dv-admin", "dv-security",
     "unknown",
 })
@@ -203,40 +202,8 @@ _CONTEXT_RE = re.compile(
 )
 
 
-# Host env vars that point at the loaded plugin root.
-# Adding a new agent host = one line here + one entry in _ALLOWED_AGENTS.
-_PLUGIN_ROOT_ENV_VARS = (
-    "CLAUDE_PLUGIN_ROOT",       # Claude Code
-    "COPILOT_PLUGIN_ROOT",      # GitHub Copilot CLI
-)
-
-
-def _read_version_from_manifest(plugin_root):
-    """Read version from plugin.json at the given plugin root. Returns None on miss."""
-    import json
-    pj = os.path.join(plugin_root, ".claude-plugin", "plugin.json")
-    if not os.path.exists(pj):
-        return None
-    try:
-        with open(pj) as f:
-            return json.load(f).get("version")
-    except (OSError, ValueError):
-        return None
-
-
 def _plugin_version():
-    """Resolve plugin version with two-tier lookup.
-
-    1. Live read from the plugin manifest via host-provided plugin root env var.
-       Survives plugin upgrades without re-running dv-connect.
-    2. Fall back to the value dv-connect baked into .env (offline / unknown host).
-    """
-    for env_var in _PLUGIN_ROOT_ENV_VARS:
-        root = os.environ.get(env_var)
-        if root:
-            ver = _read_version_from_manifest(root)
-            if ver:
-                return ver
+    """Read plugin version from .env (set by dv-connect at setup time)."""
     return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
 
 
@@ -294,7 +261,7 @@ def get_client(skill, **kwargs):
     from PowerPlatform.Dataverse.client import DataverseClient
     return DataverseClient(
         base_url=os.environ["DATAVERSE_URL"],
-        credential=get_credential(),
+        credential=_get_credential(),
         context=_build_operation_context(skill),
         **kwargs,
     )
