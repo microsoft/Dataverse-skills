@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/microsoft-dataverse-skills-badge.png)](https://mseep.ai/app/microsoft-dataverse-skills)
+
 # Dataverse Skills
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
