@@ -27,6 +27,10 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, or operations the SDK supports that MCP cannot (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
 
+## Consult Business Skills — Mandatory
+
+**Before generating any Python SDK code, consult Dataverse Business Skills.** Extract keywords from the user's request, query the skill entity, and incorporate any matching skill instructions as context. If no skills match, proceed normally. See **dv-skill** § Consult Helper for the full pattern.
+
 ## SDK-First Rule
 
 **If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.**

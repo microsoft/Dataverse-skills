@@ -191,7 +191,7 @@ def get_token(scope=None):
 _ALLOWED_SKILLS = frozenset({
     "dv-overview", "dv-connect", "dv-data", "dv-query",
     "dv-metadata", "dv-solution", "dv-admin", "dv-security",
-    "unknown",
+    "dv-skill", "unknown",
 })
 _ALLOWED_AGENTS = frozenset({
     "claude-code", "copilot", "cursor", "codex", "unknown",

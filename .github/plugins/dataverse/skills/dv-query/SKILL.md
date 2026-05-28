@@ -11,6 +11,10 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
+## Consult Business Skills — Mandatory
+
+**Before generating any Python SDK code, consult Dataverse Business Skills.** Extract keywords from the user's request, query the skill entity, and incorporate any matching skill instructions as context. If no skills match, proceed normally. See **dv-skill** § Consult Helper for the full pattern.
+
 ## How to Answer Data Questions
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:

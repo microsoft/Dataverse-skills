@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
+description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security / dv-skill) for the request.
 ---
 
 # Skill: Overview — What to Use and When
@@ -206,6 +206,7 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 | **dv-admin** | Bulk delete, data retention/archival, org settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric), recycle bin. PAC CLI for bulk delete/retention/org settings; Python SDK for OrgDB XML and recycle bin. Multi-environment: parallel with `&` and `wait` |
 | **dv-security** | Role assignment (`pac admin assign-user`), self-elevation (`pac admin self-elevate`). **PAC CLI only** |
+| **dv-skill** | Manage Dataverse Business Skills (environment-specific `skill` entity records) — list, create, update, delete skills and skill resources via Python SDK |
 
 ---
 
