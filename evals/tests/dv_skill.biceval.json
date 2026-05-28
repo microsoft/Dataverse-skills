@@ -1,0 +1,111 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Skill",
+  "description": "Verifies Business Skill management, consumption parity, and mandatory consult enforcement for the dv-skill skill.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "skill_001_create",
+      "prompt": "Create a Dataverse Business Skill called 'Refund-Handling' with a description 'Guides agents through the refund process' and body containing step-by-step refund instructions.",
+      "expected_response": "Agent uses Python SDK client.records.create('skill', {...}) with name, description, and body fields.",
+      "category": "skill-management",
+      "description": "Create a Business Skill — routes to dv-skill, uses MCP or Web API",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
+      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-skill",
+        "PRIORITY_1: Agent creates a skill with name 'Refund-Handling'. Must use Python SDK client.records.create('skill', {...}).",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_2: CONTAINS: Refund-Handling"
+      ]
+    },
+    {
+      "test_id": "skill_002_list",
+      "prompt": "List all Business Skills available in my Dataverse environment.",
+      "expected_response": "Agent uses Python SDK client.records.get('skill') to list all skills.",
+      "category": "skill-management",
+      "description": "List all skills — confirms Python Web API path works for listing",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
+      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-skill",
+        "PRIORITY_1: Agent queries the skill table to list all skills. Uses Python SDK client.records.get('skill'). Raw urllib is NOT acceptable.",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_2: CONTAINS: skill"
+      ]
+    },
+    {
+      "test_id": "skill_003_consult_enforcement",
+      "prompt": "Write a Python script that imports refund records from a CSV into the new_refund table, following our team's refund handling process.",
+      "expected_response": "Agent FIRST queries Dataverse Business Skills for relevant domain instructions (e.g., searching for 'refund' skills), THEN generates the SDK import code incorporating any retrieved skill instructions. The consult step must come before the data operation.",
+      "category": "consult-enforcement",
+      "description": "Mandatory consult — agent must query Business Skills before generating SDK code for domain-specific tasks",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "consult"},
+      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "consult_expected": true},
+      "assertions": [
+        "PRIORITY_1: Agent queries or searches Dataverse Business Skills BEFORE generating the CSV import code. Evidence: Python SDK client.records.get('skill', filter=...). If agent jumps straight to SDK code without consulting skills, this FAILS.",
+        "PRIORITY_1: Agent uses Python SDK (client.records.create with list arg or CreateMultiple) for the actual data import — not urllib for the import itself.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: CONTAINS: refund"
+      ]
+    },
+    {
+      "test_id": "skill_004_consult_skip_generic",
+      "prompt": "Write a Python script that creates 100 generic test accounts in my Dataverse account table with random names.",
+      "expected_response": "Agent still consults Business Skills (mandatory rule), but finding no relevant skills, proceeds directly with SDK bulk create. The consult check happens but does not block execution when no skills match.",
+      "category": "consult-enforcement",
+      "description": "Mandatory consult fires even for generic tasks — finding nothing is fine, skipping the check is not",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "consult"},
+      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "consult_expected": true},
+      "assertions": [
+        "PRIORITY_1: Agent queries or acknowledges checking Business Skills before generating the bulk create code. Evidence: Python SDK client.records.get('skill', ...), or explicit statement that skills were checked. If no mention of skill consultation at all, this FAILS.",
+        "PRIORITY_1: Agent uses bulk SDK pattern (list arg to client.records.create or CreateMultiple) for the 100 accounts. Per-record loops FAIL.",
+        "PRIORITY_1: NOT_CONTAINS: There is no batch API",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ]
+    },
+    {
+      "test_id": "skill_005_delete",
+      "prompt": "Delete the Business Skill named 'Old-Process' from my Dataverse environment.",
+      "expected_response": "Agent uses Python SDK client.records.delete('skill', id). Must first look up the skill by name to get the ID, then delete.",
+      "category": "skill-management",
+      "description": "Delete a skill — confirms routing and correct API usage",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
+      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-skill",
+        "PRIORITY_1: Agent deletes the skill using Python SDK client.records.delete('skill', id). Raw urllib is NOT acceptable.",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_2: CONTAINS: Old-Process"
+      ]
+    },
+    {
+      "test_id": "skill_006_skill_contract",
+      "prompt": "Before writing any code, tell me exactly what the dv-skill skill says about consuming Business Skills when using the Python SDK. Quote or closely paraphrase the mandatory consult rule. Do not use your own knowledge — only report what the loaded skill teaches.",
+      "expected_response": "Agent reports skill content: mandatory consultation before any Python SDK operation, always query skills entity, extract keywords, incorporate body as context. Agent must NOT say consultation is optional or only for domain-specific tasks.",
+      "category": "skill-contract",
+      "description": "Skill-contract test — agent must report mandatory consult rule accurately",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill", "Type": "skill-contract"},
+      "custom_metadata": {"skill": "dv-skill", "test_kind": "skill-contract"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-skill",
+        "PRIORITY_1: Agent states that skill consultation is MANDATORY (not optional, not just recommended). If agent says 'optional' or 'only when domain-specific', this FAILS.",
+        "PRIORITY_1: NOT_CONTAINS: optional",
+        "PRIORITY_1: NOT_CONTAINS: only for domain-specific",
+        "PRIORITY_2: Agent mentions the step sequence: extract keywords → query skills → incorporate body → proceed with SDK code."
+      ]
+    }
+  ]
+}
