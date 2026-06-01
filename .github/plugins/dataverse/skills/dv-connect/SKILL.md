@@ -214,16 +214,16 @@ Both must succeed. Confirm the environment URL matches the intended target.
 ## Step 6: Configure MCP server
 
 **Skip this step** if MCP is already configured:
-- `.mcp.json` or `~/.copilot/mcp-config.json` contains a Dataverse server entry
+- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server registered
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
 
-1. Detect which tool the user is running (Copilot or Claude) from context
+1. Detect which tool the user is running (Copilot, Claude, or Cursor) from context
 2. Set `MCP_CLIENT_ID` based on tool choice
 3. Get environment URL from `.env`
 4. Default to GA endpoint (`/api/mcp`)
-5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command)
+5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command; Cursor: write JSON config to `~/.cursor/mcp.json` or workspace `.cursor/mcp.json`)
 6. Handle admin consent and environment allowlist (one-time per tenant/environment)
 
 **Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`) — the CLI runs as a local subprocess and proxies requests to the Dataverse MCP HTTP endpoint. When registering the stdio proxy, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI reads it at startup and appends it to its User-Agent on all outbound HTTP requests to `/api/mcp`. Build the value from `.env`:
@@ -244,6 +244,11 @@ For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION
 > Remember to **use `claude --continue` to resume the session** without losing context.
 >
 > **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for PAC CLI (e.g., `{username}`). This only happens once; the token is cached for future sessions.
+
+**For Cursor:** Write the JSON config, then:
+> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.cursor/mcp.json`. **Reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear under Settings → Tools & MCPs.
+>
+> On first use, the `npx @microsoft/dataverse` proxy starts a device-code sign-in in your browser. Sign in with the same account you used for PAC CLI; the token is cached in your OS credential store for future sessions.
 
 ---
 
