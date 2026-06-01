@@ -23,8 +23,8 @@ Determine whether to configure MCP for GitHub Copilot, Claude Code, or Cursor:
 Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, or `cursor`. Store this for use in all subsequent steps.
 
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
-- If `copilot` or `cursor`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
-- If `claude`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457`
+- If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
+- If `claude` or `cursor`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (both use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
 - If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
 ---
@@ -327,10 +327,6 @@ Update the MCP configuration file at `CONFIG_PATH` (determined in step 1) to add
 
 **IMPORTANT: Always use the stdio transport via the npx proxy.** Do not configure a direct `url` to `/api/mcp` — the Dataverse MCP HTTP endpoint requires the npx proxy to handle authentication. The proxy is `@microsoft/dataverse@latest mcp <url>`.
 
-> **Note on AAD client IDs for Cursor**: Cursor invokes the `@microsoft/dataverse` npx stdio proxy, which authenticates to the Dataverse MCP HTTP endpoint using the **Dataverse CLI** app ID (`0c412cc3-0dd6-449b-987f-05b053db9457`) — not the Cursor/Copilot app ID (`aebc6443-996d-45c2-90f0-388ff96faa56`).
->
-> Therefore the environment's **MCP allowed-clients list must include `0c412cc3-0dd6-449b-987f-05b053db9457`** for Cursor users to successfully call MCP tools. The `aebc6443-...` ID set in `.env` as `MCP_CLIENT_ID` is used for plugin attribution / telemetry only — it does not need to be in the env's allowed-clients list for the npx-proxy flow to work. (See Step 7 for the env allowlist procedure.)
-
 **Generate a unique server name** from the `USER_URL`:
 1. Extract the subdomain (organization identifier) from the URL
    - Example: `https://orgbc9a965c.crm10.dynamics.com` → `orgbc9a965c`
@@ -406,8 +402,6 @@ Wait for the user to confirm this is done (or was already done previously) befor
 ## 7. Add the MCP client to the environment's allowed list (one-time per environment)
 
 Separately from tenant-level consent, each Dataverse environment must explicitly allow the MCP client. This is a **one-time** action per environment and does **NOT** require Azure AD admin permissions — any user with Environment Admin or System Administrator role in the environment can do it.
-
-> **Special handling for `cursor`:** Cursor uses the `@microsoft/dataverse` npx stdio proxy, which authenticates with the **Dataverse CLI** app ID (`0c412cc3-0dd6-449b-987f-05b053db9457`). When `TOOL_TYPE == cursor`, the env's allowed-clients list must include `0c412cc3-0dd6-449b-987f-05b053db9457` (not the `aebc6443-...` Cursor/Copilot ID set in `.env`). Use that ID below wherever `{MCP_CLIENT_ID}` appears.
 
 Present the two methods (PPAC portal is recommended for non-developers):
 
