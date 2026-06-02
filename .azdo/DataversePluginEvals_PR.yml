@@ -43,7 +43,7 @@ parameters:
   - name: testFile
     displayName: 'Test file (relative to evals/tests/)'
     type: string
-    default: 'dv_data.biceval.json'
+    default: 'dv_connect.biceval.json'
 
   - name: concurrency
     displayName: 'Concurrent evaluations'
