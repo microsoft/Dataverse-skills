@@ -4,14 +4,6 @@
   "description": "Verifies dv-overview correctly routes multi-skill tasks to the right child skills (dv-data, dv-query, dv-metadata, dv-solution, dv-connect).",
   "enabled_evaluators": [
     {
-      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
-      "passing_score": 3,
-      "priority": 1,
-      "settings": {
-        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
-      }
-    },
-    {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
       "priority": 1

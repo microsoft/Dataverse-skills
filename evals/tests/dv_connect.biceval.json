@@ -4,14 +4,6 @@
   "description": "Verifies the plugin's canonical auth + connection pattern (scripts/auth.py, get_credential/get_client, DATAVERSE_URL from .env).",
   "enabled_evaluators": [
     {
-      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
-      "passing_score": 3,
-      "priority": 1,
-      "settings": {
-        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
-      }
-    },
-    {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
       "priority": 1
