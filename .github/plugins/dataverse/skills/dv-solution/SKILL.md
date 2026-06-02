@@ -164,14 +164,14 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 > **Confirm the target environment before exporting or importing.** Run `pac auth list` + `pac org who`, show the output to the user, and confirm it matches the intended environment. Developers work across multiple environments — do not assume.
 
-Export the solution as unmanaged (source of truth):
+Export the solution from Python using the SDK:
+```python
+from auth import get_client
+client = get_client("dv-solution")
+client.solutions.export(name="<UniqueName>", path="./solutions/<UniqueName>.zip", managed=False)
 ```
-pac solution export \
-  --name <UniqueName> \
-  --path ./solutions/<UniqueName>.zip \
-  --managed false \
-  --environment <url>
-```
+
+The Python SDK fully supports solution export; PAC CLI is not required.
 
 Unpack into editable source files:
 ```
