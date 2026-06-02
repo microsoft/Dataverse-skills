@@ -243,7 +243,7 @@ For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION
 > ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
 > Remember to **use `claude --continue` to resume the session** without losing context.
 >
-> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for PAC CLI (e.g., `{username}`). This only happens once; the token is cached for future sessions.
+> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for PAC CLI (e.g., `{username}`). In the normal case the token is then cached for future sessions. If you are instead prompted to sign in *every* session, or a query hangs and returns nothing, see [Troubleshooting: auth keeps re-prompting, or the first query hangs](#troubleshooting-auth-keeps-re-prompting-or-the-first-query-hangs).
 
 ---
 
@@ -311,6 +311,33 @@ After verifying MCP works, tell the user:
 >
 > To create your first solution, see the `dv-solution` skill.
 > To load sample data (accounts, contacts, opportunities), ask: "Load demo data into my Dataverse environment."
+
+---
+
+## Troubleshooting: auth keeps re-prompting, or the first query hangs
+
+Both symptoms appear *after* a working setup and are **not** fixed by re-running PAC auth. There are **three separate auth surfaces, each with its own token cache**: (1) **PAC CLI** profiles (`pac auth list`); (2) **the MCP proxy** (`@microsoft/dataverse mcp`); (3) **the Python SDK / Web API path** (`scripts/auth.py`, azure-identity). A valid `pac auth list` profile only proves surface #1 — so do **not** re-run `pac auth create`/`select` when the PAC profile is already valid. Diagnose the surface that is actually prompting.
+
+### Symptom A — re-prompted to sign in every session (PAC auth is valid)
+
+The MCP proxy or the Python SDK is prompting, not PAC.
+
+- **MCP proxy:** `claude mcp list` (or the Copilot equivalent) should show **✓ Connected**. Re-register the server (Step 6), run `--validate` against the GA `/api/mcp` endpoint (Step 7), and verify **tenant admin consent** and the **environment allowlist** — one-time per tenant/environment, and they silently block auth until granted.
+- If reauth persists, the proxy's cached auth isn't being reused: clear the stale cache (Symptom C). Since Step 1 installs `@microsoft/dataverse` **globally**, you can register the MCP server against that **globally-installed executable** so the binary and its cache location stay consistent across launches instead of a fresh `npx` resolution each session.
+
+### Symptom B — a "simple query" hangs ~2 minutes and returns nothing
+
+The **non-interactive device-code trap**. When a query is answered by a Python script, `scripts/auth.py` falls back to an interactive `DeviceCodeCredential` if there is no saved auth record and no service principal. In a non-interactive agent session nobody can complete the device-code prompt, so the call **blocks until the ~2 min execution timeout** and returns nothing. Fixes, in order:
+
+1. **Warm the token cache once, interactively** — run `python scripts/auth.py` in a normal terminal and sign in. This persists the **`AuthenticationRecord`** (under `%LOCALAPPDATA%\.IdentityService\…`); later script runs then **refresh silently**. Lightest fix.
+2. **Prefer the MCP server for queries** once ✓ Connected — it does not device-code per call.
+3. **Use a service principal for unattended/CI:** set `CLIENT_ID`/`CLIENT_SECRET` in `.env` so `auth.py` uses a non-interactive `ClientSecretCredential` (the app registration needs an application user + security role).
+
+Never trigger an interactive auth flow inside a non-interactive query turn — warm the cache first.
+
+### Symptom C — sign-in loops even right after you complete it
+
+The **token cache is corrupted/stale**. Clear the **relevant** cache — the MCP proxy's cache and/or the azure-identity record (`.token_cache.bin` and the saved auth-record file under `%LOCALAPPDATA%\.IdentityService\`) — **not** your PAC profile. Then authenticate once and re-verify tenant consent and the environment allowlist.
 
 ---
 
