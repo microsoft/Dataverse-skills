@@ -34,9 +34,12 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
     CLIENT_SECRET      — optional, enables service principal auth
 """
 
+import json
 import os
 import re
 import sys
+import threading
+import time
 from pathlib import Path
 
 # AuthenticationRecord is persisted here so new processes skip device code flow
@@ -242,6 +245,198 @@ def _build_operation_context(skill):
     return OperationContext(user_agent_context=ctx_str)
 
 
+# --------------------------------------------------------------------------
+# Optional SkillOpt trace hook.
+#
+# When the env var DATAVERSE_TRACE_FILE is set, every SDK records-namespace
+# call made through a get_client(...) result is logged to that file as one
+# JSON line per call. Created-record GUIDs are written to a sibling file
+# named `created_guids.jsonl` in the same directory.
+#
+# When the env var is unset, behavior is unchanged — no overhead, no files.
+#
+# Scope: SDK records.create / .update / .delete / .upsert and the bulk
+# variants. The raw Web API path (get_token() + requests) is NOT traced —
+# see SkillOpt env docs if you need wider coverage.
+#
+# Thread-safe via a module-level lock around file appends.
+# --------------------------------------------------------------------------
+
+_TRACE_LOCK = threading.Lock()
+
+
+def _trace_file_path():
+    return os.environ.get("DATAVERSE_TRACE_FILE", "")
+
+
+def _guids_file_path():
+    trace = _trace_file_path()
+    if not trace:
+        return ""
+    return os.path.join(os.path.dirname(trace) or ".", "created_guids.jsonl")
+
+
+def _record_trace(method, table, args_summary, status, error=None):
+    """Append one JSON line to the trace file. NO-OP when env var is unset."""
+    path = _trace_file_path()
+    if not path:
+        return
+    rec = {
+        "ts": time.time(),
+        "method": method,
+        "table": table,
+        "url": f"/sdk/records/{method}/{table}",  # synthetic URL for regex matching
+        "endpoint": f"/sdk/records/{method}/{table}",
+        "args": args_summary,
+        "status": status,
+    }
+    if error:
+        rec["error"] = error
+    try:
+        with _TRACE_LOCK:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, default=str) + "\n")
+    except Exception:
+        pass  # Tracing must never break the actual call.
+
+
+def _record_guids(table, guids):
+    """Append created GUIDs to the sibling guids file."""
+    path = _guids_file_path()
+    if not path or not guids:
+        return
+    try:
+        with _TRACE_LOCK:
+            with open(path, "a", encoding="utf-8") as f:
+                for g in guids:
+                    f.write(json.dumps({"table": table, "guid": str(g), "ts": time.time()}) + "\n")
+    except Exception:
+        pass
+
+
+def _summarize_record(rec):
+    """Return a small summary of a record dict for the trace log (no large blobs).
+
+    Captures the keys and the size of any string/bytes values without writing
+    the full content. Used purely for trace observability.
+    """
+    if not isinstance(rec, dict):
+        try:
+            n = len(rec)
+            return {"_type": type(rec).__name__, "_len": n}
+        except Exception:
+            return {"_type": type(rec).__name__}
+    summary = {"_keys": sorted(list(rec.keys())), "_n_keys": len(rec)}
+    return summary
+
+
+class _TracingRecords:
+    """Lightweight wrapper around a DataverseClient.records namespace.
+
+    Intercepts CRUD calls to write to the trace + GUIDs files when
+    DATAVERSE_TRACE_FILE is set. Forwards everything else unchanged.
+    """
+
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+
+    def __getattr__(self, name):
+        # Forward any other attribute access (e.g., bulk helpers) directly.
+        return getattr(self._wrapped, name)
+
+    def create(self, table, records, *args, **kwargs):
+        is_bulk = isinstance(records, list)
+        args_summary = {
+            "is_bulk": is_bulk,
+            "count": len(records) if is_bulk else 1,
+            "record_summary": (
+                [_summarize_record(r) for r in records[:3]] if is_bulk else _summarize_record(records)
+            ),
+        }
+        try:
+            result = self._wrapped.create(table, records, *args, **kwargs)
+            # The SDK returns a single GUID (single create) or a list of GUIDs (bulk).
+            guids = result if isinstance(result, list) else [result]
+            _record_trace("create", table, args_summary, status=200)
+            _record_guids(table, [g for g in guids if g])
+            return result
+        except Exception as e:
+            _record_trace("create", table, args_summary, status=0, error=str(e))
+            raise
+
+    def update(self, table, record_id_or_ids, payload, *args, **kwargs):
+        is_bulk = isinstance(record_id_or_ids, list)
+        args_summary = {
+            "is_bulk": is_bulk,
+            "count": len(record_id_or_ids) if is_bulk else 1,
+            "payload_summary": _summarize_record(payload),
+        }
+        try:
+            result = self._wrapped.update(table, record_id_or_ids, payload, *args, **kwargs)
+            _record_trace("update", table, args_summary, status=200)
+            return result
+        except Exception as e:
+            _record_trace("update", table, args_summary, status=0, error=str(e))
+            raise
+
+    def delete(self, table, record_id_or_ids, *args, **kwargs):
+        is_bulk = isinstance(record_id_or_ids, list)
+        args_summary = {
+            "is_bulk": is_bulk,
+            "count": len(record_id_or_ids) if is_bulk else 1,
+        }
+        try:
+            result = self._wrapped.delete(table, record_id_or_ids, *args, **kwargs)
+            _record_trace("delete", table, args_summary, status=200)
+            return result
+        except Exception as e:
+            _record_trace("delete", table, args_summary, status=0, error=str(e))
+            raise
+
+    def upsert(self, table, items, *args, **kwargs):
+        is_bulk = isinstance(items, list) and len(items) > 1
+        args_summary = {
+            "is_bulk": is_bulk,
+            "count": len(items) if isinstance(items, list) else 1,
+        }
+        try:
+            result = self._wrapped.upsert(table, items, *args, **kwargs)
+            _record_trace("upsert", table, args_summary, status=200)
+            # upsert may return GUIDs depending on SDK version
+            if isinstance(result, list):
+                _record_guids(table, [str(g) for g in result if g])
+            return result
+        except Exception as e:
+            _record_trace("upsert", table, args_summary, status=0, error=str(e))
+            raise
+
+    def get(self, *args, **kwargs):
+        # Read; no GUIDs to record, but log for request_count checks.
+        table = args[0] if args else kwargs.get("table", "<unknown>")
+        try:
+            result = self._wrapped.get(*args, **kwargs)
+            _record_trace("get", table, {}, status=200)
+            return result
+        except Exception as e:
+            _record_trace("get", table, {}, status=0, error=str(e))
+            raise
+
+
+class _TracingClient:
+    """Lightweight wrapper that swaps in a _TracingRecords for the records attr.
+
+    Forwards all other attribute access unchanged. Used only when
+    DATAVERSE_TRACE_FILE is set; otherwise the underlying client is returned bare.
+    """
+
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+        self.records = _TracingRecords(wrapped.records)
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+
 def get_client(skill, **kwargs):
     """Return a DataverseClient with plugin attribution baked in.
 
@@ -252,19 +447,27 @@ def get_client(skill, **kwargs):
     schema (app/skill/agent) for safe server-side attribution.  Never
     include secrets, PII, or free-form text.
 
+    When DATAVERSE_TRACE_FILE is set, the returned client wraps the SDK's
+    records namespace to log every create/update/delete/upsert/get to the
+    trace file and record created GUIDs to a sibling created_guids.jsonl.
+    Used by SkillOpt's live-verification subsystem; safe NO-OP otherwise.
+
     :param skill: Skill name (e.g. "dv-data", "dv-query").
     :param kwargs: Extra keyword arguments forwarded to DataverseClient.
-    :returns: Configured DataverseClient instance.
+    :returns: Configured DataverseClient instance (or wrapped, when tracing).
     """
     load_env()
     _validate_skill(skill)
     from PowerPlatform.Dataverse.client import DataverseClient
-    return DataverseClient(
+    client = DataverseClient(
         base_url=os.environ["DATAVERSE_URL"],
         credential=_get_credential(),
         context=_build_operation_context(skill),
         **kwargs,
     )
+    if _trace_file_path():
+        return _TracingClient(client)
+    return client
 
 
 def get_plugin_headers(skill, token=None):
