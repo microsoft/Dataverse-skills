@@ -15,6 +15,11 @@
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
       "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/SEVAL/LMChecklist.prompty",
+      "passing_score": 1,
+      "priority": 1
     }
   ],
   "tests": [
