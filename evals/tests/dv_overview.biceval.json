@@ -1,0 +1,89 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Overview",
+  "description": "Verifies dv-overview correctly routes multi-skill tasks to the right child skills (dv-data, dv-query, dv-metadata, dv-solution, dv-connect).",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
+      "passing_score": 3,
+      "priority": 1,
+      "settings": {
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+      }
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "overview_001_routing_read_and_create",
+      "prompt": "I want to read some records AND create a new table in my Dataverse environment in the same session. Which skills and tools should I use for each?",
+      "expected_response": "Agent loads dv-overview, mentions dv-query for reads and dv-metadata for table creation. Recommends Python SDK for both.",
+      "category": "overview",
+      "description": "Skill routing for combined read + schema-create",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Overview", "Skill": "dv-overview"},
+      "custom_metadata": {"skill": "dv-overview", "tool_routing": "skill"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: CONTAINS: dv-query",
+        "PRIORITY_1: CONTAINS: dv-metadata",
+        "PRIORITY_1: Agent correctly partitions the work — routes record reads to dv-query and table creation to dv-metadata, NOT both to a single skill.",
+        "PRIORITY_2: Agent recommends the Python SDK (DataverseClient) for both operations."
+      ]
+    },
+    {
+      "test_id": "overview_002_routing_solution_export",
+      "prompt": "How should I export my Dataverse solution to source control? Just tell me which skill to use and the high-level approach.",
+      "expected_response": "Agent routes to dv-solution and recommends PAC CLI (pac solution export / unpack). Does NOT route to dv-data or dv-metadata.",
+      "category": "overview",
+      "description": "Skill routing for solution lifecycle — must go to dv-solution, not dv-data/dv-metadata",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Overview", "Skill": "dv-overview"},
+      "custom_metadata": {"skill": "dv-overview", "tool_routing": "skill"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: CONTAINS: dv-solution",
+        "PRIORITY_1: NOT_CONTAINS: dv-data",
+        "PRIORITY_2: Agent mentions PAC CLI (pac solution export / unpack) as the documented tool for solution lifecycle."
+      ]
+    },
+    {
+      "test_id": "overview_003_routing_bulk_data",
+      "prompt": "I need to load 10,000 records into a Dataverse table from a CSV. Which skill handles this and what tool does it recommend?",
+      "expected_response": "Agent routes to dv-data and recommends the Python SDK bulk path (CreateMultiple / bulk_create helper with chunking) — not MCP and not per-record loops.",
+      "category": "overview",
+      "description": "Skill routing for bulk data load — dv-data + SDK bulk path",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Overview", "Skill": "dv-overview"},
+      "custom_metadata": {"skill": "dv-overview", "tool_routing": "skill"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: CONTAINS: dv-data",
+        "PRIORITY_1: Agent recommends the SDK bulk path (CreateMultiple / bulk_create) for 10k records, NOT MCP and NOT per-record loops.",
+        "PRIORITY_2: NOT_CONTAINS: per-record loop",
+        "PRIORITY_2: Agent does not route 10k-record imports to MCP (MCP is for small interactive batches)."
+      ]
+    },
+    {
+      "test_id": "overview_004_tool_routing_hierarchy",
+      "prompt": "Summarize the tool-routing rules in dv-overview. When do I use MCP vs the Python SDK vs the Web API vs PAC CLI?",
+      "expected_response": "Agent reports the documented hierarchy: MCP for interactive small ops (~1-10 rows), Python SDK for bulk and scripted workflows, Web API only for documented SDK gaps, PAC CLI for solution lifecycle.",
+      "category": "overview",
+      "description": "Skill-contract — overview's tool-routing hierarchy is reported correctly",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Overview", "Skill": "dv-overview", "Type": "skill-contract"},
+      "custom_metadata": {"skill": "dv-overview", "test_kind": "skill-contract"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: CONTAINS: MCP",
+        "PRIORITY_1: CONTAINS: SDK",
+        "PRIORITY_1: CONTAINS: PAC",
+        "PRIORITY_1: Agent describes the documented routing hierarchy — MCP for small interactive ops, SDK for bulk/scripted, Web API for SDK gaps, PAC CLI for solution lifecycle. If the agent inverts the order (e.g. recommends Web API as primary) or claims SDK doesn't support bulk, FAIL."
+      ]
+    }
+  ]
+}
