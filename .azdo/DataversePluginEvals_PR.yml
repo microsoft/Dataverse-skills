@@ -56,7 +56,10 @@ resources:
     type: github
     endpoint: bic-proxima-shared-stamp
     name: bic/LocalEvalRunner
-    ref: refs/heads/main
+    # Temporary: pinned to LER PR #416 branch to validate the
+    # DeterministicAssertionEvaluator service-only routing fix end-to-end.
+    # Revert to refs/heads/main before merge.
+    ref: refs/heads/users/sbadenkal/service-only-deterministic-assertion
   - repository: BicEvalsService
     type: github
     endpoint: bic-proxima-shared-stamp
@@ -67,15 +70,21 @@ steps:
 - checkout: self
   displayName: 'Checkout Dataverse-skills'
 
+- checkout: LocalEvalRunner
+  displayName: 'Checkout LocalEvalRunner source (for build-from-source)'
+  fetchDepth: 1
+
 - checkout: BicEvalsService
   displayName: 'Checkout evaluator prompts'
   fetchDepth: 1
 
-# Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, auth token
+# Setup: .NET, NuGet auth, LocalEvalRunner BUILD FROM SOURCE, Copilot CLI, auth token
 - template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@LocalEvalRunner
   parameters:
     cliAgent: 'copilot'
     cliAgentTokenVariable: 'COPILOT_GH_PAT'
+    useBuildFromSource: true
+    sourceRepoPath: '$(Build.SourcesDirectory)/LocalEvalRunner'
 
 # Configure: merge replacements, prepare agent config
 - template: .pipelines/templates/steps/BicEval-ConfigureTemplate.yml@LocalEvalRunner
