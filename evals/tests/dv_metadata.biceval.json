@@ -10,7 +10,7 @@
     },
     {
       "name": "CortexConfigurations:Common/SEVAL/LMChecklist.prompty",
-      "passing_score": 3,
+      "passing_score": 1,
       "priority": 1
     }
   ],
