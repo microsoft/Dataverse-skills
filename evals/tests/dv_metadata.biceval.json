@@ -10,7 +10,7 @@
       "settings": {
         "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
       }
-    },
+    },1
     {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
