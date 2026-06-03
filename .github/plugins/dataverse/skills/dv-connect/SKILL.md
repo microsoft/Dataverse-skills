@@ -20,8 +20,8 @@ Before touching anything, check whether this workspace is already connected to a
 Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
-2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
-3. **PAC CLI auth matches `.env`** — `pac auth list` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `pac org who` against that profile succeeds
+2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
+3. **Shared auth cache matches `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `dataverse org who` against that profile succeeds. (PAC CLI is no longer the auth gate; `pac auth list` is optional.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert v>='0.1.0b9', f'SDK {v} is outdated, need >=0.1.0b9'"` exits 0
 
 **If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
@@ -52,8 +52,10 @@ If any tool is missing, install it (see [tools-setup.md](references/tools-setup.
 
 After Python is confirmed:
 ```
-pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
+pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas msal msal-extensions
 ```
+
+`msal` and `msal-extensions` let `scripts/auth.py` reuse the token cache populated by `dataverse auth create`, so a single sign-in covers the CLI, the MCP stdio proxy, and every Python script in the plugin — no second device-code prompt.
 
 After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
 ```
@@ -66,29 +68,40 @@ npm install -g @microsoft/dataverse@latest
 
 ## Step 2: Discover and select the environment
 
-Before asking the user for a URL, check what's already available:
+Before asking the user for a URL, check what's already available.
+
+> **Auth tool choice.** `dataverse auth create` (from the `@microsoft/dataverse` npm package installed in Step 1) is the preferred login surface for this plugin. It uses the Dataverse CLI app registration (`0c412cc3-…`) and writes its MSAL cache to a location that the MCP stdio proxy AND `scripts/auth.py` both read — so one login serves all three. PAC CLI stays installed for solution / admin verbs in `dv-solution` and `dv-admin` but is no longer the auth gate.
+
+Check for an existing DV CLI profile first, then fall back to PAC for environment discovery if needed:
 
 ```
-pac auth list
-pac org who
+dataverse auth list
+dataverse auth who
+pac auth list   # PAC profiles are still useful for env discovery / pac org list
 ```
 
-**If PAC CLI is authenticated:**
-- Show the currently active environment
-- Offer to use it, switch to another (`pac env list`), or create a new one
+**If `dataverse auth who` shows a profile and its environment matches the user's target:**
+- Reuse it. Set `DATAVERSE_URL` and `TENANT_ID` from the profile.
 
-**If PAC CLI is not authenticated:**
+**If no DV CLI profile exists (or it points at the wrong environment):**
 - Ask: "Do you want to connect to an existing environment or create a new one?"
 
-**Before selecting, check for tenant/region mismatch.** If the target environment URL uses a different region (e.g., `crm10.dynamics.com` = APAC) than the currently authenticated account's environments, the current auth profile likely belongs to a different tenant. In that case, create a new auth profile for the correct tenant rather than trying `pac org select` (which will fail with "no organization found"):
+**Before selecting, check for tenant/region mismatch.** If the target environment URL uses a different region (e.g., `crm10.dynamics.com` = APAC) than the currently authenticated account's environments, create a new profile for the correct tenant rather than trying to reuse the old one:
 
 ```
-pac auth create --name <profile-name> --environment <url>
+dataverse auth create --environment <url>          # interactive (WAM broker on Windows → no browser tab)
+dataverse auth create --environment <url> --deviceCode   # headless / remote / SSH
 ```
 
-**To select from existing profiles:**
+On first run in a tenant, AAD may prompt for admin consent for app `0c412cc3-0dd6-449b-987f-05b053db9457`. If the user lacks consent rights, ask an admin to visit:
+
 ```
-pac auth select --name <profile-name>
+https://login.microsoftonline.com/<tenant-id>/adminconsent?client_id=0c412cc3-0dd6-449b-987f-05b053db9457
+```
+
+**To switch between existing DV CLI profiles:**
+```
+dataverse auth select --name <profile-name>
 ```
 
 **To create a new environment** (requires admin permissions):
@@ -99,18 +112,19 @@ If this fails with permissions error, guide the user to [Power Platform Admin Ce
 
 **Confirm connection:**
 ```
-pac org who
+dataverse auth who
+dataverse org who      # or: pac org who
 ```
 Parse the output to extract `DATAVERSE_URL` and `TENANT_ID`.
 
-If `pac org who` does not show a tenant ID, fall back to:
+If neither command shows a tenant ID, fall back to:
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
   | grep -i "WWW-Authenticate" \
   | sed -n 's|.*login\.microsoftonline\.com/\([^/]*\).*|\1|p'
 ```
 
-**Skip condition:** `.env` exists with valid `DATAVERSE_URL` and `TENANT_ID`, and `pac org who` confirms the connection.
+**Skip condition:** `.env` exists with valid `DATAVERSE_URL` and `TENANT_ID`, and `dataverse auth who` confirms the connection.
 
 ---
 
@@ -199,15 +213,18 @@ Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeho
 ## Step 5: Verify the connection
 
 ```
-pac org who
+dataverse auth who
 python scripts/auth.py
 ```
 
-Both must succeed. Confirm the environment URL matches the intended target.
+Both must succeed and resolve the same user/environment. `dataverse auth who` proves the shared MSAL cache is populated; `python scripts/auth.py` proves Python can silently read that same cache (no device-code prompt).
+
+If the user is doing solution / admin work, optionally also confirm `pac org who` matches.
 
 **If either fails:**
-- `pac org who` fails → re-run Step 2
-- `python scripts/auth.py` fails → check Python SDK install, check `.env` values
+- `dataverse auth who` fails → re-run Step 2 (`dataverse auth create --environment <url>`)
+- `python scripts/auth.py` prints a device-code URL → the shared cache is missing or the wrong tenant. Re-run `dataverse auth create --environment <url>` and try again. Confirm `msal` and `msal-extensions` are installed (`pip show msal msal-extensions`) — without them Python falls back to its own device-code flow.
+- `python scripts/auth.py` fails with a different error → check Python SDK install and `.env` values.
 
 ---
 

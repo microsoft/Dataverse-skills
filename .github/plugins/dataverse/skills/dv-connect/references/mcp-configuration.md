@@ -403,6 +403,8 @@ Wait for the user to confirm this is done (or was already done previously) befor
 
 Separately from tenant-level consent, each Dataverse environment must explicitly allow the MCP client. This is a **one-time** action per environment and does **NOT** require Azure AD admin permissions — any user with Environment Admin or System Administrator role in the environment can do it.
 
+> **One sign-in for CLI, MCP, and Python.** When the user runs `dataverse auth create` (see `dv-connect` Step 2) the token cache is written to a path / OS keychain entry that the `@microsoft/dataverse` stdio MCP proxy and `scripts/auth.py` both read silently. As a result, the allowlisted MCP client ID (`0c412cc3-…` for the Claude / Cursor stdio proxy, or `aebc6443-…` for Copilot HTTP) is exercised exactly once per environment — there is no separate Python device-code sign-in for the same user/env. If a script does prompt for a device code, the shared cache is missing or stale; re-run `dataverse auth create --environment <url>`.
+
 Present the two methods (PPAC portal is recommended for non-developers):
 
 > **Method A: Power Platform Admin Center (recommended — no Azure AD admin needed)**
