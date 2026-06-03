@@ -43,10 +43,10 @@ Local install (a Cursor Marketplace listing is coming — tracked in #76):
 git clone https://github.com/microsoft/Dataverse-skills.git
 ```
 
-Then symlink (or copy) the plugin directory into your Cursor local plugins folder:
+Then copy the plugin directory into your Cursor local plugins folder:
 
-- **Windows:** `%USERPROFILE%\.cursor\plugins\local\dataverse\` → `Dataverse-skills\.github\plugins\dataverse`
-- **macOS / Linux:** `~/.cursor/plugins/local/dataverse/` → `Dataverse-skills/.github/plugins/dataverse`
+- **Windows:** copy `Dataverse-skills\.github\plugins\dataverse` to `%USERPROFILE%\.cursor\plugins\local\dataverse\`
+- **macOS / Linux:** copy `Dataverse-skills/.github/plugins/dataverse` to `~/.cursor/plugins/local/dataverse/`
 
 Reload the Cursor window (Ctrl+Shift+P → "Developer: Reload Window") to load the `dv-*` skills.
 
