@@ -21,7 +21,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
 2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
-3. **Shared auth cache matches `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, and `dataverse org who` against that profile succeeds. (PAC CLI is no longer the auth gate; `pac auth list` is optional.)
+3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert v>='0.1.0b9', f'SDK {v} is outdated, need >=0.1.0b9'"` exits 0
 
 **If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
@@ -55,7 +55,7 @@ After Python is confirmed:
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas msal msal-extensions
 ```
 
-`msal` and `msal-extensions` let `scripts/auth.py` reuse the token cache populated by `dataverse auth create`, so a single sign-in covers the CLI, the MCP stdio proxy, and every Python script in the plugin — no second device-code prompt.
+`msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache \u2014 one sign-in for CLI, MCP, Python.
 
 After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
 ```
@@ -70,7 +70,12 @@ npm install -g @microsoft/dataverse@latest
 
 Before asking the user for a URL, check what's already available.
 
-> **Auth tool choice.** `dataverse auth create` (from the `@microsoft/dataverse` npm package installed in Step 1) is the preferred login surface for this plugin. It uses the Dataverse CLI app registration (`0c412cc3-…`) and writes its MSAL cache to a location that the MCP stdio proxy AND `scripts/auth.py` both read — so one login serves all three. PAC CLI stays installed for solution / admin verbs in `dv-solution` and `dv-admin` but is no longer the auth gate.
+> **Auth tool choice.** Two tools, two AAD apps, two caches — front-load both at connect:
+>
+> 1. **`dataverse auth create`** (app `0c412cc3-…`) covers DV CLI + MCP + Python.
+> 2. **`pac auth create`** (PAC's own app) covers `dv-solution` + `dv-admin`.
+>
+> Once DV CLI gets solution lifecycle commands, the PAC step retires.
 
 Check for an existing DV CLI profile first, then fall back to PAC for environment discovery if needed:
 
@@ -124,7 +129,17 @@ curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
   | sed -n 's|.*login\.microsoftonline\.com/\([^/]*\).*|\1|p'
 ```
 
-**Skip condition:** `.env` exists with valid `DATAVERSE_URL` and `TENANT_ID`, and `dataverse auth who` confirms the connection.
+### Step 2b: Front-load PAC CLI auth for the same environment
+
+PAC uses its own AAD app, so a separate sign-in is required for `dv-solution` and `dv-admin`. Do it now — user signs in twice back-to-back, no later surprises.
+
+```
+pac auth list                                       # skip if a profile for $DATAVERSE_URL exists
+pac auth create --name <orgid> --environment <DATAVERSE_URL>
+```
+
+Use the same account as Step 2. If PAC CLI is not installed, skip with a note that `dv-solution` / `dv-admin` will need it later.
+
 
 ---
 
@@ -214,17 +229,17 @@ Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeho
 
 ```
 dataverse auth who
+pac org who
 python scripts/auth.py
 ```
 
-Both must succeed and resolve the same user/environment. `dataverse auth who` proves the shared MSAL cache is populated; `python scripts/auth.py` proves Python can silently read that same cache (no device-code prompt).
+All three must resolve the same user/environment. They prove the DV CLI cache, the PAC profile (Step 2b), and Python's silent reuse of the DV CLI cache are all wired.
 
-If the user is doing solution / admin work, optionally also confirm `pac org who` matches.
-
-**If either fails:**
-- `dataverse auth who` fails → re-run Step 2 (`dataverse auth create --environment <url>`)
-- `python scripts/auth.py` prints a device-code URL → the shared cache is missing or the wrong tenant. Re-run `dataverse auth create --environment <url>` and try again. Confirm `msal` and `msal-extensions` are installed (`pip show msal msal-extensions`) — without them Python falls back to its own device-code flow.
-- `python scripts/auth.py` fails with a different error → check Python SDK install and `.env` values.
+**If any fail:**
+- `dataverse auth who` fails → re-run Step 2.
+- `pac org who` fails → re-run Step 2b.
+- `python scripts/auth.py` prints a device-code URL → DV CLI cache missing/wrong tenant; re-run Step 2 and confirm `msal` + `msal-extensions` are installed (`pip show msal msal-extensions`).
+- Other Python error → check SDK install and `.env`.
 
 ---
 
