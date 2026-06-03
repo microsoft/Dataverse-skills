@@ -43,7 +43,9 @@ After installation, ask your agent:
 
 > "Connect to Dataverse"
 
-The `dv-connect` skill walks through tool installation, authentication, and registers a `dataverse-<orgid>` MCP server entry in `~/.cursor/mcp.json` (or `<workspace>/.cursor/mcp.json` for project scope). Reload your Cursor window to activate the MCP server; the first MCP call triggers an AAD device-code sign-in.
+The `dv-connect` skill walks through tool installation, authentication, and registers a `dataverse-<orgid>` MCP server entry in `~/.cursor/mcp.json` (or `<workspace>/.cursor/mcp.json` for project scope). Reload your Cursor window to activate the MCP server.
+
+> **Tip:** run `dataverse auth create --environment <url>` once before the first MCP call — the MCP stdio proxy and `scripts/auth.py` both reuse that cache silently, so no device-code prompt.
 
 ## Verify the install
 

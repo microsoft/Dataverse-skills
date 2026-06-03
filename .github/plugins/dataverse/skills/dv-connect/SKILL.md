@@ -260,12 +260,12 @@ For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION
 > ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
 > Remember to **use `claude --continue` to resume the session** without losing context.
 >
-> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for PAC CLI (e.g., `{username}`). This only happens once; the token is cached for future sessions.
+> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for `dataverse auth create` (or your active DV CLI profile, e.g., `{username}`). This only happens once; the token is cached for future sessions, and `dataverse auth create` populates the same cache so the popup is skipped if you've already run it.
 
 **For Cursor:** Write the JSON config, then:
 > ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.cursor/mcp.json`. **Reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear under Settings → Tools & MCPs.
 >
-> On first use, the `npx @microsoft/dataverse` proxy starts a device-code sign-in in your browser. Sign in with the same account you used for PAC CLI; the token is cached in your OS credential store for future sessions.
+> On first use, the `npx @microsoft/dataverse` proxy starts a device-code sign-in in your browser. Sign in with the same account you used for `dataverse auth create`; the token is cached in your OS credential store for future sessions. If you've already run `dataverse auth create`, the proxy reuses that cache silently — no device code.
 
 ---
 

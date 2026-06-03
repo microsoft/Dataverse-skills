@@ -110,10 +110,7 @@ def _build_shared_msal_cache():
 
     try:
         if sys.platform == "win32":
-            from msal_extensions import (
-                FilePersistenceWithDataProtection,
-                PersistedTokenCache as _PTC,
-            )
+            from msal_extensions import FilePersistenceWithDataProtection
             cache_path = (
                 Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
                 / "Microsoft" / "DataverseCli" / "tokencache_msalv3.dat"
@@ -168,18 +165,12 @@ class _MsalSharedCacheCredential:
         self._app = app
         self._accounts = accounts
 
-    def _pick_account(self):
-        # Prefer the account whose username matches a hint from .env, if any.
-        hint = (os.environ.get("DATAVERSE_USERNAME") or "").lower()
-        if hint:
-            for a in self._accounts:
-                if a.get("username", "").lower() == hint:
-                    return a
-        return self._accounts[0]
-
     def get_token(self, *scopes, **kwargs):
         from azure.core.credentials import AccessToken
-        result = self._app.acquire_token_silent(list(scopes), account=self._pick_account())
+        # Single-account is the common case. If the shared cache happens to
+        # contain multiple accounts, the first one wins — deterministic and
+        # matches what `dataverse auth select` would surface as active.
+        result = self._app.acquire_token_silent(list(scopes), account=self._accounts[0])
         if not result or "access_token" not in result:
             raise RuntimeError(
                 "Shared DataverseCLI token cache is present but silent token "
