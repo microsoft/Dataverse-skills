@@ -35,6 +35,21 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Cursor
+
+Local install (a Cursor Marketplace listing is coming — tracked in #76):
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+```
+
+Then symlink (or copy) the plugin directory into your Cursor local plugins folder:
+
+- **Windows:** `%USERPROFILE%\.cursor\plugins\local\dataverse\` → `Dataverse-skills\.github\plugins\dataverse`
+- **macOS / Linux:** `~/.cursor/plugins/local/dataverse/` → `Dataverse-skills/.github/plugins/dataverse`
+
+Reload the Cursor window (Ctrl+Shift+P → "Developer: Reload Window") to load the `dv-*` skills.
+
 ## Verify the install
 
 After installation, ask your agent:
