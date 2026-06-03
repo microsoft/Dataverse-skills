@@ -14,7 +14,7 @@ trigger:
 pr:
 - main
 
-name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.mode }} • ${{ parameters.label }} • ${{ parameters.testFile }}
+name: $(Date:yyyyMMdd)$(Rev:.r) - ${{ parameters.mode }} - ${{ parameters.label }} - ${{ parameters.testFile }}
 
 pool:
   name: 'Azure Pipelines'
@@ -100,8 +100,11 @@ steps:
     pluginDir: '.github/plugins/dataverse'
 
 # Execute: run localevalrunner with CopilotCliAgent
-# DisableEvaluationService routes around the pre-existing LER->BICEP ASCII-headers bug
-# by forcing local-eval mode (correctness.prompty + LMChecklist.prompty grade locally via CAPI/AOAI).
+# Validation harness: BICEP HTTP path is ENABLED (no DisableEvaluationService flag).
+# Combined with bullets-removed pipeline name above, this empirically tests whether
+# the consumer-side bullets-fix alone resolves LER issue #418, or whether the LER-side
+# header sanitization is also required. Build name now contains only ASCII characters,
+# so the LER -> BICEP x-ms-correlation-id header should be valid.
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
   parameters:
     sourceRepoTestFilePath: 'Dataverse-skills/evals/tests/${{ parameters.testFile }}'
@@ -110,7 +113,6 @@ steps:
     azureServiceConnection: ${{ parameters.azureServiceConnection }}
     concurrency: ${{ parameters.concurrency }}
     serviceName: 'DataverseSkillsPlugin'
-    features: 'DisableEvaluationService'
 
 # Publish: test results + artifacts
 - template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@LocalEvalRunner
