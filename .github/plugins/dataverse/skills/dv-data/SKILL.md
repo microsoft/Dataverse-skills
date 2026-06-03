@@ -23,9 +23,13 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 ---
 
-## Before Writing ANY Script — Check MCP First
+## Before Writing ANY Script — Check MCP and CLI First
 
-**If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, or operations the SDK supports that MCP cannot (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
+**If MCP tools are available** (`create_record`, `update_record`) and the task is <=10 records, **use MCP directly — no script needed.**
+
+**If MCP is unavailable** and the task is <=10 records with no data transformation, **use the Dataverse CLI** — one shell command, no Python needed. See the CLI Quick Reference below.
+
+Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, upsert, or file uploads. Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
 
 ## SDK-First Rule
 
@@ -57,11 +61,13 @@ import requests                        # WRONG for SDK-supported ops
 
 ## What This SDK Does NOT Support
 
-Use raw Web API (`get_token()`) for:
+Use the **Dataverse CLI** for:
+- N:N record association/disassociation — `data associate`/`data disassociate` (see CLI Quick Reference below)
+
+Use **raw Web API** (`get_token()`) for:
 - Forms (FormXml) — see **dv-metadata**
 - Views (SavedQueries) — see **dv-metadata**
 - Global option sets — see **dv-metadata**
-- N:N record association (`$ref` POST) — use raw Web API (`POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`)
 - N:N `$expand` — see **dv-query**
 - `$apply` aggregation — see **dv-query**
 - Unbound actions (e.g., `InstallSampleData`)
@@ -152,6 +158,48 @@ client.records.update("new_ticket", "<record-guid>",
 ```python
 client.records.delete("new_ticket", "<record-guid>")
 ```
+
+---
+
+## CLI Quick Reference (MCP Fallback)
+
+When MCP is unavailable and the task is simple single-record CRUD or N:N association, use the Dataverse CLI. All commands include `--context` for plugin attribution. The CLI uses the active `pac auth` profile automatically.
+
+```bash
+# Create a record
+npx @microsoft/dataverse data create -t accounts \
+  -d '{"name":"Contoso Ltd","revenue":5000000}' --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+
+# Read a single record by ID
+npx @microsoft/dataverse data get -t accounts -i <guid> \
+  -s name,revenue --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+
+# Update a record
+npx @microsoft/dataverse data update -t accounts -i <guid> \
+  -d '{"revenue":10000000}' --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+
+# Delete a record
+npx @microsoft/dataverse data delete -t accounts -i <guid> \
+  --no-confirm \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+
+# Associate N:N (e.g., link a contact to an account via a N:N relationship)
+npx @microsoft/dataverse data associate -t accounts -i <source-guid> \
+  -rel contact_customer_accounts \
+  --related contacts --related-id <target-guid> \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+
+# Disassociate N:N
+npx @microsoft/dataverse data disassociate -t accounts -i <source-guid> \
+  -rel contact_customer_accounts \
+  --related-id <target-guid> \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-data"
+```
+
+**When NOT to use CLI:** Bulk operations (10+ records), CSV imports, upserts, file uploads, or anything requiring data transformation — use the Python SDK instead.
 
 ---
 

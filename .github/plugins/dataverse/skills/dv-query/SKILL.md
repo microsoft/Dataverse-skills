@@ -15,21 +15,22 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:
 
-| User asks... | Approach | Why |
+| User asks... | MCP available | MCP unavailable |
 |---|---|---|
-| "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.get()` with `$filter` | Small result, no aggregation |
-| "how many X" / simple count | **MCP** `read_query` or `client.records.get()` with `count=True` | Single number |
-| Single-table aggregation (most/sum/avg/top-N) | **`$apply`** server-side aggregation (raw Web API) | One HTTP call, returns only grouped results |
-| Cross-table aggregation | **`client.dataframe.get()`** with minimal `$select` + `pd.merge()` | Server can't join; pandas merge is fast with minimal columns |
-| "show me X with related Y" / resolve lookups | `client.records.get()` with `$expand` or **QueryBuilder** (b8+) | Lookup resolution |
-| "export this data" / bulk extract | **`client.dataframe.get()`** with `select=` | Direct to DataFrame → CSV |
-| "load into notebook" / interactive analysis | **`client.dataframe.get()`** or **QueryBuilder** `.to_dataframe()` (b8+) | pandas native |
-| "find duplicates" / complex filter | `client.records.get()` with `$filter` or **QueryBuilder** (b8+) | SDK handles pagination |
-| Simple filtered read (<5K rows) | **`client.query.sql()`** | Lightweight SQL SELECT with WHERE, ORDER BY, TOP |
+| Simple filter / "show me open tickets" | **MCP** `read_query` | **CLI** `data query -t <table> -f <filter> -s <cols>` |
+| "how many X" / simple count | **MCP** `read_query` | **CLI** `data count -t <table> -f <filter>` |
+| Single record by ID | **MCP** `read_query` | **CLI** `data get -t <table> -i <guid> -s <cols>` |
+| Paginated read >20 rows | **SDK** `client.records.get()` | **CLI** `data query --all --max-records N` (no DataFrame) or **SDK** |
+| Single-table aggregation (most/sum/avg) | **`$apply`** raw Web API | **`$apply`** raw Web API |
+| Cross-table aggregation | **SDK** `client.dataframe.get()` + `pd.merge()` | **SDK** `client.dataframe.get()` + `pd.merge()` |
+| Resolve lookups / "X with related Y" | **SDK** `client.records.get()` with `$expand` | **SDK** or **CLI** `data query -x <expand>` |
+| Bulk extract / export | **SDK** `client.dataframe.get()` | **SDK** `client.dataframe.get()` |
+| Interactive / notebook analysis | **SDK** QueryBuilder `.to_dataframe()` | **SDK** QueryBuilder `.to_dataframe()` |
+| Simple filtered read (<5K rows) | **SDK** `client.query.sql()` | **CLI** `data query --sql <query>` or **SDK** |
 
-**Key principle:** Let the server do the work. For single-table aggregation, use `$apply` — it runs server-side and returns only grouped results. For cross-table questions, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()` — the merge itself is sub-second; the bottleneck is network transfer, which `$select` minimizes.
+**Key principle:** Let the server do the work. For single-table aggregation, use `$apply` — it runs server-side and returns only grouped results. For cross-table questions, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()`.
 
-**Always query the live Dataverse environment.** Do not query local copies, cached files, or source databases when the user expects results from Dataverse. The data in Dataverse is the source of truth.
+**Always query the live Dataverse environment.** Do not query local copies, cached files, or source databases when the user expects results from Dataverse.
 
 ---
 
@@ -52,6 +53,34 @@ for r in results:
 ```
 
 **Do NOT use for:** Tables >5K rows (results silently truncated), aggregation (no GROUP BY), or cross-table queries (no JOINs). Use `$apply` for single-table aggregation and `client.dataframe.get()` + `pd.merge()` for cross-table.
+
+## CLI Query Fallback (MCP Unavailable)
+
+When MCP is not available and you need a simple read without DataFrames or aggregation, use the Dataverse CLI instead of writing a Python script.
+
+```bash
+# Simple filtered query
+npx @microsoft/dataverse data query -t accounts \
+  -s name,revenue -f "revenue gt 1000000" --top 50 --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-query"
+
+# Single record by ID
+npx @microsoft/dataverse data get -t accounts -i <guid> \
+  -s name,revenue,telephone1 --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-query"
+
+# Count records with filter
+npx @microsoft/dataverse data count -t contacts -f "statecode eq 0" \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-query"
+
+# Paginated read (all pages, up to max-records cap)
+npx @microsoft/dataverse data query -t opportunities \
+  -s name,estimatedvalue -f "statecode eq 0" \
+  --all --max-records 500 --json \
+  --context "app=dataverse-skills;agent=claude-code;skill=dv-query"
+```
+
+**When NOT to use CLI for reads:** DataFrames/pandas, cross-table joins, `$apply` aggregation, or N:N `$expand` — use the SDK or Web API instead.
 
 ## Skill boundaries
 
