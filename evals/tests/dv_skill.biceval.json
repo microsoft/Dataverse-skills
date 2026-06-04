@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Skill",
-  "description": "Verifies Business Skill management, consumption parity, and mandatory consult enforcement for the dv-skill skill.",
+  "description": "Ablation tests for the dv-skill skill. Each test measures whether loading dv-skill produces measurably better answers than baseline (no skill). Focus: mandatory consult enforcement and skill-entity awareness that a naive model lacks.",
   "enabled_evaluators": [
     {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
@@ -11,100 +11,167 @@
   ],
   "tests": [
     {
-      "test_id": "skill_001_create",
-      "prompt": "Create a Dataverse Business Skill called 'Refund-Handling' with a description 'Guides agents through the refund process' and body containing step-by-step refund instructions.",
-      "expected_response": "Agent uses Python SDK client.records.create('skill', {...}) with name, description, and body fields.",
-      "category": "skill-management",
-      "description": "Create a Business Skill — routes to dv-skill, uses MCP or Web API",
-      "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
-      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-skill",
-        "PRIORITY_1: Agent creates a skill with name 'Refund-Handling'. Must use Python SDK client.records.create('skill', {...}).",
-        "PRIORITY_1: NOT_CONTAINS: urllib.request",
-        "PRIORITY_2: CONTAINS: Refund-Handling"
-      ]
-    },
-    {
-      "test_id": "skill_002_list",
-      "prompt": "List all Business Skills available in my Dataverse environment.",
-      "expected_response": "Agent uses Python SDK client.records.get('skill') to list all skills.",
-      "category": "skill-management",
-      "description": "List all skills — confirms Python Web API path works for listing",
-      "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
-      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-skill",
-        "PRIORITY_1: Agent queries the skill table to list all skills. Uses Python SDK client.records.get('skill'). Raw urllib is NOT acceptable.",
-        "PRIORITY_1: NOT_CONTAINS: urllib.request",
-        "PRIORITY_2: CONTAINS: skill"
-      ]
-    },
-    {
-      "test_id": "skill_003_consult_enforcement",
-      "prompt": "Write a Python script that imports refund records from a CSV into the new_refund table, following our team's refund handling process.",
+      "test_id": "skill_001_consult_domain_task",
+      "prompt": "Import refund records from a CSV into the new_refund table, following our team's refund handling process.",
       "expected_response": "Agent FIRST queries Dataverse Business Skills for relevant domain instructions (e.g., searching for 'refund' skills), THEN generates the SDK import code incorporating any retrieved skill instructions. The consult step must come before the data operation.",
-      "category": "consult-enforcement",
-      "description": "Mandatory consult — agent must query Business Skills before generating SDK code for domain-specific tasks",
+      "category": "ablation-consult",
+      "description": "Ablation: Without dv-skill, agent jumps straight to SDK code. With dv-skill, agent queries Business Skills first for domain context.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "consult"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "consult_expected": true},
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-skill", "Type": "consult"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "SDK",
+        "consult_expected": true,
+        "ablation_hypothesis": "Without dv-skill loaded, the agent has no knowledge of the mandatory consult pattern. It will generate a CSV import script directly without checking if the org has Business Skills with domain-specific refund instructions. With dv-skill loaded, the mandatory consult rule forces the agent to query the skill table first.",
+        "baseline_expected": "Agent generates a standard CSV-to-Dataverse import script (read CSV, build records list, call client.records.create). No mention of Business Skills, no skill query step. Domain instructions are ignored.",
+        "treatment_expected": "Agent queries client.records.list('skill', filter=contains(name,'refund')) BEFORE generating import code. If a matching skill is found, its body is incorporated as domain context guiding the import logic."
+      },
       "assertions": [
-        "PRIORITY_1: Agent queries or searches Dataverse Business Skills BEFORE generating the CSV import code. Evidence: Python SDK client.records.get('skill', filter=...). If agent jumps straight to SDK code without consulting skills, this FAILS.",
-        "PRIORITY_1: Agent uses Python SDK (client.records.create with list arg or CreateMultiple) for the actual data import — not urllib for the import itself.",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_1: Agent queries or searches Dataverse Business Skills BEFORE generating the import code. Evidence: MCP search/describe/read_query for skills, OR SDK client.records.list('skill', ...). Any path that checks skills first is valid.",
+        "PRIORITY_1: Agent uses an appropriate method for the bulk data import — SDK client.records.create with list arg for 10+ records, or MCP create_record for <=10 records. Per-record urllib loops FAIL.",
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
         "PRIORITY_2: CONTAINS: refund"
       ]
     },
     {
-      "test_id": "skill_004_consult_skip_generic",
-      "prompt": "Write a Python script that creates 100 generic test accounts in my Dataverse account table with random names.",
-      "expected_response": "Agent still consults Business Skills (mandatory rule), but finding no relevant skills, proceeds directly with SDK bulk create. The consult check happens but does not block execution when no skills match.",
-      "category": "consult-enforcement",
-      "description": "Mandatory consult fires even for generic tasks — finding nothing is fine, skipping the check is not",
+      "test_id": "skill_002_consult_generic_task",
+      "prompt": "Create 100 generic test accounts in my Dataverse account table with random names.",
+      "expected_response": "Agent still consults Business Skills (mandatory rule), but finding no relevant skills, proceeds directly with SDK bulk create. The consult check happens regardless of whether the task seems domain-specific.",
+      "category": "ablation-consult",
+      "description": "Ablation: Without dv-skill, agent never consults skills for generic tasks. With dv-skill, mandatory consult fires even when no match is expected.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "consult"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "consult_expected": true},
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-skill", "Type": "consult"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "SDK",
+        "consult_expected": true,
+        "ablation_hypothesis": "Without dv-skill, the agent sees no reason to query Business Skills for a generic 'create test accounts' task — it will jump straight to SDK code. With dv-skill loaded, the mandatory rule says 'Finding no matching skills is fine — skipping the check is not.' The agent must still perform the consult step.",
+        "baseline_expected": "Agent generates bulk account creation code immediately. No mention of Business Skills or skill consultation. Goes straight to client.records.create('account', records).",
+        "treatment_expected": "Agent queries skill table (e.g., filter on 'account' keywords), finds no matches, explicitly states no relevant skills found, then proceeds with bulk create. The consult step is visible in the output even though it yielded no results."
+      },
       "assertions": [
-        "PRIORITY_1: Agent queries or acknowledges checking Business Skills before generating the bulk create code. Evidence: Python SDK client.records.get('skill', ...), or explicit statement that skills were checked. If no mention of skill consultation at all, this FAILS.",
-        "PRIORITY_1: Agent uses bulk SDK pattern (list arg to client.records.create or CreateMultiple) for the 100 accounts. Per-record loops FAIL.",
+        "PRIORITY_1: Agent queries or acknowledges checking Business Skills before generating the bulk create code. Evidence: MCP search/describe/read_query, OR SDK client.records.list('skill', ...), OR explicit statement that skills were checked. Any path that performs the consult is valid.",
+        "PRIORITY_1: Agent uses a bulk-appropriate method for 100 records — SDK list-arg (CreateMultiple) or equivalent batch operation. Per-record loops or 100 individual MCP calls FAIL.",
         "PRIORITY_1: NOT_CONTAINS: There is no batch API",
-        "PRIORITY_2: SKILL_LOADED: dv-data"
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
+        "PRIORITY_2: Agent explicitly states no matching skills were found before proceeding."
       ]
     },
     {
-      "test_id": "skill_005_delete",
-      "prompt": "Delete the Business Skill named 'Old-Process' from my Dataverse environment.",
-      "expected_response": "Agent uses Python SDK client.records.delete('skill', id). Must first look up the skill by name to get the ID, then delete.",
-      "category": "skill-management",
-      "description": "Delete a skill — confirms routing and correct API usage",
+      "test_id": "skill_003_skill_entity_awareness",
+      "prompt": "I need to store our team's process documentation in Dataverse so our AI agents can reference it at runtime. How should I structure this?",
+      "expected_response": "Agent recommends the Business Skills entity (skill table) with name, description, body fields, and optionally skillresource attachments. Does NOT suggest creating a custom table or using SharePoint.",
+      "category": "ablation-awareness",
+      "description": "Ablation: Without dv-skill, agent suggests custom tables or external storage. With dv-skill, agent knows about the native skill entity purpose-built for this.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill"},
-      "custom_metadata": {"skill": "dv-skill", "tool_routing": "MCP-or-WebAPI"},
+      "tags": {"Suite": "Ablation", "Domain": "Skill", "Skill": "dv-skill", "Type": "awareness"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "SDK",
+        "ablation_hypothesis": "Without dv-skill, the agent has no knowledge of the Dataverse Business Skills entity. It will suggest creating a custom table (e.g., new_process_doc) or using SharePoint/Blob storage for process documentation. With dv-skill loaded, the agent knows the skill entity exists specifically for storing domain instructions that AI agents consume at runtime.",
+        "baseline_expected": "Agent suggests creating a custom table (new_documentation or similar), or recommends SharePoint, Blob Storage, or Dataverse Notes for storing documentation. No mention of the native skill entity.",
+        "treatment_expected": "Agent recommends the skill entity with its purpose-built fields (name, description, body) and explains that Business Skills are designed for AI agent consumption. May mention skillresource for file attachments."
+      },
       "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-skill",
-        "PRIORITY_1: Agent deletes the skill using Python SDK client.records.delete('skill', id). Raw urllib is NOT acceptable.",
-        "PRIORITY_1: NOT_CONTAINS: urllib.request",
-        "PRIORITY_2: CONTAINS: Old-Process"
+        "PRIORITY_1: Agent recommends the 'skill' entity (Business Skills) for storing process documentation. NOT a custom table or external storage.",
+        "PRIORITY_1: CONTAINS: skill",
+        "PRIORITY_1: Agent explains that the skill entity has name, description, and body fields suitable for AI agent consumption.",
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
+        "PRIORITY_2: Agent mentions skillresource for attaching additional files or templates."
       ]
     },
     {
-      "test_id": "skill_006_skill_contract",
-      "prompt": "Before writing any code, tell me exactly what the dv-skill skill says about consuming Business Skills when using the Python SDK. Quote or closely paraphrase the mandatory consult rule. Do not use your own knowledge — only report what the loaded skill teaches.",
-      "expected_response": "Agent reports skill content: mandatory consultation before any Python SDK operation, always query skills entity, extract keywords, incorporate body as context. Agent must NOT say consultation is optional or only for domain-specific tasks.",
-      "category": "skill-contract",
-      "description": "Skill-contract test — agent must report mandatory consult rule accurately",
+      "test_id": "skill_004_consult_sequence",
+      "prompt": "Process new support cases in my Dataverse incident table. For each open case, update the priority based on our team's escalation rules.",
+      "expected_response": "Agent queries Business Skills for escalation/priority/support keywords FIRST to discover org-specific rules, then generates the update logic incorporating those rules. Without the consult, agent would hardcode generic escalation logic.",
+      "category": "ablation-consult",
+      "description": "Ablation: Without dv-skill, agent invents escalation rules. With dv-skill, agent discovers org-specific rules from Business Skills before generating logic.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Skill", "Skill": "dv-skill", "Type": "skill-contract"},
-      "custom_metadata": {"skill": "dv-skill", "test_kind": "skill-contract"},
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-skill", "Type": "consult"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "SDK",
+        "consult_expected": true,
+        "ablation_hypothesis": "Without dv-skill, the agent will invent generic escalation rules (e.g., 'if SLA breached, set priority to High'). With dv-skill loaded, the mandatory consult forces the agent to query Business Skills for org-specific escalation rules before generating any logic. The agent discovers real rules rather than hallucinating them.",
+        "baseline_expected": "Agent hardcodes generic escalation logic (e.g., time-based priority bumps, keyword matching). Rules are invented by the model, not sourced from the org's Dataverse.",
+        "treatment_expected": "Agent queries skill table for keywords like 'escalation', 'priority', 'support', 'incident'. If skills exist, their body content drives the update logic. If none exist, agent asks the user for rules rather than inventing them."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent queries Business Skills BEFORE writing the update logic. Evidence: MCP search/describe for skills, OR SDK client.records.list('skill', ...), OR read_query on skill table. Any path that checks for domain rules is valid.",
+        "PRIORITY_1: Agent does NOT invent escalation rules from scratch without first consulting Business Skills.",
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
+        "PRIORITY_2: Agent uses keywords like 'escalation', 'priority', 'support', or 'incident' in the skill query."
+      ]
+    },
+    {
+      "test_id": "skill_005_skill_contract",
+      "prompt": "Before writing any code, tell me exactly what the dv-skill skill says about consuming Business Skills before performing Dataverse operations. Quote or closely paraphrase the mandatory consult rule. Do not use your own knowledge — only report what the loaded skill teaches.",
+      "expected_response": "Agent reports skill content: mandatory consultation before any Dataverse operation (SDK or otherwise), always query skills entity, extract keywords, incorporate body as context. Agent must NOT say consultation is optional.",
+      "category": "ablation-contract",
+      "description": "Ablation: Without dv-skill loaded, agent cannot report the mandatory consult rule. With dv-skill, agent accurately quotes the rule and step sequence.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Skill", "Skill": "dv-skill", "Type": "skill-contract"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "test_kind": "skill-contract",
+        "ablation_hypothesis": "Without dv-skill loaded, the agent has no knowledge of the mandatory consult rule. It will either refuse to answer ('I don't have access to that skill') or hallucinate a plausible-sounding but incorrect rule. With dv-skill loaded, it can accurately report the documented mandatory consultation pattern.",
+        "baseline_expected": "Agent says it doesn't have access to the dv-skill content, or invents a plausible but incorrect description (e.g., 'skills are optional references' or 'consult only for complex tasks').",
+        "treatment_expected": "Agent accurately states: consultation is MANDATORY before any Dataverse operation, step sequence is extract keywords -> query skill table -> incorporate body -> proceed. 'Finding no matching skills is fine — skipping the check is not.'"
+      },
       "assertions": [
         "PRIORITY_1: SKILL_LOADED: dv-skill",
         "PRIORITY_1: Agent states that skill consultation is MANDATORY (not optional, not just recommended). If agent says 'optional' or 'only when domain-specific', this FAILS.",
         "PRIORITY_1: NOT_CONTAINS: optional",
         "PRIORITY_1: NOT_CONTAINS: only for domain-specific",
-        "PRIORITY_2: Agent mentions the step sequence: extract keywords → query skills → incorporate body → proceed with SDK code."
+        "PRIORITY_2: Agent mentions the step sequence: extract keywords, query skills, incorporate body, proceed with the operation.",
+        "PRIORITY_2: CONTAINS: mandatory"
+      ]
+    },
+    {
+      "test_id": "skill_006_mcp_crud",
+      "prompt": "Create a Business Skill in my Dataverse environment called 'Onboarding-Checklist' with description 'New hire onboarding steps' and a body listing the first-week tasks.",
+      "expected_response": "Agent uses the MCP upsert_skill tool directly to create the skill. Single record, simple CRUD — MCP is the correct path per the skill's MCP-first rule.",
+      "category": "ablation-mcp",
+      "description": "Ablation: Without dv-skill, agent writes a full Python script for skill CRUD. With dv-skill + MCP available, agent uses the MCP upsert_skill tool directly.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Skill", "Skill": "dv-skill", "Type": "mcp-routing"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "MCP",
+        "ablation_hypothesis": "Without dv-skill loaded, the agent has no guidance on MCP-vs-SDK routing for skill records. It defaults to writing a Python script (get_client, client.records.create('skill', {...})). With dv-skill loaded and MCP tools available (upsert_skill), the agent recognizes this as a single-record operation and uses MCP directly — no script overhead.",
+        "baseline_expected": "Agent writes a Python script: sys.path.insert, from auth import get_client, client.records.create('skill', {name, description, body}). Full boilerplate for a single record create.",
+        "treatment_expected": "Agent calls the MCP upsert_skill tool with name='Onboarding-Checklist', description='New hire onboarding steps', and body containing first-week tasks. No Python script generated."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent uses MCP upsert_skill tool (or equivalent MCP tool call) to create the skill. If agent writes a full script with sys.path.insert and get_client for this single skill creation, this FAILS.",
+        "PRIORITY_1: CONTAINS: Onboarding-Checklist",
+        "PRIORITY_1: NOT_CONTAINS: sys.path.insert",
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
+        "PRIORITY_2: Agent does not generate unnecessary boilerplate for a single-record MCP operation."
+      ]
+    },
+    {
+      "test_id": "skill_007_webapi_resource_upload",
+      "prompt": "Upload a markdown file called 'escalation-matrix.md' as a resource attachment to the Business Skill named 'Support-Triage' in my Dataverse environment.",
+      "expected_response": "Agent uses the SDK file upload pattern (client.records.upload_file on skillresource table) or MCP init_file_upload/commit_file_upload flow. Correctly identifies skillresource as the target table with filecontent as the file column.",
+      "category": "ablation-webapi",
+      "description": "Ablation: Without dv-skill, agent doesn't know about skillresource table or file upload pattern. With dv-skill, agent uses the documented file attachment workflow.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Skill", "Skill": "dv-skill", "Type": "file-upload"},
+      "custom_metadata": {
+        "skill": "dv-skill",
+        "tool_routing": "SDK-or-MCP",
+        "ablation_hypothesis": "Without dv-skill, the agent has no knowledge of the skillresource entity or its file upload pattern. It might try to store file content in the skill body field, create a custom entity, or use a Note attachment. With dv-skill loaded, the agent knows the documented flow: create skillresource record linked to the skill, then upload file content to the 'filecontent' column via SDK upload_file or MCP init_file_upload + commit_file_upload.",
+        "baseline_expected": "Agent either (a) tries to stuff markdown content into the skill body field, (b) creates a Note/Annotation attachment, (c) suggests SharePoint, or (d) doesn't know how to attach files to skills.",
+        "treatment_expected": "Agent creates a skillresource record with skillid@odata.bind pointing to the Support-Triage skill, then uploads the file via client.records.upload_file('skillresource', resource_id, 'filecontent', 'escalation-matrix.md') or uses MCP init_file_upload + commit_file_upload."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent targets the 'skillresource' table (not annotation, note, or a custom table) for the file attachment.",
+        "PRIORITY_1: CONTAINS: skillresource",
+        "PRIORITY_1: CONTAINS: filecontent",
+        "PRIORITY_1: Agent links the resource to the parent skill via skillid@odata.bind or equivalent lookup binding.",
+        "PRIORITY_2: SKILL_LOADED: dv-skill",
+        "PRIORITY_2: Agent uses either SDK upload_file or MCP init_file_upload/commit_file_upload flow for the actual file content."
       ]
     }
   ]
