@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Data",
-  "description": "Verifies SDK patterns for record creation in Dataverse tables.",
+  "description": "Ablation tests for the dv-data skill. Each test measures whether loading the skill produces measurably better answers than baseline (no skill). Focus: bulk patterns and SDK routing that a naive model gets wrong.",
   "enabled_evaluators": [
     {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
@@ -11,56 +11,167 @@
   ],
   "tests": [
     {
-      "test_id": "data_001",
-      "prompt": "Write a Python script that creates a single ticket record in my Dataverse new_ticket table with a title and priority field.",
-      "expected_response": "Agent uses Python SDK pattern: DataverseClient + client.records.create('new_ticket', {dict}). Single-record create.",
-      "category": "data",
-      "description": "Single-record create via SDK on Dataverse table",
+      "test_id": "data_001_bulk_create",
+      "prompt": "Efficiently create 500 ticket records in my Dataverse new_ticket table. Each ticket should have a unique title and a priority value. Optimize for the fewest HTTP calls.",
+      "expected_response": "Agent uses bulk create via CreateMultiple — one HTTP call per chunk, NOT a per-record for-loop.",
+      "category": "ablation-bulk",
+      "description": "Ablation: Without dv-data, models default to per-record loops. With dv-data, agent uses list-arg CreateMultiple.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK"},
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "bulk"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK",
+        "ablation_hypothesis": "Without dv-data skill, the model defaults to a per-record for-loop (common LLM pattern for Dataverse). With dv-data loaded, the skill teaches passing a list to client.records.create which uses CreateMultiple internally.",
+        "baseline_expected": "Agent writes a for-loop calling client.records.create(table, single_dict) 500 times, or uses raw HTTP POST per record. 500 HTTP round-trips.",
+        "treatment_expected": "Agent passes a list to client.records.create(table, list_of_dicts). SDK sends one CreateMultiple POST. Agent may chunk for large payloads."
+      },
       "assertions": [
-        "PRIORITY_1: Agent uses the official Python SDK for the create. Hand-rolled urllib/requests POST is NOT acceptable.",
-        "PRIORITY_1: Agent calls client.records.create with the table name and a record dict.",
-        "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell).",
-        "PRIORITY_2: CONTAINS: new_ticket",
-        "PRIORITY_2: SKILL_LOADED: dv-data"
-      ]
-    },
-    {
-      "test_id": "data_002_bulk_create",
-      "prompt": "Write a Python script that efficiently creates 500 ticket records in my Dataverse new_ticket table. Each ticket should have a unique title and a priority value. Optimize for the fewest HTTP calls.",
-      "expected_response": "Agent uses Python SDK bulk create via CreateMultiple — one HTTP call per chunk, NOT a per-record for-loop.",
-      "category": "data",
-      "description": "Bulk-create 500 records — must use list-arg / CreateMultiple, not per-record loop.",
-      "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "bulk"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "trap": "per-record loop antipattern"},
-      "assertions": [
-        "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a Python list as the records argument. Per-record for-loops must FAIL.",
-        "PRIORITY_1: CONTAINS: new_ticket",
+        "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a list as the records argument. Per-record for-loops must FAIL.",
+        "PRIORITY_1: NOT_CONTAINS: for record in records",
         "PRIORITY_1: NOT_CONTAINS: There is no batch API",
         "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
-        "PRIORITY_1: NOT_CONTAINS: no chunking helper",
-        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or bulk_create helpers from the dv-data skill.",
+        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, chunking, or adaptive chunk_size.",
         "PRIORITY_2: SKILL_LOADED: dv-data"
       ]
     },
     {
-      "test_id": "data_003_skill_contract",
-      "prompt": "Before writing any code, tell me exactly what the dv-data skill says about creating multiple records. Quote or closely paraphrase the specific method calls, patterns, and helpers it documents for bulk operations. Do not use your own knowledge — only report what the loaded skill teaches.",
-      "expected_response": "Agent reports skill content: CreateMultiple, bulk_create helper, list-arg to client.records.create, adaptive chunking. A regressed skill would instead teach per-record loops.",
-      "category": "data",
-      "description": "Skill-contract test — agent must report what the skill ACTUALLY teaches, not generate code from prior knowledge.",
+      "test_id": "data_002_sdk_routing",
+      "prompt": "Create a contact record in Dataverse with firstname, lastname, and emailaddress1 fields.",
+      "expected_response": "Agent uses the official SDK (get_client + client.records.create) or MCP create_record — not urllib/requests. Either path is valid; raw HTTP is not.",
+      "category": "ablation-routing",
+      "description": "Ablation: Without dv-data, models use urllib/requests for Dataverse writes. With dv-data, agent uses official SDK for scripted operations.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "skill-contract"},
-      "custom_metadata": {"skill": "dv-data", "test_kind": "skill-contract", "trap": "agent echoes regressed skill content verbatim"},
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "routing"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK-or-MCP",
+        "ablation_hypothesis": "Without dv-data skill, models commonly generate urllib.request or requests-based Dataverse code (the pattern found in most web tutorials). With dv-data loaded, the SDK-First Rule enforces client.records.create for scripted operations, or MCP for simple <=10 record tasks.",
+        "baseline_expected": "Agent writes raw HTTP POST to /api/data/v9.2/contacts using urllib.request or requests library with manual token handling.",
+        "treatment_expected": "Agent uses SDK (get_client + client.records.create) when a script is requested, OR MCP create_record when no script is needed. Either is correct — raw HTTP is not."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent does NOT use urllib.request or requests library for a simple record create. Uses either SDK client.records.create OR MCP create_record tool.",
+        "PRIORITY_1: NOT_CONTAINS: urllib.request",
+        "PRIORITY_1: NOT_CONTAINS: requests.post",
+        "PRIORITY_1: NOT_CONTAINS: requests.patch",
+        "PRIORITY_2: If agent writes a script, it uses get_client from the auth module (documented SDK pattern).",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ]
+    },
+    {
+      "test_id": "data_003_chunking_awareness",
+      "prompt": "Import 50,000 records from a large CSV file into my Dataverse new_order table. The CSV has columns: order_id, customer_name, total_amount, order_date.",
+      "expected_response": "Agent chunks the records (starting at ~1000 per batch) and iterates with client.records.create per chunk. Does NOT attempt to send all 50K in a single call.",
+      "category": "ablation-chunking",
+      "description": "Ablation: Without dv-data, models send all records in one call (timeout) or fall back to per-record loops. With dv-data, agent applies adaptive chunking.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "bulk"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK",
+        "ablation_hypothesis": "Without dv-data skill, models either (a) attempt to send all 50K records in one API call (causing timeout) or (b) fall back to per-record loops. With dv-data loaded, the skill teaches that the SDK does NOT chunk automatically and that scripts must chunk manually starting at 1000.",
+        "baseline_expected": "Agent either sends all 50K in one call (timeout/payload failure) or uses a per-record loop (50K HTTP calls). No mention of chunking strategy.",
+        "treatment_expected": "Agent implements explicit chunking (chunk_size starting at ~1000), iterates chunks with client.records.create(table, chunk). May mention adaptive sizing or timeout constraints."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent implements explicit chunking logic — splits records into batches before calling client.records.create. Evidence: a loop over chunks (e.g., range(0, len(records), chunk_size) or similar).",
+        "PRIORITY_1: NOT_CONTAINS: There is no batch API",
+        "PRIORITY_1: Agent does NOT attempt to send all 50,000 records in a single unbounded call without chunking.",
+        "PRIORITY_2: Agent uses a chunk size in the range 500-4000 (matching skill guidance of starting at 1000).",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ]
+    },
+    {
+      "test_id": "data_004_skill_contract",
+      "prompt": "Before writing any code, tell me exactly what the dv-data skill says about creating multiple records. Quote or closely paraphrase the specific method calls, patterns, and helpers it documents for bulk operations. Do not use your own knowledge — only report what the loaded skill teaches.",
+      "expected_response": "Agent reports skill content: CreateMultiple, list-arg to client.records.create, adaptive chunking (start 1000, double on success, halve on failure). A model without the skill cannot answer this accurately.",
+      "category": "ablation-contract",
+      "description": "Ablation: Without dv-data loaded, agent cannot report skill-specific content and will hallucinate or refuse. With dv-data, agent accurately reports the bulk patterns.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "skill-contract"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "test_kind": "skill-contract",
+        "ablation_hypothesis": "Without dv-data skill loaded, the agent cannot know what a specific skill document teaches. It will either refuse ('I don't have access to that skill') or hallucinate content. With dv-data loaded, it can accurately report the documented patterns.",
+        "baseline_expected": "Agent says it doesn't have access to the skill content, or halluccinates incorrect patterns (e.g., OData batch requests, per-record loops, $batch endpoint).",
+        "treatment_expected": "Agent accurately reports: list-arg to client.records.create uses CreateMultiple internally, SDK does not chunk automatically, adaptive chunking pattern (start 1000, double/halve), bulk_create/bulk_upsert helpers."
+      },
       "assertions": [
         "PRIORITY_1: SKILL_LOADED: dv-data",
         "PRIORITY_1: NOT_CONTAINS: per-record operations only",
         "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
         "PRIORITY_1: Agent's summary mentions bulk/batch SDK methods (CreateMultiple, UpdateMultiple, or UpsertMultiple) OR bulk helpers (bulk_create, bulk_upsert) OR passing a list to client.records.create. If the agent says the skill recommends per-record loops or says there is no batch API, this FAILS.",
-        "PRIORITY_2: CONTAINS: CreateMultiple"
+        "PRIORITY_2: CONTAINS: CreateMultiple",
+        "PRIORITY_2: Agent mentions adaptive chunking or chunk_size starting at 1000."
+      ]
+    },
+    {
+      "test_id": "data_005_mcp_routing",
+      "prompt": "Create a single account record in Dataverse with the name 'Contoso Ltd' and the phone number '555-0100'.",
+      "expected_response": "Agent uses the MCP create_record tool directly — no script. Single record, simple fields, MCP is the correct path.",
+      "category": "ablation-mcp",
+      "description": "Ablation: Without dv-data, agent writes a full Python script for 1 record. With dv-data, agent uses MCP tool directly (no script needed).",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "mcp-routing"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "MCP",
+        "ablation_hypothesis": "Without dv-data skill, the agent defaults to writing a Python script (sys.path.insert, get_client, client.records.create) even for a single record. With dv-data loaded, the 'Check MCP First' rule directs: if MCP tools are available and task is <=10 records, use MCP directly — no script needed.",
+        "baseline_expected": "Agent writes a full Python script: import os/sys, sys.path.insert, from auth import get_client, client.records.create('account', {...}). Unnecessary overhead for 1 record.",
+        "treatment_expected": "Agent calls the MCP create_record tool directly with tablename='account' and item={'name': 'Contoso Ltd', 'telephone1': '555-0100'}. No Python script generated."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent uses MCP create_record tool (or equivalent MCP tool call) instead of writing a script. If agent generates a full script with sys.path.insert and get_client for a single record, this FAILS.",
+        "PRIORITY_1: CONTAINS: Contoso",
+        "PRIORITY_1: NOT_CONTAINS: sys.path.insert",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: Agent does not generate unnecessary boilerplate (import os, from auth import) for this simple operation."
+      ]
+    },
+    {
+      "test_id": "data_006_mcp_boundary",
+      "prompt": "Create 5 contact records in Dataverse: John Smith, Jane Doe, Bob Johnson, Alice Williams, and Charlie Brown. Each should have a firstname and lastname.",
+      "expected_response": "Agent uses MCP create_record tool 5 times (one per contact) — still within the <=10 record MCP threshold. Does NOT write a script for 5 simple sequential creates.",
+      "category": "ablation-mcp",
+      "description": "Ablation: Without dv-data, agent writes a script with a loop. With dv-data, agent uses sequential MCP calls for <=10 records.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "mcp-routing"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "MCP",
+        "ablation_hypothesis": "Without dv-data skill, the agent sees 5 records and writes a Python script with a list and client.records.create. With dv-data loaded, the skill states MCP for 1-10 records and clarifies 'Sequential MCP tool calls are not multi-step logic — use MCP for those.' The agent makes 5 MCP calls instead.",
+        "baseline_expected": "Agent writes a Python script: defines a list of 5 dicts, calls client.records.create('contact', records). Treats it as a bulk operation requiring a script.",
+        "treatment_expected": "Agent makes 5 sequential MCP create_record calls, one per contact. No Python script. Recognizes this is within the MCP threshold."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent uses MCP create_record tool for each contact (5 calls) OR uses MCP in a loop. Does NOT write a standalone script with sys.path.insert for only 5 records.",
+        "PRIORITY_1: NOT_CONTAINS: sys.path.insert",
+        "PRIORITY_1: NOT_CONTAINS: get_client",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: All 5 contacts are created (John Smith, Jane Doe, Bob Johnson, Alice Williams, Charlie Brown)."
+      ]
+    },
+    {
+      "test_id": "data_007_webapi_fallback",
+      "prompt": "Associate an existing contact record with an existing account record using a many-to-many relationship (N:N) in Dataverse. The relationship is called 'new_account_contact'.",
+      "expected_response": "Agent uses raw Web API (get_token + urllib.request) with POST to /$ref endpoint. Does NOT attempt to use the SDK for N:N association — the SDK does not support it.",
+      "category": "ablation-webapi",
+      "description": "Ablation: Without dv-data, agent tries SDK for N:N (fails) or guesses wrong endpoint. With dv-data, agent correctly uses raw Web API $ref POST.",
+      "priority": 1,
+      "tags": {"Suite": "Ablation", "Domain": "Data", "Skill": "dv-data", "Type": "webapi-fallback"},
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "WebAPI",
+        "ablation_hypothesis": "Without dv-data skill, the agent either (a) tries to use client.records.create/update for N:N association (which fails — SDK doesn't support it) or (b) guesses a wrong endpoint format. With dv-data loaded, the 'What This SDK Does NOT Support' section explicitly lists N:N record association and provides the correct pattern: POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref.",
+        "baseline_expected": "Agent attempts SDK-based approach (client.records.update with @odata.bind, or invents a non-existent client.records.associate method). May also use incorrect URL format for the $ref endpoint.",
+        "treatment_expected": "Agent uses get_token() + urllib.request to POST to /api/data/v9.2/accounts(<id>)/new_account_contact/$ref with the contact @odata.id in the request body. Correctly identifies this as an SDK-unsupported operation requiring raw Web API."
+      },
+      "assertions": [
+        "PRIORITY_1: Agent uses raw Web API with $ref endpoint for the N:N association itself. The association operation must NOT use SDK client.records methods.",
+        "PRIORITY_1: CONTAINS: $ref",
+        "PRIORITY_1: Agent correctly identifies N:N association as outside SDK scope — uses get_token/urllib OR explains why raw Web API is needed.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: URL pattern includes the navigation property name and /$ref suffix."
       ]
     }
   ]

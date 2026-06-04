@@ -421,3 +421,15 @@ FodyWeavers.xsd
 *.snk
 solutions/*.zip
 .claude/mcp_settings.json
+
+.vscode/settings.json
+plugins/**/bin/
+plugins/**/obj/
+
+# Local-only artifacts from running evals against a personal Dataverse org
+.mcp.json
+.env
+scripts/
+evals/*.py
+evals/results/
+
