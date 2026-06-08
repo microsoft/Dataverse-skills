@@ -16,7 +16,7 @@
     "dynamics-365",
     "microsoft"
   ],
-  "logo": "./assets/dataverse-logo.svg",
-  "skills": "./skills/",
+  "logo": "assets/dataverse-logo.svg",
+  "skills": ["skills/"],
   "license": "MIT"
 }
