@@ -16,5 +16,6 @@
     "dynamics-365",
     "microsoft"
   ],
+  "logo": "./assets/azure-logo.svg",
   "license": "MIT"
 }
