@@ -1,5 +1,6 @@
 {
   "name": "dataverse",
+  "displayName": "Microsoft Dataverse",
   "description": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills.",
   "version": "1.5.0",
   "author": {
