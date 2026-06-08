@@ -110,13 +110,13 @@ Users should never need to invoke skills or slash commands directly. The intende
 
 1. Install the plugin
 2. Describe what you want in plain English
-3. Claude figures out the right sequence of tools, APIs, and scripts
+3. The agent figures out the right sequence of tools, APIs, and scripts
 
 **Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
 
-From that single prompt, Claude should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
+From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
 
-Skills exist as **Claude's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. Claude chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
+Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
 
 ---
 
@@ -181,7 +181,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
 3. Load the `dv-connect` skill to set up the MCP server
-4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind them: "Use `claude --continue` to resume without losing context." Do not proceed with SDK. Wait for the user to restart.
+4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind the user to resume the session without losing context (Claude Code: `claude --continue`; Cursor: reload the window with Ctrl+Shift+P → "Developer: Reload Window"; Copilot: reopen the Copilot panel). Do not proceed with SDK. Wait for the user to restart.
 
 **If MCP tools are NOT available and the user asked a data question without explicitly requesting MCP** (e.g., "how many accounts with 'jeff'?", "show me open tickets"):
 1. This is a SDK fallback case — use the Python SDK to answer the question. Do not block the user.
@@ -195,7 +195,7 @@ The distinction matters: explicit MCP request → block and set up MCP. Implicit
 
 ## Available Skills
 
-Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses for automatic routing. This index is for human reference only.
+Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent uses for automatic routing. This index is for human reference only.
 
 | Skill | What it covers |
 | --- | --- |
@@ -225,13 +225,13 @@ Any Web API call that goes beyond a one-off query should be written as a Python 
 
 ## Windows Scripting Rules
 
-When running in Git Bash on Windows (the default for Claude Code on Windows):
+When running in a Unix-style shell on Windows (Git Bash is the default for Claude Code on Windows; Cursor and Copilot may use PowerShell — the same rules apply, adapt path/quoting syntax as needed):
 
 - **ASCII only in `.py` files.** Curly quotes, em dashes, or other non-ASCII characters cause `SyntaxError`. Use straight quotes and regular dashes.
 - **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
 - **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
 - **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
-- **Background job output may be empty on Windows.** Claude Code's background task runner ("Running in the background") can silently produce no output on Windows. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
+- **Background job output may be empty on Windows.** Agent background task runners on Windows (e.g., Claude Code's "Running in the background") can silently produce no output. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
 
 ---
 

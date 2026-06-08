@@ -1,6 +1,6 @@
 # MCP Server Configuration Reference
 
-Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot or Claude Code.
+Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, or Cursor.
 
 The environment URL should already be known from the `dv-connect` flow (stored in `DATAVERSE_URL` in `.env`). If it's not set, go back to Step 2 of the `dv-connect` skill to discover and select the environment first.
 
@@ -10,7 +10,7 @@ The parameters for the MCP server should be determined from context or environme
 
 ## 0. Determine which tool to configure
 
-Determine whether to configure MCP for GitHub Copilot or for Claude Code:
+Determine whether to configure MCP for GitHub Copilot, Claude Code, or Cursor:
 - If explicitly mentioned in prompt, use that.
 - Otherwise, determine which tool the user is running from the context.
 - Only if choosing based on the context is impossible, ask the user:
@@ -18,12 +18,13 @@ Determine whether to configure MCP for GitHub Copilot or for Claude Code:
 > Which tool would you like to configure the Dataverse MCP server for?
 > 1. **GitHub Copilot**
 > 2. **Claude**
+> 3. **Cursor**
 
-Based on the result, set the `TOOL_TYPE` variable to either `copilot` or `claude`. Store this for use in all subsequent steps.
+Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, or `cursor`. Store this for use in all subsequent steps.
 
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
-- If `claude`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457`
+- If `claude` or `cursor`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (both use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
 - If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
 ---
@@ -57,6 +58,18 @@ Based on the scope, set the `CLAUDE_SCOPE` variable:
 - **Local**: `CLAUDE_SCOPE` = `local`
 
 Store this value for use in step 5.
+
+**If TOOL_TYPE is `cursor`:**
+
+The options are:
+1. **Globally** (default, available in all projects)
+2. **Project-only** (available only in this project)
+
+Based on the scope, set the `CONFIG_PATH` variable:
+- **Global**: `~/.cursor/mcp.json` (use the user's home directory)
+- **Project**: `.cursor/mcp.json` (relative to the current working directory)
+
+Store this path for use in steps 2 and 5.
 
 ---
 
@@ -94,6 +107,12 @@ If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP serv
 **If TOOL_TYPE is `claude`:**
 
 Skip this step — Claude uses CLI commands to manage MCP servers, so we don't need to check existing configuration.
+
+**If TOOL_TYPE is `cursor`:**
+
+Read the MCP configuration file at `CONFIG_PATH` (determined in step 1) to check for already-configured servers. Same logic as Copilot: parse `mcpServers` (or `servers`) keys, extract URLs, store as `CONFIGURED_URLS`. If the file doesn't exist or is empty, treat `CONFIGURED_URLS` as empty (`[]`).
+
+If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
 
 ---
 
@@ -277,16 +296,16 @@ This is the `SERVER_NAME`.
 
 **Build the command:**
 
-Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint:
+Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint. **Always pass `-e DATAVERSE_OPERATION_CONTEXT="…"`** so the stdio proxy attaches plugin attribution to outbound requests (same role as the `env` block in the Copilot / Cursor JSON configs):
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
 ```
 
 When running on Windows without WSL, wrap the `npx` call into `cmd //c` and omit the quotes around the URL:
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
 ```
 
 Where:
@@ -294,13 +313,64 @@ Where:
 - `{SERVER_NAME}` is the generated server name (e.g., `dataverse-orgbc9a965c`)
 - `{USER_URL}` is the base environment URL (e.g., `https://orgbc9a965c.crm10.dynamics.com`)
 - `{ENDPOINT_FLAG}` is `--preview` if the user chose Preview endpoint in step 4, otherwise omit this flag
+- `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
 
 **Example commands:**
-- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
-- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
-- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
+- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
+- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
+- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
 
 Store this command as `CLAUDE_COMMAND` for use in step 8.
+
+**If TOOL_TYPE is `cursor`:**
+
+Update the MCP configuration file at `CONFIG_PATH` (determined in step 1) to add the new server.
+
+**IMPORTANT: Always use the stdio transport via the npx proxy.** Do not configure a direct `url` to `/api/mcp` — the Dataverse MCP HTTP endpoint requires the npx proxy to handle authentication. The proxy is `@microsoft/dataverse@latest mcp <url>`.
+
+**Generate a unique server name** from the `USER_URL`:
+1. Extract the subdomain (organization identifier) from the URL
+   - Example: `https://orgbc9a965c.crm10.dynamics.com` → `orgbc9a965c`
+2. Use lowercase format: `dataverse-{orgid}`
+   - Example: `dataverse-orgbc9a965c`
+
+This is the `SERVER_NAME`.
+
+**Update the configuration file:**
+
+1. If `CONFIG_PATH` is for a **project-scoped** configuration (`.cursor/mcp.json`), ensure the `.cursor` directory exists first:
+   ```bash
+   mkdir -p .cursor
+   ```
+
+2. Read the existing configuration file at `CONFIG_PATH`, or create a new empty config if it doesn't exist:
+   ```json
+   { "mcpServers": {} }
+   ```
+
+3. Add or update the server entry under `mcpServers`:
+   ```json
+   {
+     "mcpServers": {
+       "{SERVER_NAME}": {
+         "command": "npx",
+         "args": ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
+         "env": {
+           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=cursor"
+         }
+       }
+     }
+   }
+   ```
+
+   Append `"--preview"` to the `args` array if the user chose the Preview endpoint in step 4.
+
+4. Write the updated configuration back to `CONFIG_PATH` with proper JSON formatting (2-space indentation).
+
+**Important notes:**
+- Do NOT overwrite other entries in the configuration file — preserve sibling `mcpServers` entries
+- If `SERVER_NAME` already exists, update it with the new args
+- After writing, ask the user to **reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear
 
 ---
 
@@ -309,7 +379,7 @@ Store this command as `CLAUDE_COMMAND` for use in step 8.
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot or Claude) from step 0
+- Tool type (Copilot, Claude, or Cursor) from step 0
 - Scope from step 1
 - Environment URL from step 3
 - Endpoint (GA or Preview) from step 4
@@ -333,6 +403,8 @@ Wait for the user to confirm this is done (or was already done previously) befor
 ## 7. Add the MCP client to the environment's allowed list (one-time per environment)
 
 Separately from tenant-level consent, each Dataverse environment must explicitly allow the MCP client. This is a **one-time** action per environment and does **NOT** require Azure AD admin permissions — any user with Environment Admin or System Administrator role in the environment can do it.
+
+> **One sign-in for CLI, MCP, and Python.** When the user runs `dataverse auth create` (see `dv-connect` Step 2) the token cache is written to a path / OS keychain entry that the `@microsoft/dataverse` stdio MCP proxy and `scripts/auth.py` both read silently. As a result, the allowlisted MCP client ID (`0c412cc3-…` for the Claude / Cursor stdio proxy, or `aebc6443-…` for Copilot HTTP) is exercised exactly once per environment — there is no separate Python device-code sign-in for the same user/env. If a script does prompt for a device code, the shared cache is missing or stale; re-run `dataverse auth create --environment <url>`.
 
 Present the two methods (PPAC portal is recommended for non-developers):
 
