@@ -561,6 +561,48 @@ def check_version_consistency(repo_root):
 
 
 # ---------------------------------------------------------------------------
+# CAT-7  auth.py _ALLOWED_SKILLS sync
+# ---------------------------------------------------------------------------
+
+
+def check_allowed_skills_sync(repo_root, all_skill_names):
+    """
+    EVAL-SKILLS-SYNC-01: _ALLOWED_SKILLS in auth.py must contain every skill
+    directory name plus "unknown", and no stale entries.
+    """
+    failures = []
+    auth_path = repo_root / ".github" / "plugins" / "dataverse" / "scripts" / "auth.py"
+    if not auth_path.exists():
+        return failures
+
+    text = auth_path.read_text(encoding="utf-8")
+    match = re.search(r"_ALLOWED_SKILLS\s*=\s*frozenset\(\{([^}]+)\}\)", text)
+    if not match:
+        failures.append("EVAL-SKILLS-SYNC-01 could not parse _ALLOWED_SKILLS from auth.py")
+        return failures
+
+    allowed = {s.strip().strip('"').strip("'") for s in match.group(1).split(",")}
+    allowed.discard("")
+    expected = all_skill_names | {"unknown"}
+
+    missing = expected - allowed
+    extra = allowed - expected
+
+    if missing:
+        failures.append(
+            f"EVAL-SKILLS-SYNC-01 _ALLOWED_SKILLS is missing skill(s): {sorted(missing)}. "
+            f"Add them to auth.py."
+        )
+    if extra:
+        failures.append(
+            f"EVAL-SKILLS-SYNC-01 _ALLOWED_SKILLS has stale entries: {sorted(extra)}. "
+            f"Remove them from auth.py or add the skill directory."
+        )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # CAT-8  Skill Token Budget (Anthropic Skills spec)
 # ---------------------------------------------------------------------------
 
@@ -661,6 +703,9 @@ def main():
     # Manifest version consistency — check across repo root
     repo_root = skills_dir.parent.parent.parent.parent
     all_failures.extend(check_version_consistency(repo_root))
+
+    # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
+    all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
     if all_failures:
         # Group output by category prefix for readability

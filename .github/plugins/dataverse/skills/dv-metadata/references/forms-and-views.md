@@ -8,11 +8,13 @@ Neither the MCP server nor the Python SDK supports forms or views. Use the Web A
 # POST /api/data/v9.2/systemforms
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, load_env  # get_token() is correct here — SDK does not support forms
+from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK does not support forms
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
 token = get_token()
+_headers = get_plugin_headers("dv-metadata", token)
+_headers.update({"Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0"})
 
 form_xml = """<form type="7" name="Project Budget" id="{FORM-GUID}">
   <tabs>
@@ -50,10 +52,7 @@ body = {
 req = urllib.request.Request(
     f"{env}/api/data/v9.2/systemforms",
     data=json.dumps(body).encode(),
-    headers={"Authorization": f"Bearer {token}",
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0",
-             "OData-Version": "4.0"},
+    headers=_headers,
     method="POST"
 )
 with urllib.request.urlopen(req) as resp:

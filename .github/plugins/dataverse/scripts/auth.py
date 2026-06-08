@@ -14,19 +14,18 @@ Token caching:
 
 Functions:
   load_env()            — loads .env into os.environ
-  get_credential()      — returns a TokenCredential for use with DataverseClient
+  get_client(skill)     — returns a DataverseClient with plugin attribution
   get_token(scope=None) — returns a raw access token string
+  get_plugin_headers(skill, token) — returns headers dict for raw Web API calls
 
 Usage:
-    # PREFERRED — use the Python SDK for all supported operations:
-    from auth import get_credential, load_env
-    from PowerPlatform.Dataverse.client import DataverseClient
-    load_env()
-    client = DataverseClient(os.environ["DATAVERSE_URL"], get_credential())
+    # PREFERRED — SDK with plugin attribution:
+    from auth import get_client
+    client = get_client("dv-data")
 
-    # ONLY for operations the SDK does NOT support (forms, views, $ref, $apply):
-    from auth import get_token, load_env
-    token = get_token()
+    # Raw Web API only (forms, views, $ref, $apply):
+    from auth import get_token, get_plugin_headers
+    headers = get_plugin_headers("dv-metadata", get_token())
 
 Reads from .env in the repo root (parent of scripts/) or current working directory:
     DATAVERSE_URL      — required
@@ -36,6 +35,7 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -66,7 +66,7 @@ def load_env():
 _credential = None
 
 
-def get_credential():
+def _get_credential():
     """
     Return an Azure Identity TokenCredential, creating one on first call.
 
@@ -165,7 +165,7 @@ def get_token(scope=None):
     if not scope:
         scope = f"{dataverse_url}/.default"
 
-    credential = get_credential()
+    credential = _get_credential()
 
     try:
         from azure.identity import DeviceCodeCredential
@@ -186,6 +186,111 @@ def get_token(scope=None):
         sys.exit(1)
 
     return token.token
+
+
+_ALLOWED_SKILLS = frozenset({
+    "dv-overview", "dv-connect", "dv-data", "dv-query",
+    "dv-metadata", "dv-solution", "dv-admin", "dv-security",
+    "unknown",
+})
+_ALLOWED_AGENTS = frozenset({
+    "claude-code", "copilot", "cursor", "codex", "unknown",
+})
+# Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
+_CONTEXT_RE = re.compile(
+    r"^[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+(;[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+)*$"
+)
+
+
+def _plugin_version():
+    """Read plugin version from .env (set by dv-connect at setup time)."""
+    return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+
+
+def _current_agent():
+    agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
+    if agent not in _ALLOWED_AGENTS:
+        raise ValueError(f"Unknown agent '{agent}'; allowed: {_ALLOWED_AGENTS}")
+    return agent
+
+
+def _validate_skill(skill):
+    if skill not in _ALLOWED_SKILLS:
+        raise ValueError(f"Unknown skill '{skill}'; allowed: {_ALLOWED_SKILLS}")
+    return skill
+
+
+def _build_operation_context(skill):
+    """Build and validate the operation_context string.
+
+    Returns an OperationContext object for the SDK.  The string is validated
+    both here (via allowlists) and inside OperationContext.__post_init__
+    (via regex + control-char check).
+
+    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and
+    _ALLOWED_AGENTS are used.  Never pass user-provided or free-form
+    strings into operation_context — it is written to HTTP headers and
+    server-side telemetry logs.
+    """
+    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
+    if not _CONTEXT_RE.match(ctx_str):
+        raise ValueError(
+            f"operation_context failed format validation: {ctx_str!r}. "
+            "Must be semicolon-separated key=value pairs with no spaces or special characters."
+        )
+    from PowerPlatform.Dataverse.core.config import OperationContext
+    return OperationContext(user_agent_context=ctx_str)
+
+
+def get_client(skill, **kwargs):
+    """Return a DataverseClient with plugin attribution baked in.
+
+    The operation_context is appended to the User-Agent header as a
+    parenthesized comment for server-side traffic attribution.
+
+    IMPORTANT: Do not modify the operation_context — it uses a closed
+    schema (app/skill/agent) for safe server-side attribution.  Never
+    include secrets, PII, or free-form text.
+
+    :param skill: Skill name (e.g. "dv-data", "dv-query").
+    :param kwargs: Extra keyword arguments forwarded to DataverseClient.
+    :returns: Configured DataverseClient instance.
+    """
+    load_env()
+    _validate_skill(skill)
+    from PowerPlatform.Dataverse.client import DataverseClient
+    return DataverseClient(
+        base_url=os.environ["DATAVERSE_URL"],
+        credential=_get_credential(),
+        context=_build_operation_context(skill),
+        **kwargs,
+    )
+
+
+def get_plugin_headers(skill, token=None):
+    """Return HTTP headers for raw Web API calls, with plugin attribution.
+
+    Use this for operations the SDK does not support (forms, views, $apply,
+    N:N $expand, unbound actions).
+
+    IMPORTANT: Do not modify the User-Agent context — it uses a closed
+    schema (app/skill/agent) for safe server-side attribution.  Never
+    include secrets, PII, or free-form text.
+
+    :param skill: Skill name (e.g. "dv-metadata").
+    :param token: Optional bearer token (from get_token()).
+    :returns: Headers dict with User-Agent and optional Authorization.
+    """
+    _validate_skill(skill)
+    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
+    if not _CONTEXT_RE.match(ctx_str):
+        raise ValueError(
+            f"operation_context failed format validation: {ctx_str!r}."
+        )
+    headers = {"User-Agent": f"Python-urllib ({ctx_str})"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 if __name__ == "__main__":

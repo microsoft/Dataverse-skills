@@ -16,14 +16,15 @@ Using upsert from the start means partial failures, retries, and re-runs never c
 ```python
 import os, sys, csv, time
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_credential, load_env
-from PowerPlatform.Dataverse.client import DataverseClient
+from auth import get_client
 from PowerPlatform.Dataverse.models.upsert import UpsertItem
 from PowerPlatform.Dataverse.core.errors import HttpError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-load_env()
-client = DataverseClient(base_url=os.environ["DATAVERSE_URL"], credential=get_credential())
+# get_client sets a plugin attribution context on the User-Agent header.
+# Do not modify the context value — it is a closed schema for server-side
+# telemetry (app/skill/agent). Never include secrets or PII.
+client = get_client("dv-data")
 
 def bind(entity_set, guid):
     """Build an @odata.bind value. entity_set must be the actual EntitySetName, not a guess."""
