@@ -17,5 +17,6 @@
     "microsoft"
   ],
   "logo": "./assets/azure-logo.svg",
+  "skills": "./skills/",
   "license": "MIT"
 }
