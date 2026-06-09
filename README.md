@@ -35,34 +35,32 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
-### Codex CLI
+### Codex
 
-**Add the marketplace** (first time only):
+**Codex app**
+
+1. Open **Plugins → Add marketplace**.
+2. Set **Source** to `https://github.com/microsoft/Dataverse-skills.git`.
+3. Leave **Git ref** as the default (or set a branch to test unreleased changes) and leave **Sparse paths** empty.
+4. Click **Add marketplace**, then browse the **dataverse-skills** marketplace, open `dataverse`, and select **Install plugin**.
+
+You can also point **Source** at a local clone (e.g. `C:\path\to\Dataverse-skills`) instead of the GitHub URL.
+
+**Codex CLI**
+
+Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
 
 ```bash
 codex plugin marketplace add microsoft/Dataverse-skills
 ```
 
-**Install the plugin** — browse `/plugins`, open `dataverse`, and select **Install plugin**.
-
-**Update** to the latest release:
+Update to the latest release:
 
 ```bash
 codex plugin marketplace upgrade dataverse-skills
 ```
 
-Use `/skills` to enable or disable individual `dv-*` skills. A plugin installed from the Codex CLI is also available in the Codex app.
-
-#### Local install (Codex app or unreleased changes)
-
-To install from a local clone — for the Codex app's **Add marketplace** dialog, or to test an unreleased branch — point Codex at the repo folder instead of the GitHub shorthand:
-
-```bash
-git clone https://github.com/microsoft/Dataverse-skills.git
-codex plugin marketplace add ./Dataverse-skills
-```
-
-In the Codex app, open **Plugins → Add marketplace**, set **Source** to the repo folder (or `https://github.com/microsoft/Dataverse-skills.git`), and leave **Sparse paths** empty. Then browse `/plugins` and install `dataverse`. After editing local files, refresh with `codex plugin marketplace upgrade dataverse-skills`.
+Use `/skills` to enable or disable individual `dv-*` skills. A plugin installed from the Codex CLI is also available in the Codex app, and vice versa.
 
 ### Cursor
 
