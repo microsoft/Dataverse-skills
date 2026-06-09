@@ -246,16 +246,16 @@ All three must resolve the same user/environment. They prove the DV CLI cache, t
 ## Step 6: Configure MCP server
 
 **Skip this step** if MCP is already configured:
-- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` contains a Dataverse server entry
+- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` or `~/.codex/config.toml` contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server registered
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
 
-1. Detect which tool the user is running (Copilot, Claude, or Cursor) from context
+1. Detect which tool the user is running (Copilot, Claude, Cursor, or Codex) from context
 2. Set `MCP_CLIENT_ID` based on tool choice
 3. Get environment URL from `.env`
 4. Default to GA endpoint (`/api/mcp`)
-5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command; Cursor: write JSON config to `~/.cursor/mcp.json` or workspace `.cursor/mcp.json`)
+5. Register the MCP server (Copilot: write JSON config; Claude: run `claude mcp add` command; Cursor: write JSON config to `~/.cursor/mcp.json`; Codex: write TOML config to `~/.codex/config.toml`)
 6. Handle admin consent and environment allowlist (one-time per tenant/environment)
 
 **Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`) — the CLI runs as a local subprocess and proxies requests to the Dataverse MCP HTTP endpoint. When registering the stdio proxy, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI reads it at startup and appends it to its User-Agent on all outbound HTTP requests to `/api/mcp`. Build the value from `.env`:
@@ -264,7 +264,7 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent={DATAVERSE_PLUGIN_AGENT}
 ```
 
-For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry.
+For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry; for Codex, add it to its `[mcp_servers.<name>.env]` table.
 
 **Important:** MCP configuration requires an editor/CLI restart.
 

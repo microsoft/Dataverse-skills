@@ -94,6 +94,16 @@ claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 
 Quote the path if it contains spaces or special characters; use an absolute path.
 
+### Testing with Codex CLI
+
+Add your local clone as a marketplace source, then browse `/plugins` and install `dataverse`:
+
+```bash
+codex plugin marketplace add <path/to/repo>
+```
+
+Codex discovers the plugin via the repo-root `.claude-plugin/marketplace.json` (one of Codex's supported marketplace paths) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
+
 ## Legal
 
 This project is licensed under the [MIT License](LICENSE).

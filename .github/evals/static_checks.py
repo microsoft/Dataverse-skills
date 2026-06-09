@@ -577,15 +577,17 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in three plugin.json manifests (one per
-# marketplace format) and the plugins[0] entry of three marketplace.json
-# catalogs. All six describe the same plugin and must match. The
+# The plugin description appears in four plugin.json manifests (one per
+# harness/marketplace format) and the plugins[0] entry of three marketplace.json
+# catalogs. All seven describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
 # describes the marketplace, not the plugin) and is deliberately excluded.
 _DESCRIPTION_SOURCES = [
     (".github/plugins/dataverse/.cursor-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.claude-plugin/plugin.json",
+     lambda d: d.get("description"), "description"),
+    (".github/plugins/dataverse/.codex-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.github/plugin/plugin.json",
      lambda d: d.get("description"), "description"),

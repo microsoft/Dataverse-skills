@@ -35,6 +35,16 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Codex CLI
+
+Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
+
+```bash
+codex plugin marketplace add microsoft/Dataverse-skills
+```
+
+Use `/skills` to enable or disable individual `dv-*` skills. A plugin installed from the Codex CLI is also available in the Codex app.
+
 ### Cursor
 
 Local install (a Cursor Marketplace listing is coming — tracked in #76):
