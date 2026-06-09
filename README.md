@@ -37,13 +37,32 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 ### Codex CLI
 
-Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
+**Add the marketplace** (first time only):
 
 ```bash
 codex plugin marketplace add microsoft/Dataverse-skills
 ```
 
+**Install the plugin** — browse `/plugins`, open `dataverse`, and select **Install plugin**.
+
+**Update** to the latest release:
+
+```bash
+codex plugin marketplace upgrade dataverse-skills
+```
+
 Use `/skills` to enable or disable individual `dv-*` skills. A plugin installed from the Codex CLI is also available in the Codex app.
+
+#### Local install (Codex app or unreleased changes)
+
+To install from a local clone — for the Codex app's **Add marketplace** dialog, or to test an unreleased branch — point Codex at the repo folder instead of the GitHub shorthand:
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+codex plugin marketplace add ./Dataverse-skills
+```
+
+In the Codex app, open **Plugins → Add marketplace**, set **Source** to the repo folder (or `https://github.com/microsoft/Dataverse-skills.git`), and leave **Sparse paths** empty. Then browse `/plugins` and install `dataverse`. After editing local files, refresh with `codex plugin marketplace upgrade dataverse-skills`.
 
 ### Cursor
 
