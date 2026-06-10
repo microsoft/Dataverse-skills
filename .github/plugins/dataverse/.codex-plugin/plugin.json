@@ -7,6 +7,12 @@
     "url": "https://www.microsoft.com"
   },
   "homepage": "https://github.com/microsoft/Dataverse-skills",
-  "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365"],
-  "license": "MIT"
+  "repository": "https://github.com/microsoft/Dataverse-skills",
+  "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365", "microsoft"],
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Microsoft Dataverse",
+    "logo": "./assets/dataverse-logo.svg"
+  }
 }
