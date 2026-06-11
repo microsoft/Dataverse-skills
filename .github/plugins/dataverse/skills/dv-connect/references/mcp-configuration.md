@@ -470,9 +470,26 @@ Separately from tenant-level consent, each Dataverse environment must explicitly
 
 > **One sign-in for CLI, MCP, and Python.** When the user runs `dataverse auth create` (see `dv-connect` Step 2) the token cache is written to a path / OS keychain entry that the `@microsoft/dataverse` stdio MCP proxy and `scripts/auth.py` both read silently. As a result, the allowlisted MCP client ID (`0c412cc3-…` for the Claude / Cursor stdio proxy, or `aebc6443-…` for Copilot HTTP) is exercised exactly once per environment — there is no separate Python device-code sign-in for the same user/env. If a script does prompt for a device code, the shared cache is missing or stale; re-run `dataverse auth create --environment <url>`.
 
-Present the two methods (PPAC portal is recommended for non-developers):
+Present the methods in priority order. **Always attempt Method A first** — it is a single command, needs no portal navigation, and is the most reliable path.
 
-> **Method A: Power Platform Admin Center (recommended — no Azure AD admin needed)**
+> **Method A (preferred): Dataverse CLI `mcp allow`**
+>
+> Run the first-class CLI command — it ensures the MCP client app is in the environment's allowed list using the active auth profile's environment:
+>
+> ```
+> dataverse mcp allow {MCP_CLIENT_ID}
+> ```
+>
+> Any of these outputs means success — continue to validation:
+> - `Client {MCP_CLIENT_ID} is already enabled. No changes needed.`
+> - `Client exists but is disabled. Enabling... Done.`
+> - `Client not found. Creating... Done.`
+>
+> Requires the signed-in user to have Dataverse admin rights (Environment Admin or System Administrator) on the target environment. No Azure AD admin needed.
+
+> **Method B (fallback): Power Platform Admin Center**
+>
+> Use this only if `dataverse mcp allow` is unavailable (CLI not installed) or fails on permissions:
 >
 > 1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/)
 > 2. Select **Environments** in the left navigation
@@ -484,12 +501,20 @@ Present the two methods (PPAC portal is recommended for non-developers):
 > 8. Under **Allowed clients**, click **Add client**
 > 9. Paste the MCP Client ID: `{MCP_CLIENT_ID}`
 > 10. Click **Save**
->
-> **Method B: Programmatic (via script)**
->
-> Run `scripts/enable-mcp-client.py` to add the client ID to the allowed list via the Dataverse API.
 
-If the user completed Method A, attempt to run `scripts/enable-mcp-client.py` anyway to verify. If it reports the client is already enabled, continue. Do not ask for user confirmation.
+> **Method C (fallback): Programmatic via script**
+>
+> Run `scripts/enable-mcp-client.py` to add the client ID to the allowed list via the Dataverse API. Useful in non-interactive environments where the CLI isn't present.
+
+**Do not send the user to the portal (Method B) before attempting Method A.** Run `dataverse mcp allow {MCP_CLIENT_ID}` yourself first; fall back to Method B or C only if it fails (CLI missing, or the user lacks Dataverse admin rights).
+
+**Then validate the endpoint:**
+
+```
+npx -y @microsoft/dataverse@latest mcp {USER_URL} --validate
+```
+
+Treat `GA endpoint is valid, but Preview endpoint is not configured` as **success** for a GA registration (the default). Only revisit enablement if the GA endpoint still returns **403 Forbidden** after `mcp allow` reported success.
 
 ---
 
@@ -529,6 +554,24 @@ Run {CLAUDE_COMMAND} to install the Dataverse MCP server, then tell the user:
 
 Pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
 
+**If TOOL_TYPE is `codex`:**
+
+Tell the user:
+
+> ✅ Dataverse MCP server `{SERVER_NAME}` written to `{CONFIG_PATH}`.
+>
+> **IMPORTANT: Codex loads MCP tools at startup.** Fully **restart Codex** (CLI) or **reload the Codex IDE** for the Dataverse tools to appear — the current session cannot call them yet.
+>
+> After restart, you will be able to:
+> - List all tables in your Dataverse environment
+> - Query records from any table
+> - Create, update, or delete records
+> - Explore your schema and relationships
+
+**Do not claim the Dataverse MCP tools are callable in the current session.** They become available only after a restart, once Codex discovers the `dataverse-*` server. If the user asks you to run an MCP query before restarting, explain that the tools load on restart — do **not** spin up a separate `npx @microsoft/dataverse mcp` stdio proxy as a workaround, and if the user explicitly required MCP, do **not** silently fall back to the SDK or Web API. Surface the restart requirement instead.
+
+Pause and give the user a chance to restart Codex before proceeding.
+
 ---
 
 ## 9. Troubleshooting
@@ -539,7 +582,7 @@ If something goes wrong, help the user check:
 - They have access to the Dataverse environment
 - The environment URL matches what's shown in the Power Platform Admin Center
 - **Tenant-level admin consent** has been granted for the MCP client app. This is a one-time per-tenant action requiring an Azure AD admin. Without it, authentication succeeds but the app is denied access. Use the admin consent URL from step 6.
-- **Org-level allowed clients** — the MCP client ID has been added to the environment's allowed list. To check or fix this:
+- **Org-level allowed clients** — the MCP client ID has been added to the environment's allowed list. The quickest fix is the CLI command `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A). To check or fix it via the portal instead:
   1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/) > Environments > your environment > Settings > Product > Features
   2. Verify **MCP Server** is toggled **On**
   3. Verify the MCP Client ID appears under **Allowed clients**
@@ -561,3 +604,8 @@ If something goes wrong, help the user check:
     npx -y @microsoft/dataverse@latest mcp "{USER_URL}" --validate
     ```
     This checks credentials and prints error details if issues are found.
+- **If TOOL_TYPE is `codex`:**
+  - The Dataverse MCP tools load only on a Codex **restart** after `~/.codex/config.toml` is written — the session that wrote the config cannot see them. Do not treat their absence in the current session as a failure or build a workaround proxy.
+  - If `--validate` returns **403 Forbidden** on the GA endpoint, the client isn't allowlisted yet — run `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A), then re-validate.
+  - Confirm the server entry exists: look for `[mcp_servers.{SERVER_NAME}]` in `~/.codex/config.toml` (global) or `.codex/config.toml` (project).
+  - If `npx` can't be found when Codex launches the server, ensure Node.js 18+ is on PATH; on Windows the proxy command may need `cmd /c` wrapping (see Step 5).
