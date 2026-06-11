@@ -57,7 +57,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 `msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache \u2014 one sign-in for CLI, MCP, Python.
 
-After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version. This mirrors the `pip install --upgrade` pattern used for the Python SDK — running it on each connect ensures the CLI stays current:
+After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version (run on each connect to keep it current):
 ```
 npm install -g @microsoft/dataverse@latest
 ```
@@ -183,7 +183,7 @@ with open(".env", "w") as f:
         f.write(f"CLIENT_SECRET={client_secret}\n")
 ```
 
-> **Multi-environment repos:** If the team deploys to multiple environments from the same repo, each developer's `.env` represents their current target. Consider `.env.dev`, `.env.staging`, etc., with a pattern like `cp .env.dev .env` to switch targets. Each developer manages their own local `.env`.
+> **Multi-environment repos:** If the team deploys to multiple environments from the same repo, each developer's `.env` represents their current target. Consider `.env.dev`, `.env.staging`, etc., with a pattern like `cp .env.dev .env` to switch targets.
 
 Ensure `.env` is in `.gitignore`:
 
@@ -266,21 +266,23 @@ DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skil
 
 For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry; for Codex, add it to its `[mcp_servers.<name>.env]` table.
 
-**Important:** MCP configuration requires an editor/CLI restart. (Codex loads MCP tools only on restart — don't claim they're callable until then.)
+**Important:** MCP configuration requires an editor/CLI restart.
 
 **For Copilot:** Write the JSON config, then:
 > ✅ Dataverse MCP server configured. **Restart your editor** for changes to take effect.
 
-**For Claude:** Run the `claude mcp add` command, then warn the user about the auth popup that will appear on next launch:
-> ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
-> Remember to **use `claude --continue` to resume the session** without losing context.
+**For Claude:** Run the `claude mcp add` command, then:
+> ✅ Dataverse MCP server registered. **Restart Claude Code** to enable MCP tools (use `claude --continue` to resume without losing context).
 >
-> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for `dataverse auth create` (or your active DV CLI profile, e.g., `{username}`). This only happens once; the token is cached for future sessions, and `dataverse auth create` populates the same cache so the popup is skipped if you've already run it.
+> On restart, a browser sign-in opens — the `@microsoft/dataverse` proxy authenticating. Use the same account as `dataverse auth create`; the token is cached, so if you've already run that command the popup is skipped.
 
 **For Cursor:** Write the JSON config, then:
-> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.cursor/mcp.json`. **Reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear under Settings → Tools & MCPs.
+> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.cursor/mcp.json`. **Reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") — it appears under Settings → Tools & MCPs.
 >
-> On first use, the `npx @microsoft/dataverse` proxy starts a device-code sign-in in your browser. Sign in with the same account you used for `dataverse auth create`; the token is cached in your OS credential store for future sessions. If you've already run `dataverse auth create`, the proxy reuses that cache silently — no device code.
+> On first use, the proxy starts a device-code sign-in — same account as `dataverse auth create`, cached in your OS credential store; if you've already run it, the cache is reused silently.
+
+**For Codex:** Write the TOML config to `~/.codex/config.toml`. Codex loads MCP tools only at startup, so don't claim they're callable until the user restarts. Tell the user:
+> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.codex/config.toml`. **Restart Codex** (CLI) or reload the Codex IDE to load the MCP tools.
 
 ---
 
