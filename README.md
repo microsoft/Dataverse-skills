@@ -41,7 +41,7 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 1. Open **Plugins → Add marketplace**.
 2. Set **Source** to `https://github.com/microsoft/Dataverse-skills.git`.
-3. Leave **Git ref** as the default (or set a branch to test unreleased changes) and leave **Sparse paths** empty.
+3. Leave **Git ref** and **Sparse paths** empty.
 4. Click **Add marketplace**, then browse the **dataverse-skills** marketplace, open `dataverse`, and select **Install plugin**.
 
 You can also point **Source** at a local clone (e.g. `C:\path\to\Dataverse-skills`) instead of the GitHub URL.
