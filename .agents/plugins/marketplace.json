@@ -1,0 +1,24 @@
+{
+  "name": "dataverse-skills",
+  "owner": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "interface": {
+    "displayName": "Microsoft Dataverse"
+  },
+  "plugins": [
+    {
+      "name": "dataverse",
+      "source": {
+        "source": "local",
+        "path": "./.github/plugins/dataverse"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

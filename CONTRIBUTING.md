@@ -104,7 +104,7 @@ codex plugin marketplace add <path/to/repo>
 
 In the **Codex app**, do the same through **Plugins → Add marketplace**: set **Source** to your local clone path (or the repo's HTTPS URL), leave **Sparse paths** empty, then install `dataverse` from the marketplace.
 
-Codex discovers the plugin via the repo-root `.claude-plugin/marketplace.json` (one of Codex's supported marketplace paths) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
+Codex discovers the plugin via the repo-root `.agents/plugins/marketplace.json` (its native marketplace path; it falls back to `.claude-plugin/marketplace.json` if that's absent) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
 
 ## Legal
 
