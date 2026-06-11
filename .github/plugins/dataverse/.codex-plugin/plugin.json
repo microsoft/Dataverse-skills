@@ -13,6 +13,21 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Microsoft Dataverse",
+    "shortDescription": "Build, query, and manage Microsoft Dataverse in natural language.",
+    "longDescription": "Build, query, and manage Microsoft Dataverse through natural language. The plugin teaches coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — covering data modeling, single-record and bulk data operations, advanced queries, solution lifecycle, environment administration, and security.",
+    "developerName": "Microsoft",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://learn.microsoft.com/power-apps/maker/data-platform/data-platform-intro",
+    "privacyPolicyURL": "https://privacy.microsoft.com/privacystatement",
+    "termsOfServiceURL": "https://github.com/microsoft/Dataverse-skills/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Show me my open opportunities closing this quarter",
+      "Import this CSV into the contacts table",
+      "Create a customer feedback table with name, rating, and comment columns"
+    ],
+    "brandColor": "#22918B",
+    "composerIcon": "./assets/dataverse-logo.svg",
     "logo": "./assets/dataverse-logo.svg"
   }
 }
