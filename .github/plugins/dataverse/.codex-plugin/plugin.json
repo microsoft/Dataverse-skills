@@ -22,9 +22,12 @@
     "privacyPolicyURL": "https://privacy.microsoft.com/privacystatement",
     "termsOfServiceURL": "https://github.com/microsoft/Dataverse-skills/blob/main/LICENSE",
     "defaultPrompt": [
-      "Show me my open opportunities closing this quarter",
+      "Show me my open deals over $100K closing this quarter",
       "Import this CSV into the contacts table",
-      "Create a customer feedback table with name, rating, and comment columns"
+      "Create a customer feedback table with name, rating, and comment columns",
+      "Pull the schema and pack it into a solution",
+      "Bulk delete activities older than 2024",
+      "Add a teammate to the sales team on the dev environment"
     ],
     "brandColor": "#22918B",
     "composerIcon": "./assets/dataverse-logo.svg",
