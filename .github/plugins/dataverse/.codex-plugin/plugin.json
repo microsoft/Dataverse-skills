@@ -24,10 +24,7 @@
     "defaultPrompt": [
       "Show me my open deals over $100K closing this quarter",
       "Import this CSV into the contacts table",
-      "Create a customer feedback table with name, rating, and comment columns",
-      "Pull the schema and pack it into a solution",
-      "Bulk delete activities older than 2024",
-      "Add a teammate to the sales team on the dev environment"
+      "Create a customer feedback table with name, rating, and comment columns"
     ],
     "brandColor": "#22918B",
     "composerIcon": "./assets/dataverse-logo.svg",
