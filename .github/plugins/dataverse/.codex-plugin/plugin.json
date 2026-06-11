@@ -18,7 +18,7 @@
     "developerName": "Microsoft",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
-    "websiteURL": "https://learn.microsoft.com/power-apps/maker/data-platform/data-platform-intro",
+    "websiteURL": "https://www.microsoft.com/en-us",
     "privacyPolicyURL": "https://privacy.microsoft.com/privacystatement",
     "termsOfServiceURL": "https://github.com/microsoft/Dataverse-skills/blob/main/LICENSE",
     "defaultPrompt": [
