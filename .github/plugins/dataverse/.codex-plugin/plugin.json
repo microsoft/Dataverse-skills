@@ -1,0 +1,34 @@
+{
+  "name": "dataverse",
+  "description": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills that unify MCP, CLI, and SDK workflows.",
+  "version": "1.6.0",
+  "author": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "homepage": "https://github.com/microsoft/Dataverse-skills",
+  "repository": "https://github.com/microsoft/Dataverse-skills",
+  "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365", "microsoft"],
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Microsoft Dataverse",
+    "shortDescription": "Build, query, and manage Microsoft Dataverse from your coding agent.",
+    "longDescription": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills that unify MCP, CLI, and SDK workflows.",
+    "developerName": "Microsoft",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://www.microsoft.com/en-us",
+    "privacyPolicyURL": "https://privacy.microsoft.com/privacystatement",
+    "termsOfServiceURL": "https://www.microsoft.com/en-us/legal/terms-of-use",
+    "defaultPrompt": [
+      "Show me my open deals over $100K closing this quarter",
+      "Import this CSV into the contacts table",
+      "Create a customer feedback table with name, rating, and comment columns",
+      "Pull the schema and pack it into a solution"
+    ],
+    "brandColor": "#22918B",
+    "composerIcon": "./assets/dataverse-logo.svg",
+    "logo": "./assets/dataverse-logo.svg"
+  }
+}

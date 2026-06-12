@@ -1,6 +1,6 @@
 # MCP Server Configuration Reference
 
-Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, or Cursor.
+Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, Cursor, or Codex.
 
 The environment URL should already be known from the `dv-connect` flow (stored in `DATAVERSE_URL` in `.env`). If it's not set, go back to Step 2 of the `dv-connect` skill to discover and select the environment first.
 
@@ -10,7 +10,7 @@ The parameters for the MCP server should be determined from context or environme
 
 ## 0. Determine which tool to configure
 
-Determine whether to configure MCP for GitHub Copilot, Claude Code, or Cursor:
+Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, or Codex:
 - If explicitly mentioned in prompt, use that.
 - Otherwise, determine which tool the user is running from the context.
 - Only if choosing based on the context is impossible, ask the user:
@@ -19,12 +19,13 @@ Determine whether to configure MCP for GitHub Copilot, Claude Code, or Cursor:
 > 1. **GitHub Copilot**
 > 2. **Claude**
 > 3. **Cursor**
+> 4. **Codex**
 
-Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, or `cursor`. Store this for use in all subsequent steps.
+Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, `cursor`, or `codex`. Store this for use in all subsequent steps.
 
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
-- If `claude` or `cursor`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (both use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
+- If `claude`, `cursor`, or `codex`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
 - If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
 ---
@@ -71,6 +72,18 @@ Based on the scope, set the `CONFIG_PATH` variable:
 
 Store this path for use in steps 2 and 5.
 
+**If TOOL_TYPE is `codex`:**
+
+Codex stores MCP servers in a `config.toml` file. The options are:
+1. **Globally** (default, available in all projects)
+2. **Project-only** (trusted projects only)
+
+Based on the scope, set the `CONFIG_PATH` variable:
+- **Global**: `~/.codex/config.toml` (use the user's home directory)
+- **Project**: `.codex/config.toml` (relative to the current working directory)
+
+Store this path for use in steps 2 and 5.
+
 ---
 
 ## 2. Check already-configured MCP servers
@@ -111,6 +124,12 @@ Skip this step — Claude uses CLI commands to manage MCP servers, so we don't n
 **If TOOL_TYPE is `cursor`:**
 
 Read the MCP configuration file at `CONFIG_PATH` (determined in step 1) to check for already-configured servers. Same logic as Copilot: parse `mcpServers` (or `servers`) keys, extract URLs, store as `CONFIGURED_URLS`. If the file doesn't exist or is empty, treat `CONFIGURED_URLS` as empty (`[]`).
+
+If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
+
+**If TOOL_TYPE is `codex`:**
+
+Read the `config.toml` file at `CONFIG_PATH` (determined in step 1) to check for already-configured servers. The file is TOML — look for `[mcp_servers.<name>]` tables and extract the environment URL from each table's `args` array (the URL is the argument that follows `"mcp"`). Store the URLs as `CONFIGURED_URLS`. If the file doesn't exist or has no `[mcp_servers.*]` tables, treat `CONFIGURED_URLS` as empty (`[]`).
 
 If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
 
@@ -299,13 +318,13 @@ This is the `SERVER_NAME`.
 Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint. **Always pass `-e DATAVERSE_OPERATION_CONTEXT="…"`** so the stdio proxy attaches plugin attribution to outbound requests (same role as the `env` block in the Copilot / Cursor JSON configs):
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
 ```
 
 When running on Windows without WSL, wrap the `npx` call into `cmd //c` and omit the quotes around the URL:
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
 ```
 
 Where:
@@ -316,9 +335,9 @@ Where:
 - `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
 
 **Example commands:**
-- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
-- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
-- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=unknown;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
+- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
+- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
+- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
 
 Store this command as `CLAUDE_COMMAND` for use in step 8.
 
@@ -356,7 +375,7 @@ This is the `SERVER_NAME`.
          "command": "npx",
          "args": ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
          "env": {
-           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=unknown;agent=cursor"
+           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=cursor"
          }
        }
      }
@@ -372,6 +391,51 @@ This is the `SERVER_NAME`.
 - If `SERVER_NAME` already exists, update it with the new args
 - After writing, ask the user to **reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear
 
+**If TOOL_TYPE is `codex`:**
+
+Update the `config.toml` file at `CONFIG_PATH` (determined in step 1) to add the new server.
+
+**IMPORTANT: Always use the stdio transport via the npx proxy.** Do not configure a direct `url` to `/api/mcp` — the Dataverse MCP HTTP endpoint requires the npx proxy to handle authentication. The proxy is `@microsoft/dataverse@latest mcp <url>`.
+
+**Generate a unique server name** from the `USER_URL`:
+1. Extract the subdomain (organization identifier) from the URL
+   - Example: `https://orgbc9a965c.crm10.dynamics.com` → `orgbc9a965c`
+2. Use lowercase format: `dataverse-{orgid}`
+   - Example: `dataverse-orgbc9a965c`
+
+This is the `SERVER_NAME`.
+
+**Update the configuration file:**
+
+1. If `CONFIG_PATH` is for a **project-scoped** configuration (`.codex/config.toml`), ensure the `.codex` directory exists first:
+   ```bash
+   mkdir -p .codex
+   ```
+
+2. Read the existing `config.toml` at `CONFIG_PATH`, or treat it as empty if it doesn't exist. Preserve all existing content (other settings and `[mcp_servers.*]` tables).
+
+3. Add the server as a `[mcp_servers.{SERVER_NAME}]` table with an `env` sub-table:
+   ```toml
+   [mcp_servers.{SERVER_NAME}]
+   command = "npx"
+   args = ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"]
+
+   [mcp_servers.{SERVER_NAME}.env]
+   DATAVERSE_OPERATION_CONTEXT = "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=codex"
+   ```
+
+   Append `"--preview"` to the `args` array if the user chose the Preview endpoint in step 4.
+
+Where:
+- `{SERVER_NAME}` is the generated server name (e.g., `dataverse-orgbc9a965c`)
+- `{USER_URL}` is the base environment URL (e.g., `https://orgbc9a965c.crm10.dynamics.com`)
+- `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
+
+**Important notes:**
+- Do NOT overwrite other entries in the file — preserve sibling `[mcp_servers.*]` tables and any other settings
+- If `[mcp_servers.{SERVER_NAME}]` already exists, replace that table (and its `.env` sub-table) with the new values; otherwise append the new tables
+- After writing, ask the user to **restart Codex** for the new MCP server to load
+
 ---
 
 ## 6. Ensure tenant-level admin consent (one-time per tenant)
@@ -379,7 +443,7 @@ This is the `SERVER_NAME`.
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot, Claude, or Cursor) from step 0
+- Tool type (Copilot, Claude, Cursor, or Codex) from step 0
 - Scope from step 1
 - Environment URL from step 3
 - Endpoint (GA or Preview) from step 4
@@ -406,9 +470,26 @@ Separately from tenant-level consent, each Dataverse environment must explicitly
 
 > **One sign-in for CLI, MCP, and Python.** When the user runs `dataverse auth create` (see `dv-connect` Step 2) the token cache is written to a path / OS keychain entry that the `@microsoft/dataverse` stdio MCP proxy and `scripts/auth.py` both read silently. As a result, the allowlisted MCP client ID (`0c412cc3-…` for the Claude / Cursor stdio proxy, or `aebc6443-…` for Copilot HTTP) is exercised exactly once per environment — there is no separate Python device-code sign-in for the same user/env. If a script does prompt for a device code, the shared cache is missing or stale; re-run `dataverse auth create --environment <url>`.
 
-Present the two methods (PPAC portal is recommended for non-developers):
+Present the methods in priority order. **Always attempt Method A first** — it is a single command, needs no portal navigation, and is the most reliable path.
 
-> **Method A: Power Platform Admin Center (recommended — no Azure AD admin needed)**
+> **Method A (preferred): Dataverse CLI `mcp allow`**
+>
+> Run the first-class CLI command — it ensures the MCP client app is in the environment's allowed list using the active auth profile's environment:
+>
+> ```
+> dataverse mcp allow {MCP_CLIENT_ID}
+> ```
+>
+> Any of these outputs means success — continue to validation:
+> - `Client {MCP_CLIENT_ID} is already enabled. No changes needed.`
+> - `Client exists but is disabled. Enabling... Done.`
+> - `Client not found. Creating... Done.`
+>
+> Requires the signed-in user to have Dataverse admin rights (Environment Admin or System Administrator) on the target environment. No Azure AD admin needed.
+
+> **Method B (fallback): Power Platform Admin Center**
+>
+> Use this only if `dataverse mcp allow` is unavailable (CLI not installed) or fails on permissions:
 >
 > 1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/)
 > 2. Select **Environments** in the left navigation
@@ -420,12 +501,20 @@ Present the two methods (PPAC portal is recommended for non-developers):
 > 8. Under **Allowed clients**, click **Add client**
 > 9. Paste the MCP Client ID: `{MCP_CLIENT_ID}`
 > 10. Click **Save**
->
-> **Method B: Programmatic (via script)**
->
-> Run `scripts/enable-mcp-client.py` to add the client ID to the allowed list via the Dataverse API.
 
-If the user completed Method A, attempt to run `scripts/enable-mcp-client.py` anyway to verify. If it reports the client is already enabled, continue. Do not ask for user confirmation.
+> **Method C (fallback): Programmatic via script**
+>
+> Run `scripts/enable-mcp-client.py` to add the client ID to the allowed list via the Dataverse API. Useful in non-interactive environments where the CLI isn't present.
+
+**Do not send the user to the portal (Method B) before attempting Method A.** Run `dataverse mcp allow {MCP_CLIENT_ID}` yourself first; fall back to Method B or C only if it fails (CLI missing, or the user lacks Dataverse admin rights).
+
+**Then validate the endpoint:**
+
+```
+npx -y @microsoft/dataverse@latest mcp {USER_URL} --validate
+```
+
+Treat `GA endpoint is valid, but Preview endpoint is not configured` as **success** for a GA registration (the default). Only revisit enablement if the GA endpoint still returns **403 Forbidden** after `mcp allow` reported success.
 
 ---
 
@@ -465,6 +554,24 @@ Run {CLAUDE_COMMAND} to install the Dataverse MCP server, then tell the user:
 
 Pause and give the user a chance to restart the session to enable it before proceeding. Do not perform any subsequent or parallel operations until the user responds.
 
+**If TOOL_TYPE is `codex`:**
+
+Tell the user:
+
+> ✅ Dataverse MCP server `{SERVER_NAME}` written to `{CONFIG_PATH}`.
+>
+> **IMPORTANT: Codex loads MCP tools at startup.** Fully **restart Codex** (CLI) or **reload the Codex IDE** for the Dataverse tools to appear — the current session cannot call them yet.
+>
+> After restart, you will be able to:
+> - List all tables in your Dataverse environment
+> - Query records from any table
+> - Create, update, or delete records
+> - Explore your schema and relationships
+
+**Do not claim the Dataverse MCP tools are callable in the current session.** They become available only after a restart, once Codex discovers the `dataverse-*` server. If the user asks you to run an MCP query before restarting, explain that the tools load on restart — do **not** spin up a separate `npx @microsoft/dataverse mcp` stdio proxy as a workaround, and if the user explicitly required MCP, do **not** silently fall back to the SDK or Web API. Surface the restart requirement instead.
+
+Pause and give the user a chance to restart Codex before proceeding.
+
 ---
 
 ## 9. Troubleshooting
@@ -475,7 +582,7 @@ If something goes wrong, help the user check:
 - They have access to the Dataverse environment
 - The environment URL matches what's shown in the Power Platform Admin Center
 - **Tenant-level admin consent** has been granted for the MCP client app. This is a one-time per-tenant action requiring an Azure AD admin. Without it, authentication succeeds but the app is denied access. Use the admin consent URL from step 6.
-- **Org-level allowed clients** — the MCP client ID has been added to the environment's allowed list. To check or fix this:
+- **Org-level allowed clients** — the MCP client ID has been added to the environment's allowed list. The quickest fix is the CLI command `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A). To check or fix it via the portal instead:
   1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/) > Environments > your environment > Settings > Product > Features
   2. Verify **MCP Server** is toggled **On**
   3. Verify the MCP Client ID appears under **Allowed clients**
@@ -497,3 +604,8 @@ If something goes wrong, help the user check:
     npx -y @microsoft/dataverse@latest mcp "{USER_URL}" --validate
     ```
     This checks credentials and prints error details if issues are found.
+- **If TOOL_TYPE is `codex`:**
+  - The Dataverse MCP tools load only on a Codex **restart** after `~/.codex/config.toml` is written — the session that wrote the config cannot see them. Do not treat their absence in the current session as a failure or build a workaround proxy.
+  - If `--validate` returns **403 Forbidden** on the GA endpoint, the client isn't allowlisted yet — run `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A), then re-validate.
+  - Confirm the server entry exists: look for `[mcp_servers.{SERVER_NAME}]` in `~/.codex/config.toml` (global) or `.codex/config.toml` (project).
+  - If `npx` can't be found when Codex launches the server, ensure Node.js 18+ is on PATH; on Windows the proxy command may need `cmd /c` wrapping (see Step 5).
