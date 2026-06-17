@@ -316,14 +316,9 @@ This exercises two Dataverse MCP endpoints with a fresh authentication handshake
 - **GA / Production endpoint** — `{DATAVERSE_URL}/api/mcp`. This is the one the plugin actually uses at runtime.
 - **Preview endpoint** — `{DATAVERSE_URL}/api/mcp_preview`. Opt-in per environment; not used by the plugin.
 
-**Do not use `--validate` as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
+**Do not use `--validate` as a success gate on first-time setup.** On a fresh workspace the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP works fine on real calls. Reserve it for diagnosing a confirmed Check 1 / Check 2 failure.
 
-**How to read `--validate` output:**
-
-- **Look at the GA / Production endpoint (`/api/mcp`) result first.** If this passes, MCP will work for normal plugin usage regardless of what the Preview endpoint reports.
-- **A `403 Forbidden` on the Preview endpoint (`/api/mcp_preview`) is expected for most environments.** Preview is opt-in per environment; if your environment hasn't enabled it, the Preview check will always fail. This does not indicate a broken setup.
-- **Ignore the overall exit code and the `⚠ Partial success` warning in this case.** The validator returns exit code `1` (failure) unless BOTH `/api/mcp` and `/api/mcp_preview` pass. Because most environments don't enable the Preview endpoint, `--validate` will exit `1` even when MCP is fully functional via the GA endpoint. Focus on per-endpoint results, not the aggregate status.
-- **If the GA endpoint (`/api/mcp`) fails:** that's the real signal to investigate — auth, tenant consent, environment allowlist, or endpoint reachability.
+**How to read `--validate` output:** Judge by the **GA endpoint (`/api/mcp`)** result alone — if it passes, MCP works for normal usage. A `403` on the **Preview endpoint (`/api/mcp_preview`)** is expected (it's opt-in per environment), and the validator still exits `1` whenever Preview fails — so ignore the aggregate exit code and the `⚠ Partial success` warning. If the GA endpoint itself fails, that's the real signal to investigate: auth, tenant consent, environment allowlist, or endpoint reachability.
 
 ### MCP Server Capabilities
 
@@ -349,6 +344,14 @@ After verifying MCP works, tell the user:
 >
 > To create your first solution, see the `dv-solution` skill.
 > To load sample data (accounts, contacts, opportunities), ask: "Load demo data into my Dataverse environment."
+
+---
+
+## Step 8: Load Business Skills catalog (once per session)
+
+Some environments define **Business Skills** — `skill` records holding org-specific instructions. After the connection is verified, check once whether the org has any; if so, load the catalog (`skillid`, `name`, `description`) into context for the session, so the agent can pull a skill's `body` on demand when a request matches. Most orgs have none — then skip.
+
+See [`references/business-skills.md`](references/business-skills.md) for the probe and how to consult.
 
 ---
 

@@ -11,6 +11,8 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
+**Business Skills:** If a Business Skills catalog was loaded at connect (see dv-connect Step 8) and one governs this read — e.g. an org rule for what counts as "open" or "high-priority" — consult that skill's `body` from the **already-loaded catalog** before generating the query. Don't re-query the `skill` entity per operation. See [`../dv-connect/references/business-skills.md`](../dv-connect/references/business-skills.md).
+
 ## How to Answer Data Questions
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:
