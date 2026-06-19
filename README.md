@@ -60,19 +60,17 @@ codex plugin marketplace upgrade dataverse-skills
 
 ### Cursor
 
+**From agent chat**
+
+```bash
+/add-plugin dataverse
+```
+
 **From the marketplace UI**
 
 1. Open **Settings → Plugins** in Cursor.
 2. Search the Marketplace for **Dataverse**.
 3. Open **Microsoft Dataverse** and select **Add to Cursor**.
-
-**From agent chat**
-
-Type the install command in the Cursor agent chat:
-
-```text
-/add-plugin dataverse
-```
 
 The listing is published at [cursor.com/marketplace/microsoft-dataverse](https://cursor.com/marketplace/microsoft-dataverse).
 
