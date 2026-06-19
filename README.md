@@ -60,7 +60,9 @@ codex plugin marketplace upgrade dataverse-skills
 
 ### Cursor
 
-Local install (a Cursor Marketplace listing is coming — tracked in #76):
+Install from the [Cursor Marketplace](https://cursor.com/marketplace/microsoft-dataverse) — open the listing and click **Add**, or inside Cursor go to **Settings → Plugins**, search for **Dataverse**, and install **Microsoft Dataverse**.
+
+**Install from source (development)**
 
 ```bash
 git clone https://github.com/microsoft/Dataverse-skills.git
