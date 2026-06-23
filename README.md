@@ -35,6 +35,44 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Codex
+
+**Codex app**
+
+1. Open **Plugins → Add marketplace**.
+2. Set **Source** to `https://github.com/microsoft/Dataverse-skills.git`.
+3. Leave **Git ref** and **Sparse paths** empty.
+4. Click **Add marketplace**, then browse the **dataverse-skills** marketplace, open `dataverse`, and select **Install plugin**.
+
+**Codex CLI**
+
+Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
+
+```bash
+codex plugin marketplace add microsoft/Dataverse-skills
+```
+
+Update to the latest release:
+
+```bash
+codex plugin marketplace upgrade dataverse-skills
+```
+
+### Cursor
+
+Local install (a Cursor Marketplace listing is coming — tracked in #76):
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+```
+
+Then copy the plugin directory into your Cursor local plugins folder:
+
+- **Windows:** copy `Dataverse-skills\.github\plugins\dataverse` to `%USERPROFILE%\.cursor\plugins\local\dataverse\`
+- **macOS / Linux:** copy `Dataverse-skills/.github/plugins/dataverse` to `~/.cursor/plugins/local/dataverse/`
+
+Reload the Cursor window (Ctrl+Shift+P → "Developer: Reload Window") to load the `dv-*` skills.
+
 ## Verify the install
 
 After installation, ask your agent:

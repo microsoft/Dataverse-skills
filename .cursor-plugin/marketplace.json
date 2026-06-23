@@ -1,7 +1,8 @@
 {
+  "$schema": "https://cursor.com/schema/marketplace.schema.json",
   "name": "dataverse-skills",
   "metadata": {
-    "description": "Official Dataverse plugin marketplace for agent-guided development",
+    "description": "Official Dataverse plugin marketplace for Cursor",
     "version": "1.7.0"
   },
   "owner": {

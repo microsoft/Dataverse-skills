@@ -1,5 +1,6 @@
 {
   "name": "dataverse",
+  "displayName": "Microsoft Dataverse",
   "description": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills that unify MCP, CLI, and SDK workflows.",
   "version": "1.7.0",
   "author": {
@@ -7,6 +8,15 @@
     "url": "https://www.microsoft.com"
   },
   "homepage": "https://github.com/microsoft/Dataverse-skills",
-  "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365"],
+  "repository": "https://github.com/microsoft/Dataverse-skills",
+  "keywords": [
+    "dataverse",
+    "mcp",
+    "power-platform",
+    "dynamics-365",
+    "microsoft"
+  ],
+  "logo": "assets/dataverse-logo.svg",
+  "skills": ["skills/"],
   "license": "MIT"
 }

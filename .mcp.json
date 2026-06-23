@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "dataverse-aurorabapenve09c4": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "//c",
+        "npx -y @microsoft/dataverse@latest mcp https://aurorabapenve09c4.crm10.dynamics.com"
+      ],
+      "env": {
+        "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/1.6.0;skill=unknown;agent=claude-code"
+      }
+    }
+  }
+}

@@ -110,13 +110,13 @@ Users should never need to invoke skills or slash commands directly. The intende
 
 1. Install the plugin
 2. Describe what you want in plain English
-3. Claude figures out the right sequence of tools, APIs, and scripts
+3. The agent figures out the right sequence of tools, APIs, and scripts
 
 **Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
 
-From that single prompt, Claude should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
+From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
 
-Skills exist as **Claude's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. Claude chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
+Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
 
 ---
 
@@ -140,7 +140,7 @@ Once confirmed for a session, you do not need to re-confirm for every subsequent
 
 ## What This Plugin Covers
 
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **Finance & Operations (ERP) is in scope when provisioned on the same env** — in-scope: record CRUD (composite keys, cross-company), F&O custom services, batch jobs, entity schema discovery; out-of-scope: X++/package builds, LCS, UI personalizations. See [`references/erp-target.md`](references/erp-target.md).
+This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **Finance & Operations (ERP) data plane is in scope on UNO envs** — see [`references/erp-target.md`](references/erp-target.md).
 
 It does **not** cover:
 
@@ -162,12 +162,12 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Python SDK (`dv-data`)** | **Preferred for all scripted data writes.** Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, table/column/relationship creation (use `dv-metadata`), custom action invocation |
 | **Python SDK (`dv-query`)** | **Preferred for bulk reads and analytics.** Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API (b8+), GUID-free display (formatted values), `$expand` to resolve lookups, pandas DataFrame handoff (`client.dataframe.get()`) for cross-table joins and exports, Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
 | **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
-| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management. For ERP (`pac package`, `pac admin batch`) see [`references/erp-target.md`](references/erp-target.md) | Dataverse data CRUD, metadata creation (tables/columns/forms) |
-| **Dataverse CLI** (`dataverse`) | ERP (F&O) data plane via `--target erp` (CRUD with composite keys, `--cross-company`), `api invoke --target erp`, `erp batch list/cancel`, `mcp <fnoUrl>` auto-routing to F&O MCP. See [`references/erp-target.md`](references/erp-target.md) | Bulk ERP writes (use DMF), metadata, admin |
+| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Dataverse data CRUD, metadata creation (tables/columns/forms) |
+| **Dataverse CLI** (`dataverse`) | ERP data plane: `--target erp` CRUD, `api invoke --target erp`, `erp batch`, `mcp <fnoUrl>`. See [`erp-target.md`](references/erp-target.md) | Bulk ERP writes (use DMF), metadata, admin |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below). **ERP target** (no Python SDK tier): ERP MCP → Dataverse CLI `--target erp` → DMF for bulk. See [`references/erp-target.md`](references/erp-target.md).
+**Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below). **ERP target:** ERP MCP → `dataverse --target erp` → DMF for bulk. See [`erp-target.md`](references/erp-target.md).
 
 **Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for large datasets, chunk in your script starting at 1,000 and adapt up or down based on success (see `dv-data` for the adaptive pattern).
 
@@ -183,7 +183,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
 3. Load the `dv-connect` skill to set up the MCP server
-4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind them: "Use `claude --continue` to resume without losing context." Do not proceed with SDK. Wait for the user to restart.
+4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind the user to resume the session without losing context (Claude Code: `claude --continue`; Cursor: reload the window with Ctrl+Shift+P → "Developer: Reload Window"; Copilot: reopen the Copilot panel). Do not proceed with SDK. Wait for the user to restart.
 
 **If MCP tools are NOT available and the user asked a data question without explicitly requesting MCP** (e.g., "how many accounts with 'jeff'?", "show me open tickets"):
 1. This is a SDK fallback case — use the Python SDK to answer the question. Do not block the user.
@@ -197,7 +197,7 @@ The distinction matters: explicit MCP request → block and set up MCP. Implicit
 
 ## Available Skills
 
-Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that Claude uses for automatic routing. This index is for human reference only.
+Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent uses for automatic routing. This index is for human reference only.
 
 | Skill | What it covers |
 | --- | --- |
@@ -227,13 +227,13 @@ Any Web API call that goes beyond a one-off query should be written as a Python 
 
 ## Windows Scripting Rules
 
-When running in Git Bash on Windows (the default for Claude Code on Windows):
+When running in a Unix-style shell on Windows (Git Bash is the default for Claude Code on Windows; Cursor and Copilot may use PowerShell — the same rules apply, adapt path/quoting syntax as needed):
 
 - **ASCII only in `.py` files.** Curly quotes, em dashes, or other non-ASCII characters cause `SyntaxError`. Use straight quotes and regular dashes.
 - **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
 - **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
 - **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
-- **Background job output may be empty on Windows.** Claude Code's background task runner ("Running in the background") can silently produce no output on Windows. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
+- **Background job output may be empty on Windows.** Agent background task runners on Windows (e.g., Claude Code's "Running in the background") can silently produce no output. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
 
 ---
 
