@@ -11,6 +11,8 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
+**ERP target is a separate path.** ERP (F&O on UNO envs) does not go through the Python SDK in this plugin. For ERP reads, use ERP MCP (small) or `dataverse data query/get/count --target erp` (medium volume, cross-company, composite keys). See [Querying ERP data](#querying-erp-data).
+
 ## How to Answer Data Questions
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:
@@ -57,7 +59,8 @@ for r in results:
 
 | Need | Use instead |
 |---|---|
-| Create, update, delete records | **dv-data** |
+| Create, update, delete records (Dataverse) | **dv-data** |
+| Query, create, update, delete records (ERP) | Use ERP MCP or `dataverse data <verb> --target erp` (CLI). See [Querying ERP data](#querying-erp-data) below and [`erp-target.md`](../dv-overview/references/erp-target.md). |
 | Create tables, columns, relationships | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
 
@@ -72,11 +75,11 @@ from auth import get_client
 
 # get_client sets a plugin attribution context on the User-Agent header.
 # Do not modify the context value — it is a closed schema for server-side
-# telemetry (app/skill/agent). Never include secrets or PII.
+# telemetry (app/skill/agent/target). Never include secrets or PII.
 client = get_client("dv-query")
 ```
 
-`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup.
+`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup. For ERP (F&O), use ERP MCP or the Dataverse CLI `--target erp` path — not this client. See [Querying ERP data](#querying-erp-data).
 
 ---
 
@@ -192,6 +195,59 @@ Available in `PowerPlatform-Dataverse-Client` b8+. Chainable builder for complex
 ## Jupyter Notebook Setup
 
 For interactive querying in notebooks (auth + DataverseClient + DataFrame display), see [`references/jupyter-setup.md`](references/jupyter-setup.md).
+
+## Querying ERP data
+
+When the env is ERP-linked (UNO — F&O provisioned on the same env), ERP reads do not go through `DataverseClient`. Use one of:
+
+1. **ERP MCP** (≤10 records, no paging) — if `dataverse mcp <erpUrl>` is wired up as an MCP server in your client. Same `read_query` / `read_metadata` shape as Dataverse MCP.
+2. **Dataverse CLI `--target erp`** for everything else — composite keys, cross-company, `--top` paging, multi-record reads.
+
+```bash
+# Multi-record read
+dataverse data query --target erp --table SalesOrderHeaders --top 200 \
+  --select "SalesOrderNumber,CustomerAccount,SalesOrderStatus" \
+  --filter "SalesOrderStatus eq Microsoft.Dynamics.DataEntities.SalesStatus'Backorder'" \
+  --orderby "SalesOrderNumber"
+
+# Single record by composite key (F&O keys are dataAreaId + business key)
+dataverse data get --target erp --table CustomerGroups \
+  --key "dataAreaId='usmf',CustomerGroupId='10'"
+
+# Cross-company — all legal entities the user can read
+dataverse data query --target erp --table CustomerGroups --cross-company \
+  --select "CustomerGroupId,Description,dataAreaId" --top 50
+
+# Count
+dataverse data count --target erp --table Currencies --filter "CurrencyCode eq 'AED'"
+```
+
+Add `--json` on read commands for script consumption. The ERP URL is auto-discovered from the active auth profile — no separate `pac auth` step required.
+
+For F&O Custom Services (`/api/services/...`), use `dataverse api invoke --target erp`. See [`erp-target.md`](../dv-overview/references/erp-target.md).
+
+### What's different from Dataverse OData
+
+| Concept | Dataverse | ERP (F&O) |
+|---|---|---|
+| Entity set casing | lowercase plural (`accounts`) | PascalCase plural (`SalesOrderHeaders`) |
+| Primary key | single GUID | composite, often includes `dataAreaId` (e.g. `dataAreaId='usmf',CustomerGroupId='10'`) |
+| Cross-org query | n/a — one org per env | `--cross-company` flag |
+| Aggregation | `$apply` (Web API) | **Not supported** — pull and aggregate locally (pandas / pwsh / jq) |
+| FetchXML / SQL | supported | **Not supported** — OData only |
+| Bound actions | per-entity | per-entity; discover via `dataverse data describe --target erp --table <T>` |
+| Tooling | MCP / Python SDK / Web API / PAC CLI | ERP MCP / Dataverse CLI `--target erp` / `api invoke --target erp` |
+
+### Discovering an unfamiliar ERP entity
+
+```bash
+dataverse data describe --target erp --table ExpMobileMasterData
+dataverse data describe --target erp --table SalesOrderHeaders --json
+```
+
+Returns schema, key fields, properties, navigations, and **runtime-routable** bound actions in one call. Use before guessing entity-set names or action names.
+
+For the broader ERP routing model (when to use which tool, DMF for bulk writes, ERP MCP setup), see [`references/erp-target.md`](../dv-overview/references/erp-target.md) in `dv-overview`.
 
 ## Common Query Errors
 

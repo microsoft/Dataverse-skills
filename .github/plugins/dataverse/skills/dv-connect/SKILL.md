@@ -103,6 +103,16 @@ pac org who
 ```
 Parse the output to extract `DATAVERSE_URL` and `TENANT_ID`.
 
+**Also detect ERP (F&O) linkage.** On UNO environments, F&O is provisioned on top of the same Dataverse env. If `pac org who` surfaces an `erpUrl` field, use that. If it does not (PAC CLI ERP-discovery rollout is in flight at the time of writing), fall back to the Dataverse CLI:
+
+```
+dataverse org who --environment <DATAVERSE_URL> --json
+```
+
+Pass `--environment` explicitly — the Dataverse CLI keeps its own active profile separate from PAC's, and without it `org who` may target a stale URL. Reuse the `DATAVERSE_URL` resolved earlier in this step.
+
+A non-null `erpUrl` / `ErpUrl` in either output is the ERP endpoint — capture it as `ERP_URL` for Step 3. If neither surfaces it, the env is Dataverse-only — skip ERP_URL.
+
 If `pac org who` does not show a tenant ID, fall back to:
 ```bash
 curl -sI https://<org>.crm.dynamics.com/api/data/v9.2/ \
@@ -148,6 +158,8 @@ with open(".env", "w") as f:
     f.write(f"SOLUTION_NAME={solution_name}\n")
     f.write(f"PUBLISHER_PREFIX=\n")  # filled in when solution is created
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
+    if erp_url:
+        f.write(f"ERP_URL={erp_url}\n")  # set when env is ERP-linked (UNO); enables --target erp routing
     if client_id:
         f.write(f"CLIENT_ID={client_id}\n")
     if client_secret:
@@ -205,7 +217,13 @@ python scripts/auth.py
 
 Both must succeed. Confirm the environment URL matches the intended target.
 
-**If either fails:**
+**If `.env` has `ERP_URL`**, also smoke-test the ERP linkage:
+```
+dataverse data query --target erp --table Currencies --top 1
+```
+A successful one-row response proves the active auth profile can reach the F&O OData endpoint. If this fails but Dataverse-side checks pass, the user's account likely lacks F&O access — surface that explicitly rather than re-running Steps 1–4.
+
+**If either Dataverse check fails:**
 - `pac org who` fails → re-run Step 2
 - `python scripts/auth.py` fails → check Python SDK install, check `.env` values
 

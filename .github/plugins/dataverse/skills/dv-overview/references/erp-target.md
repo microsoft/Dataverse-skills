@@ -1,30 +1,42 @@
 # ERP (Finance & Operations) target routing
 
-On Unified Operations environments, F&O is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same `pac org who` output (the `erpUrl` field surfaces F&O when linked). The same skills (dv-connect, dv-query, dv-data) cover both Dataverse and ERP work; target selection drives the routing.
+On Unified Operations environments, F&O is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the F&O linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
+
+The same skills (dv-connect, dv-query, dv-data) cover both targets — the routing differs by **which tool** the agent reaches for, not which skill.
 
 ## Detecting ERP context
 
 The user's request involves ERP when any of the following is true:
 
-- They explicitly pass `--target erp` or mention ERP / Finance & Operations / F&O / Dynamics 365 Finance & Operations
-- The entity name is an F&O public entity — examples: `SalesOrderHeaders`, `PurchaseOrderHeaders`, `CustomerGroupsV3`, `BatchJobs`, `ExpMobileMasterData`, `DataManagementDefinitionGroups`, `Currencies`
-- The topic is F&O-specific: batch jobs, financial dimensions, data management framework, dataAreaId, cross-company, legal entity, X++
+- They explicitly mention ERP / Finance & Operations / F&O / Dynamics 365 Finance & Operations, or pass `--target erp`.
+- The entity name is an F&O public entity — examples: `SalesOrderHeaders`, `PurchaseOrderHeaders`, `CustomerGroupsV3`, `BatchJobs`, `ExpMobileMasterData`, `DataManagementDefinitionGroups`, `Currencies`.
+- The topic is F&O-specific: batch jobs, financial dimensions, data management framework, `dataAreaId`, cross-company, legal entity, X++.
 
 If unsure whether the env has ERP, run `dataverse org who --json` — a non-null `erpUrl` field confirms linkage.
 
 ## Tool priority for ERP target
 
-The MCP / SDK / Web API priority is the Dataverse path — those tools reach Dataverse entities, not F&O. For ERP, the priority is:
+Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands for service-style endpoints:
 
-1. **Dataverse CLI single-record CRUD** for 1-10 records:
+1. **ERP MCP** for simple reads/writes (≤10 records, no paging). The Dataverse CLI ships an F&O MCP proxy — `dataverse mcp <fnoUrl>` auto-routes to the F&O MCP endpoint when the URL host is F&O. One-time client allow-list via `dataverse mcp allow <appId> --erp`. Setup is in `dv-connect`.
+
+2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD:
    ```bash
+   dataverse data query  --target erp --table <EntitySet> --select "..." [--cross-company] [--top 100]
+   dataverse data get    --target erp --table <EntitySet> --key "<composite>"
+   dataverse data count  --target erp --table <EntitySet> [--filter "..."]
    dataverse data create --target erp --table <EntitySet> --data '{...}'
    dataverse data update --target erp --table <EntitySet> --key "<composite>" --data '{...}'
-   dataverse data get    --target erp --table <EntitySet> --key "<composite>"
-   dataverse data delete --target erp --table <EntitySet> --key "<composite>"
+   dataverse data delete --target erp --table <EntitySet> --key "<composite>" [--no-confirm]
+   dataverse data describe --target erp --table <EntitySet>
    ```
+   ERP URL is auto-discovered from the active auth profile — no separate connection step. `--json` is supported on read commands for script consumption.
 
-2. **DMF data packages** for any volume above ~10 records — there is no `CreateMultiple` analog on F&O OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
+3. **`dataverse api invoke --target erp`** for F&O Custom Services (`/api/services/<group>/<service>/<operation>`) — these are the "unbound action" surface (F&O OData has no truly unbound actions; global ops live under `/api/services/`). Discovery via `dataverse api list --target erp` and `dataverse api describe --target erp`. Use `erp:ServiceGroup/Service/Operation` syntax or pass `--service-group`/`--service` separately.
+
+4. **`dataverse erp batch list|cancel`** for Finance & Operations batch jobs on the linked F&O instance.
+
+5. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on F&O OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
    ```
    GetAzureWriteUrl     → returns blob SAS URL
    (upload package.zip to that URL)
@@ -32,44 +44,61 @@ The MCP / SDK / Web API priority is the Dataverse path — those tools reach Dat
    GetExecutionSummaryStatus  → poll until terminal
    GetExecutionErrors   → on Failed / PartiallySucceeded
    ```
-   See `dv-data` for the full DMF pipeline.
-
-3. **`dataverse api invoke --target erp`** for `/api/services/<group>/<service>/<operation>` Custom Services — these are F&O's "unbound action" surface (F&O OData has no truly unbound actions; global ops live under `/api/services/`).
+   DMF is reachable today via `dataverse api invoke --target erp` against the bound actions. A dedicated DMF flow is not yet packaged into a skill — request when needed.
 
 ## Reads for ERP
 
-All reads go through `dataverse data query --target erp`:
-
 ```bash
-# Single company (the user's default)
+# Small / interactive — ERP MCP if available, else CLI
 dataverse data query --target erp --table SalesOrderHeaders --top 10 \
   --select "SalesOrderNumber,CustomerAccount,SalesOrderStatus"
 
-# Cross-company (all companies the user has access to)
+# Cross-company — all legal entities the user can read
 dataverse data query --target erp --table CustomerGroups --cross-company \
   --select "CustomerGroupId,Description,dataAreaId" --top 50
 
-# Get a single record by composite key
+# Single record by composite key
 dataverse data get --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='10'"
+
+# Count
+dataverse data count --target erp --table Currencies --filter "CurrencyCode eq 'AED'"
 ```
 
 What's different from Dataverse OData:
 
-- **No FetchXML, no SQL, no `$apply`.** ERP exposes OData only. Use `--select` / `--filter` / `--top` / `--orderby` / `--expand`.
-- **Composite keys are common** — `dataAreaId='usmf',OrderNumber='SO-001'`. Pass the whole thing as `--key "<expr>"`.
+- **No FetchXML, no SQL, no `$apply`.** ERP exposes OData only. Use `--select` / `--filter` / `--top` / `--orderby` / `--expand`. For aggregation, pull and aggregate locally (pandas).
+- **Composite keys are common** — `dataAreaId='usmf',OrderNumber='SO-001'`. Pass the whole expression as `--key "<expr>"`.
 - **`--cross-company`** is the equivalent of "query across all legal entities." Without it, queries are scoped to the user's default company.
 - **Entity sets are PascalCase plurals** (`SalesOrderHeaders`, not `salesorderheader`).
+- **`data associate` / `data disassociate`** are not supported on ERP. Set or clear the linking property on the entity via `data update --target erp`.
+
+## Writes for ERP
+
+For single-record CRUD, prefer ERP MCP (≤10 records). For programmatic / scripted writes, use the CLI:
+
+```bash
+dataverse data create --target erp --table CustomerGroups \
+  --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}'
+
+dataverse data update --target erp --table CustomerGroups \
+  --key "dataAreaId='usmf',CustomerGroupId='demo'" \
+  --data '{"Description":"demo group (updated)"}'
+
+dataverse data delete --target erp --table CustomerGroups \
+  --key "dataAreaId='usmf',CustomerGroupId='demo'" --no-confirm
+```
+
+`--no-confirm` suppresses the interactive prompt on `delete` for scripted use.
+
+For bulk writes, go to DMF (tier 5 above). There is no efficient Python SDK path for ERP today.
 
 ## Discover what's on an entity
 
-Before writing a query or action call against an unfamiliar ERP entity, use `data describe` — it returns the entity's schema, key fields, and bound actions in one small JSON response (no expensive `$metadata` download):
+Before writing a query or action call against an unfamiliar ERP entity, use `data describe` — it returns the entity's schema, key fields, properties, navigations, and **bound actions** in one small JSON response (no expensive `$metadata` download):
 
 ```bash
-# Human-readable
 dataverse data describe --target erp --table ExpMobileMasterData
-
-# Raw JSON for programmatic use
 dataverse data describe --target erp --table SalesOrderHeaders --json
 ```
 
