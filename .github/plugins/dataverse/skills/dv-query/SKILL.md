@@ -11,7 +11,7 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
-**ERP target is a separate path.** ERP (F&O on UNO envs) does not go through the Python SDK in this plugin. For ERP reads, use ERP MCP (small) or `dataverse data query/get/count --target erp` (medium volume, cross-company, composite keys). See [Querying ERP data](#querying-erp-data).
+**ERP target is a separate path.** ERP (F&O linked to a Dataverse env) does not go through the Python SDK in this plugin. For ERP reads, use ERP MCP (small) or `dataverse data query/get/count --target erp` (medium volume, cross-company, composite keys). See [Querying ERP data](#querying-erp-data).
 
 ## How to Answer Data Questions
 
@@ -198,7 +198,7 @@ For interactive querying in notebooks (auth + DataverseClient + DataFrame displa
 
 ## Querying ERP data
 
-When the env is ERP-linked (UNO — F&O provisioned on the same env), ERP reads do not go through `DataverseClient`. Use one of:
+When the env is ERP-linked (F&O provisioned on the same Dataverse env), ERP reads do not go through `DataverseClient`. Use one of:
 
 1. **ERP MCP** (≤10 records, no paging) — if `dataverse mcp <erpUrl>` is wired up as an MCP server in your client. Same `read_query` / `read_metadata` shape as Dataverse MCP.
 2. **Dataverse CLI `--target erp`** for everything else — composite keys, cross-company, `--top` paging, multi-record reads.

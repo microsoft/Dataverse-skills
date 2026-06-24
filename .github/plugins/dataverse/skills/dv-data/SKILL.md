@@ -328,7 +328,7 @@ except HttpError as e:
 
 ## Writing ERP data
 
-When the env is ERP-linked (UNO — F&O provisioned on the same env), ERP writes do not go through the Python SDK. Use:
+When the env is ERP-linked (F&O provisioned on the same Dataverse env), ERP writes do not go through the Python SDK. Use:
 
 1. **ERP MCP** (≤10 records) — if `dataverse mcp <erpUrl>` is wired up as an MCP server. Same `create_record` / `update_record` / `delete_record` shape as Dataverse MCP.
 2. **Dataverse CLI `--target erp`** for scripted single-record writes:

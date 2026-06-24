@@ -140,7 +140,7 @@ Once confirmed for a session, you do not need to re-confirm for every subsequent
 
 ## What This Plugin Covers
 
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **Finance & Operations (ERP) data plane is in scope on UNO envs** — see [`references/erp-target.md`](references/erp-target.md).
+This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **Finance & Operations (ERP) data plane is in scope on Dataverse-linked ERP envs** — see [`references/erp-target.md`](references/erp-target.md).
 
 It does **not** cover:
 

@@ -1,6 +1,6 @@
 # Detecting and validating ERP (F&O) linkage
 
-On UNO environments, F&O is provisioned on top of the same Dataverse env. After Step 2 resolves `DATAVERSE_URL`, detect whether an ERP endpoint is also linked.
+On ERP-linked Dataverse environments, F&O is provisioned on top of the same Dataverse env. After Step 2 resolves `DATAVERSE_URL`, detect whether an ERP endpoint is also linked.
 
 ## Detection (Step 2 follow-up)
 
