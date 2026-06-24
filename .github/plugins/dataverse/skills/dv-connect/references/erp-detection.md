@@ -1,6 +1,6 @@
-# Detecting and validating ERP (F&O) linkage
+# Detecting and validating ERP (Finance and Operations) linkage
 
-On ERP-linked Dataverse environments, F&O is provisioned on top of the same Dataverse env. After Step 2 resolves `DATAVERSE_URL`, detect whether an ERP endpoint is also linked.
+On ERP-linked Dataverse environments, ERP is provisioned on top of the same Dataverse env. After Step 2 resolves `DATAVERSE_URL`, detect whether an ERP endpoint is also linked.
 
 ## Detection (Step 2 follow-up)
 
@@ -36,4 +36,4 @@ If `.env` has `ERP_URL`, also smoke-test the ERP linkage:
 dataverse data query --target erp --table Currencies --top 1
 ```
 
-A successful one-row response proves the active auth profile can reach the F&O OData endpoint. If this fails but the Dataverse-side checks pass, the user's account likely lacks F&O access — surface that explicitly rather than re-running Steps 1–4.
+A successful one-row response proves the active auth profile can reach the ERP OData endpoint. If this fails but the Dataverse-side checks pass, the user's account likely lacks ERP access — surface that explicitly rather than re-running Steps 1–4.

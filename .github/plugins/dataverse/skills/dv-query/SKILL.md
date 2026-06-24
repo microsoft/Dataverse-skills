@@ -11,7 +11,7 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
-**ERP target is a separate path.** ERP (F&O linked to a Dataverse env) does not go through the Python SDK in this plugin. For ERP reads, use ERP MCP (small) or `dataverse data query/get/count --target erp` (medium volume, cross-company, composite keys). See [Querying ERP data](#querying-erp-data).
+**ERP target is a separate path.** ERP (Finance and Operations), when linked to a Dataverse env, does not go through the Python SDK in this plugin. For ERP reads, use ERP MCP (small) or `dataverse data query/get/count --target erp` (medium volume, cross-company, composite keys). See [Querying ERP data](#querying-erp-data).
 
 ## How to Answer Data Questions
 
@@ -79,7 +79,7 @@ from auth import get_client
 client = get_client("dv-query")
 ```
 
-`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup. For ERP (F&O), use ERP MCP or the Dataverse CLI `--target erp` path — not this client. See [Querying ERP data](#querying-erp-data).
+`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup. For ERP, use ERP MCP or the Dataverse CLI `--target erp` path — not this client. See [Querying ERP data](#querying-erp-data).
 
 ---
 
@@ -198,7 +198,7 @@ For interactive querying in notebooks (auth + DataverseClient + DataFrame displa
 
 ## Querying ERP data
 
-When the env is ERP-linked (F&O provisioned on the same Dataverse env), ERP reads do not go through `DataverseClient`. Use one of:
+When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP reads do not go through `DataverseClient`. Use one of:
 
 1. **ERP MCP** (≤10 records, no paging) — if `dataverse mcp <erpUrl>` is wired up as an MCP server in your client. Same `read_query` / `read_metadata` shape as Dataverse MCP.
 2. **Dataverse CLI `--target erp`** for everything else — composite keys, cross-company, `--top` paging, multi-record reads.
@@ -210,7 +210,7 @@ dataverse data query --target erp --table SalesOrderHeaders --top 200 \
   --filter "SalesOrderStatus eq Microsoft.Dynamics.DataEntities.SalesStatus'Backorder'" \
   --orderby "SalesOrderNumber"
 
-# Single record by composite key (F&O keys are dataAreaId + business key)
+# Single record by composite key (ERP keys are dataAreaId + business key)
 dataverse data get --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='10'"
 
@@ -224,11 +224,11 @@ dataverse data count --target erp --table Currencies --filter "CurrencyCode eq '
 
 Add `--json` on read commands for script consumption. The ERP URL is auto-discovered from the active auth profile — no separate `pac auth` step required.
 
-For F&O Custom Services (`/api/services/...`), use `dataverse api invoke --target erp`. See [`erp-target.md`](../dv-overview/references/erp-target.md).
+For ERP Custom Services (`/api/services/...`), use `dataverse api invoke --target erp`. See [`erp-target.md`](../dv-overview/references/erp-target.md).
 
 ### What's different from Dataverse OData
 
-| Concept | Dataverse | ERP (F&O) |
+| Concept | Dataverse | ERP |
 |---|---|---|
 | Entity set casing | lowercase plural (`accounts`) | PascalCase plural (`SalesOrderHeaders`) |
 | Primary key | single GUID | composite, often includes `dataAreaId` (e.g. `dataAreaId='usmf',CustomerGroupId='10'`) |

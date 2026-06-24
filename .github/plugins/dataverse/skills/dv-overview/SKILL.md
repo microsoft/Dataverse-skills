@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or Finance & Operations (ERP); this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
+description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP (Finance and Operations); this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
 ---
 
 # Skill: Overview — What to Use and When
@@ -140,7 +140,7 @@ Once confirmed for a session, you do not need to re-confirm for every subsequent
 
 ## What This Plugin Covers
 
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **Finance & Operations (ERP) data plane is in scope on Dataverse-linked ERP envs** — see [`references/erp-target.md`](references/erp-target.md).
+This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics). **ERP data plane is in scope on Dataverse-linked envs** — see [`references/erp-target.md`](references/erp-target.md).
 
 It does **not** cover:
 
@@ -148,7 +148,7 @@ It does **not** cover:
 - Canvas apps (use `pac canvas` or the maker portal)
 - Azure infrastructure beyond what's needed for service principal setup
 - Business Central or other Dynamics products
-- F&O X++ source authoring and package compilation (use `pac package` family)
+- ERP X++ source authoring and package compilation (use `pac package` family)
 
 ---
 

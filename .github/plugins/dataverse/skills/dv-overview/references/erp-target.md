@@ -1,6 +1,6 @@
-# ERP (Finance & Operations) target routing
+# ERP (Finance and Operations) target routing
 
-On Unified Operations environments, F&O is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the F&O linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
+On Unified Operations environments, ERP is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the ERP linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
 
 The same skills (dv-connect, dv-query, dv-data) cover both targets — the routing differs by **which tool** the agent reaches for, not which skill.
 
@@ -8,9 +8,9 @@ The same skills (dv-connect, dv-query, dv-data) cover both targets — the routi
 
 The user's request involves ERP when any of the following is true:
 
-- They explicitly mention ERP / Finance & Operations / F&O / Dynamics 365 Finance & Operations, or pass `--target erp`.
-- The entity name is an F&O public entity — examples: `SalesOrderHeaders`, `PurchaseOrderHeaders`, `CustomerGroupsV3`, `BatchJobs`, `ExpMobileMasterData`, `DataManagementDefinitionGroups`, `Currencies`.
-- The topic is F&O-specific: batch jobs, financial dimensions, data management framework, `dataAreaId`, cross-company, legal entity, X++.
+- They explicitly mention ERP, Finance and Operations, F&O, or Dynamics 365 Finance and Operations, or pass `--target erp`.
+- The entity name is an ERP public entity — examples: `SalesOrderHeaders`, `PurchaseOrderHeaders`, `CustomerGroupsV3`, `BatchJobs`, `ExpMobileMasterData`, `DataManagementDefinitionGroups`, `Currencies`.
+- The topic is ERP-specific: batch jobs, financial dimensions, data management framework, `dataAreaId`, cross-company, legal entity, X++.
 
 If unsure whether the env has ERP, run `dataverse org who --json` — a non-null `erpUrl` field confirms linkage.
 
@@ -18,7 +18,7 @@ If unsure whether the env has ERP, run `dataverse org who --json` — a non-null
 
 Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands for service-style endpoints:
 
-1. **ERP MCP** for simple reads/writes (≤10 records, no paging). The Dataverse CLI ships an F&O MCP proxy — `dataverse mcp <fnoUrl>` auto-routes to the F&O MCP endpoint when the URL host is F&O. One-time client allow-list via `dataverse mcp allow <appId> --erp`. Setup is in `dv-connect`.
+1. **ERP MCP** for simple reads/writes (≤10 records, no paging). The Dataverse CLI ships an ERP MCP proxy — `dataverse mcp <erpUrl>` auto-routes to the ERP MCP endpoint when the URL host is an ERP host. One-time client allow-list via `dataverse mcp allow <appId> --erp`. Setup is in `dv-connect`.
 
 2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD:
    ```bash
@@ -32,11 +32,11 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
    ```
    ERP URL is auto-discovered from the active auth profile — no separate connection step. `--json` is supported on read commands for script consumption.
 
-3. **`dataverse api invoke --target erp`** for F&O Custom Services (`/api/services/<group>/<service>/<operation>`) — these are the "unbound action" surface (F&O OData has no truly unbound actions; global ops live under `/api/services/`). Discovery via `dataverse api list --target erp` and `dataverse api describe --target erp`. Use `erp:ServiceGroup/Service/Operation` syntax or pass `--service-group`/`--service` separately.
+3. **`dataverse api invoke --target erp`** for ERP Custom Services (`/api/services/<group>/<service>/<operation>`) — these are the "unbound action" surface (ERP OData has no truly unbound actions; global ops live under `/api/services/`). Discovery via `dataverse api list --target erp` and `dataverse api describe --target erp`. Use `erp:ServiceGroup/Service/Operation` syntax or pass `--service-group`/`--service` separately.
 
-4. **`dataverse erp batch list|cancel`** for Finance & Operations batch jobs on the linked F&O instance.
+4. **`dataverse erp batch list|cancel`** for ERP batch jobs on the linked ERP instance.
 
-5. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on F&O OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
+5. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
    ```
    GetAzureWriteUrl     → returns blob SAS URL
    (upload package.zip to that URL)
@@ -106,8 +106,8 @@ The output reflects what is **actually routable at runtime** — empty `Actions[
 
 ## What's out of scope for skills
 
-- **F&O X++ authoring and package builds** — these go through `pac package init/compile/db-sync/deploy`; not a runtime data-plane operation.
-- **F&O UI customization** (form personalizations, workflow editor) — out of skill scope.
-- **LCS / Power Platform admin tasks specific to F&O** (LCS uploads, environment lifecycle) — out of skill scope.
+- **ERP X++ authoring and package builds** — these go through `pac package init/compile/db-sync/deploy`; not a runtime data-plane operation.
+- **ERP UI customization** (form personalizations, workflow editor) — out of skill scope.
+- **LCS / Power Platform admin tasks specific to ERP** (LCS uploads, environment lifecycle) — out of skill scope.
 
 For anything in scope, the skills (dv-connect, dv-query, dv-data) handle Dataverse and ERP through the same routing — pick the target and the right tool follows.
