@@ -120,4 +120,3 @@ Before running `pac admin self-elevate`, the agent MUST:
 - **Always confirm** before assigning System Administrator role
 - Show the list of target environments before batch operations
 - Self-elevation is logged and auditable — warn the user
-
