@@ -37,3 +37,37 @@ dataverse data query --target erp --table Currencies --top 1
 ```
 
 A successful one-row response proves the active auth profile can reach the ERP OData endpoint. If this fails but the Dataverse-side checks pass, the user's account likely lacks ERP access — surface that explicitly rather than re-running Steps 1–4.
+
+## ERP MCP registration (Step 6 follow-up)
+
+If `.env` has `ERP_URL`, additionally register an ERP MCP server alongside the Dataverse one. The Dataverse CLI ships a single stdio proxy (`npx @microsoft/dataverse mcp <url>`) that auto-routes to `/api/mcp` when the URL host is a Dataverse env, and to the ERP MCP endpoint when the URL host is an ERP host. Two separate server entries — same binary, different URLs.
+
+**One-time allowlist per tenant/environment** (independent of the Dataverse allowlist):
+
+```
+dataverse mcp allow <MCP_CLIENT_ID> --erp
+```
+
+Same client IDs as `dv-connect` uses for Dataverse. The `--erp` flag scopes the consent to the ERP endpoint; without it, the client is only permitted against `/api/mcp` on Dataverse hosts.
+
+**Per-host registration** — copy the exact block from `mcp-configuration.md` and substitute `ERP_URL` for `DATAVERSE_URL`, and a distinct server name (suggest `erp-{orgid}` to sit next to `dataverse-{orgid}`). Include `DATAVERSE_OPERATION_CONTEXT` in the `env` block with `skill=mcp-direct` and the same plugin version / agent as the Dataverse server — the CLI appends it to outbound User-Agent on `/api/mcp` calls whether the target is Dataverse or ERP.
+
+**Claude Code example:**
+
+```
+claude mcp add -t stdio erp-{orgid} \
+  -e DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent={DATAVERSE_PLUGIN_AGENT} \
+  -- npx @microsoft/dataverse mcp {ERP_URL}
+```
+
+For Copilot / Cursor JSON configs and Codex TOML, add a second server entry with `url = ERP_URL`, keeping the Dataverse one intact. Both start on editor restart; both cache their tokens independently in the DV CLI credential store.
+
+**Verification:**
+
+```
+npx @microsoft/dataverse mcp {ERP_URL} --validate
+```
+
+Same validator as the Dataverse endpoint. GA endpoint on ERP is `/api/mcp`; ERP preview endpoint is not currently opt-in for external tenants, so a `403` there is expected and safe to ignore — focus on the GA result. `list_tables` from the ERP MCP server should surface public entities like `SalesOrderHeaders`, `Currencies`, `DataManagementDefinitionGroups`.
+
+**When to skip ERP MCP setup entirely:** if `.env` does not have `ERP_URL`, or if the user's workflow is Dataverse-only. The `--target erp` CLI path (`dataverse data query --target erp ...`) does not depend on the ERP MCP server — CLI works without it. Only wire up the ERP MCP if the user wants ≤10-record interactive reads/writes on ERP entities from the same agent surface as Dataverse MCP.
