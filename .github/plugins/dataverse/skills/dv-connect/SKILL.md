@@ -20,7 +20,7 @@ Before touching anything, check whether this workspace is already connected to a
 Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
-2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
+2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor / Codex / opencode config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert v>='0.1.0b9', f'SDK {v} is outdated, need >=0.1.0b9'"` exits 0
 
@@ -151,20 +151,18 @@ Present authentication options:
 
 Write `.env` directly — do not instruct the user to create it:
 
-Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID` automatically:
-- Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
-- GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
+Detect the current tool from context and set `MCP_CLIENT_ID` automatically — see [mcp-configuration.md](references/mcp-configuration.md) Step 0 for the full agent → client-ID mapping.
 
 Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
 
 - `PLUGIN_VERSION` — the `version` field of your loaded plugin manifest (e.g. `"1.5.0"`). At runtime, `auth.py` re-reads this from the live manifest via host env vars; this `.env` entry is a fallback for offline cases.
-- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
+- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, `opencode`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
 
 ```python
 # Substitute these two literals from your loaded plugin context.
 # Do NOT leave the angle-bracket placeholders — replace with real values.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
-agent_host = "<your host name: claude-code | copilot | cursor | codex | unknown>"
+agent_host = "<your host name: claude-code | copilot | cursor | codex | opencode | unknown>"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
@@ -244,12 +242,12 @@ All three must resolve the same user/environment. They prove the DV CLI cache, t
 ## Step 6: Configure MCP server
 
 **Skip this step** if MCP is already configured:
-- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` or `~/.codex/config.toml` contains a Dataverse server entry
+- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` or `~/.codex/config.toml` or `opencode.json` / `~/.config/opencode/opencode.json` contains a Dataverse server entry
 - `claude mcp list` shows a `dataverse-*` server registered
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
 
-1. Detect which tool the user is running (Copilot, Claude, Cursor, or Codex) from context
+1. Detect which tool the user is running (Copilot, Claude, Cursor, Codex, or opencode) from context
 2. Set `MCP_CLIENT_ID` based on tool choice
 3. Get environment URL from `.env`
 4. Default to GA endpoint (`/api/mcp`)
@@ -262,26 +260,7 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent={DATAVERSE_PLUGIN_AGENT}
 ```
 
-For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry; for Codex, add it to its `[mcp_servers.<name>.env]` table.
-
-**Important:** MCP configuration requires an editor/CLI restart.
-
-**For Copilot:** Write the JSON config, then:
-> ✅ Dataverse MCP server configured. **Restart your editor** for changes to take effect.
-
-**For Claude:** Run the `claude mcp add` command, then warn the user about the auth popup that will appear on next launch:
-> ✅ Dataverse MCP server registered. Restart Claude Code to enable MCP tools.
-> Remember to **use `claude --continue` to resume the session** without losing context.
->
-> **On restart, a browser window will open** asking you to sign in to your Dataverse environment. This is the MCP proxy authenticating on your behalf — sign in with the same account you used for `dataverse auth create` (or your active DV CLI profile, e.g., `{username}`). This only happens once; the token is cached for future sessions, and `dataverse auth create` populates the same cache so the popup is skipped if you've already run it.
-
-**For Cursor:** Write the JSON config, then:
-> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.cursor/mcp.json`. **Reload the Cursor window** (Ctrl+Shift+P → "Developer: Reload Window") for the new MCP server to appear under Settings → Tools & MCPs.
->
-> On first use, the `npx @microsoft/dataverse` proxy starts a device-code sign-in in your browser. Sign in with the same account you used for `dataverse auth create`; the token is cached in your OS credential store for future sessions. If you've already run `dataverse auth create`, the proxy reuses that cache silently — no device code.
-
-**For Codex:** Write the TOML config to `~/.codex/config.toml`. Codex loads MCP tools only at startup, so don't claim they're callable until the user restarts. Tell the user:
-> ✅ Dataverse MCP server `dataverse-{orgid}` configured in `~/.codex/config.toml`. **Restart Codex** (CLI) or reload the Codex IDE to load the MCP tools.
+**Important:** MCP configuration requires an editor/CLI restart (or opencode session restart) for every host. Register the server and deliver the exact per-host confirmation message from [mcp-configuration.md](references/mcp-configuration.md) Step 8 — do not improvise the wording, it carries host-specific restart and auth-popup guidance.
 
 ---
 
@@ -354,6 +333,4 @@ After verifying MCP works, tell the user:
 
 ## Supported Agents
 
-This plugin's skill files are natively loaded by both **GitHub Copilot CLI** and **Claude Code CLI** when installed as a plugin. No manual context-loading is needed — both agents discover and invoke skills automatically.
-
-The PAC CLI commands, Python scripts, and XML templates work identically in both environments.
+This plugin's skills are natively discovered by GitHub Copilot, Claude Code, Cursor, and Codex when installed as a plugin, and by opencode via its built-in `.claude/skills` compatibility layer (see the README for the opencode install path). No manual context-loading is needed. PAC CLI commands, Python scripts, and XML templates work identically across all five.

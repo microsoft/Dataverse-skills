@@ -106,6 +106,16 @@ In the **Codex app**, do the same through **Plugins → Add marketplace**: set *
 
 Codex discovers the plugin via the repo-root `.agents/plugins/marketplace.json` (its native marketplace path; it falls back to `.claude-plugin/marketplace.json` if that's absent) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
 
+### Testing with opencode
+
+opencode has no plugin marketplace for skill bundles, so there's no install/uninstall cycle to mirror here. Instead, use the installer script to copy the skill folders into your local clone's `.claude/skills/` (or a scratch test project):
+
+```bash
+python .github/plugins/dataverse/scripts/install-opencode.py --target <path/to/test-project>
+```
+
+The script is idempotent and only rewrites files whose content changed, so re-run it after every local edit to refresh the copy, then restart your opencode session to pick up the changes (opencode discovers skills at session startup, not live).
+
 ## Legal
 
 This project is licensed under the [MIT License](LICENSE).

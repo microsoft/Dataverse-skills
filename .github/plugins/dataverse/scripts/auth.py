@@ -330,7 +330,7 @@ _ALLOWED_SKILLS = frozenset({
     "unknown",
 })
 _ALLOWED_AGENTS = frozenset({
-    "claude-code", "copilot", "cursor", "codex", "unknown",
+    "claude-code", "copilot", "cursor", "codex", "opencode", "unknown",
 })
 # Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
 _CONTEXT_RE = re.compile(
