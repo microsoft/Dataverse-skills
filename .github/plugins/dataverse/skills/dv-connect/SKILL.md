@@ -311,19 +311,7 @@ Only when **both** checks pass is the setup verified.
 ```
 npx @microsoft/dataverse mcp {DATAVERSE_URL} --validate
 ```
-This exercises two Dataverse MCP endpoints with a fresh authentication handshake and reports detailed errors (auth, allowlist, consent, endpoint reachability):
-
-- **GA / Production endpoint** — `{DATAVERSE_URL}/api/mcp`. This is the one the plugin actually uses at runtime.
-- **Preview endpoint** — `{DATAVERSE_URL}/api/mcp_preview`. Opt-in per environment; not used by the plugin.
-
-**Do not use `--validate` as a success gate on first-time setup.** On a freshly configured workspace, the token cache hasn't warmed up, so `--validate` can fail with `MsalClientException` or `403` while MCP is actually working fine on subsequent real calls. Reserve `--validate` for diagnosing a confirmed failure in Check 1 or Check 2.
-
-**How to read `--validate` output:**
-
-- **Look at the GA / Production endpoint (`/api/mcp`) result first.** If this passes, MCP will work for normal plugin usage regardless of what the Preview endpoint reports.
-- **A `403 Forbidden` on the Preview endpoint (`/api/mcp_preview`) is expected for most environments.** Preview is opt-in per environment; if your environment hasn't enabled it, the Preview check will always fail. This does not indicate a broken setup.
-- **Ignore the overall exit code and the `⚠ Partial success` warning in this case.** The validator returns exit code `1` (failure) unless BOTH `/api/mcp` and `/api/mcp_preview` pass. Because most environments don't enable the Preview endpoint, `--validate` will exit `1` even when MCP is fully functional via the GA endpoint. Focus on per-endpoint results, not the aggregate status.
-- **If the GA endpoint (`/api/mcp`) fails:** that's the real signal to investigate — auth, tenant consent, environment allowlist, or endpoint reachability.
+**Do NOT use `--validate` as a success gate on first-time setup.** On a cold token cache it can fail with `MsalClientException` or `403` while MCP works fine on subsequent real calls. Reserve it for diagnosing a confirmed Check 1 or Check 2 failure. It exercises two endpoints — the GA `/api/mcp` (what the plugin uses) and the opt-in Preview `/api/mcp_preview` (expected to `403` on most envs, making the aggregate exit code `1` even when MCP is healthy). For how to read the per-endpoint output, see [mcp-configuration.md](references/mcp-configuration.md#reading---validate-output).
 
 ### MCP Server Capabilities
 

@@ -216,24 +216,7 @@ Step 3: pac data retention set --entity activitypointer --criteria "<fetchxml>..
 Step 4: pac data retention show --id <config-id>
 ```
 
-### Commands
-
-```bash
-pac data retention enable-entity --entity activitypointer --environment https://myorg.crm.dynamics.com
-pac data retention set --entity activitypointer \
-    --criteria "<fetch><entity name='activitypointer'><filter><condition attribute='createdon' operator='lt' value='2023-01-01'/></filter></entity></fetch>"
-pac data retention list --environment https://myorg.crm.dynamics.com
-pac data retention show --id <config-id>
-pac data retention status --id <operation-id>
-```
-
-| Argument | Alias | Required | Description |
-|----------|-------|----------|-------------|
-| `--entity` | `-e` | Yes | Logical name of the table |
-| `--criteria` | `-c` | Yes | FetchXML defining which records to archive |
-| `--start-time` | `-st` | No | ISO 8601 start time. Defaults to now |
-| `--recurrence` | `-r` | No | RFC 5545 recurrence pattern |
-| `--environment` | `-env` | No | Target environment URL |
+For the full `pac data retention` command syntax (`enable-entity` / `set` / `list` / `show` / `status`) and the argument reference table, see [`references/retention.md`](references/retention.md).
 
 ### Retention vs Bulk Delete
 
