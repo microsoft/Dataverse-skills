@@ -13,7 +13,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Microsoft Dataverse",
-    "shortDescription": "Build, query, and manage Microsoft Dataverse from your coding agent.",
+    "shortDescription": "Build & manage Dataverse",
     "longDescription": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills that unify MCP, CLI, and SDK workflows.",
     "developerName": "Microsoft",
     "category": "Developer Tools",
