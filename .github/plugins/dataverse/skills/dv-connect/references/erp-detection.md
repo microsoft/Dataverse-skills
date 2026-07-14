@@ -10,7 +10,7 @@ Try PAC first:
 pac org who
 ```
 
-If the output surfaces an `erpUrl` field, capture it. (PAC CLI ERP-discovery rollout is in flight at the time of writing — this field may not appear yet.)
+If the output surfaces an `erpUrl` field, capture it.
 
 If PAC does not surface it, fall back to the Dataverse CLI:
 

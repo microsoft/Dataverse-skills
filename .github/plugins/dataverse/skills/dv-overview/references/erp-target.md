@@ -18,7 +18,7 @@ If unsure whether the env has ERP, run `dataverse org who --json` — a non-null
 
 Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands for service-style endpoints:
 
-1. **ERP MCP** for simple reads/writes (≤10 records, no paging). The Dataverse CLI ships an ERP MCP proxy — `dataverse mcp <erpUrl>` auto-routes to the ERP MCP endpoint when the URL host is an ERP host. One-time client allow-list via `dataverse mcp allow <appId> --erp`. Setup is in `dv-connect`.
+1. **ERP MCP** for simple, interactive reads/writes. The Dataverse CLI ships an ERP MCP proxy — `dataverse mcp <erpUrl>` auto-routes to the ERP MCP endpoint when the URL host is an ERP host. One-time client allow-list via `dataverse mcp allow <appId> --erp`. Setup is in `dv-connect`.
 
 2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD:
    ```bash
@@ -44,7 +44,7 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
    GetExecutionSummaryStatus  → poll until terminal
    GetExecutionErrors   → on Failed / PartiallySucceeded
    ```
-   DMF is reachable today via `dataverse api invoke --target erp` against the bound actions. A dedicated DMF flow is not yet packaged into a skill — request when needed.
+   DMF is reachable via `dataverse api invoke --target erp` against the bound actions.
 
 ## Reads for ERP
 
