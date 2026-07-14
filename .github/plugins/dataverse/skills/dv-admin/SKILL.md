@@ -11,7 +11,6 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 > 2. **Settings allowlist is hard.** Only the 37 PPAC toggles in [Allowed settings](#allowed-settings--hard-allowlist) may be read or updated. Any other setting **must be refused**: *"That setting is out of scope for dv-admin. Use the Power Platform admin center."*
 > 3. **Recycle bin disable is PATCH, never DELETE.** `PATCH statecode=1, statuscode=2, isreadyforrecyclebin=false`. DELETE enqueues async opt-out and orphans per-entity configs — see [`references/recycle-bin.md`](references/recycle-bin.md).
 > 4. **System tables warning.** Unfiltered bulk delete on `systemuser`, `businessunit`, `organization`, or `role` breaks the environment. Warn additionally before running.
-> 5. **ERP batch cancel is disruptive.** `dataverse erp batch cancel` aborts in-flight ERP jobs. Confirm the exact id — see [`references/erp-batch.md`](references/erp-batch.md).
 
 **Four mechanisms — pick based on where the setting lives:**
 
@@ -21,7 +20,8 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 | **Python SDK — OrgDB XML** | Keys inside the `orgdborgsettings` XML blob (MCP, search, Fabric, Work IQ, TDS endpoint, attachment security, ownership, address records, block unmanaged, delete users, Excel AI) | Read XML → parse → modify → PATCH whole blob back on `organizations({id})` |
 | **Python SDK — recyclebinconfigs** | Recycle bin on/off + retention days | CREATE/PATCH `recyclebinconfigs` entity record |
 | **Python SDK — settingdefinition + organizationsettings** | App-level / plan-level security role toggles | Look up `settingdefinition` by `uniquename` → CREATE or PATCH `organizationsettings` row with `value` |
-| **`dataverse erp batch`** (CLI) | ERP batch job admin | [`references/erp-batch.md`](references/erp-batch.md) |
+
+ERP batch admin (`dataverse erp batch list|cancel`): see [`references/erp-batch.md`](references/erp-batch.md).
 
 Do NOT write Python scripts for operations PAC CLI can handle. Do NOT mix mechanisms (e.g., don't hand-PATCH an org column that PAC CLI already covers).
 

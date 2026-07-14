@@ -42,7 +42,7 @@ Takes exactly one positional argument: the `BatchJobRecId` — a **positive long
 
 Under the hood: `PATCH /data/BatchJobs(<recId>)` with body `{ "Status": "Cancelling" }`. The ERP runtime transitions the batch through `Cancelling` → `Cancelled` at its next scheduling tick; the CLI does not poll. On success, prints `Batch job <id> set to Cancelling.` and exits 0.
 
-**Confirmation gate** (safety rule 5 in the SKILL callout): before executing, first `list` the target row (e.g. `dataverse erp batch list --top 1 --json` filtered by id, or scan a wider `list` for the specific `BatchJobRecId`) and echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` back to the user. Then require an explicit affirmative that names the id, e.g. `"yes, cancel <BatchJobRecId>"`. Bare `"yes"` is not sufficient.
+**Confirmation gate**: before executing, first `list` the target row (e.g. `dataverse erp batch list --top 1 --json` filtered by id, or scan a wider `list` for the specific `BatchJobRecId`) and echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` back to the user. Then require an explicit affirmative that names the id, e.g. `"yes, cancel <BatchJobRecId>"`. Bare `"yes"` is not sufficient.
 
 **When cancellation is safe vs. risky**:
 - `Waiting` — safe. The batch is removed from the queue before it runs; no partial state.
