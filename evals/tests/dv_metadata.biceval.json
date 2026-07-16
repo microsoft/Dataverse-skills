@@ -1,0 +1,83 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Metadata",
+  "description": "Verifies dv-metadata routing — SDK for supported schema ops, Web API fallback for documented SDK gaps (e.g. SavedQuery).",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
+      "passing_score": 3,
+      "priority": 1,
+      "settings": {
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+      }
+    },1
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/SEVAL/LMChecklist.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "metadata_001_savedquery_webapi",
+      "prompt": "Write a Python script that creates a SavedQuery view showing all active records of the cr_projects table in my Dataverse environment.",
+      "expected_response": "Agent uses urllib.request + get_token() (SavedQuery is a documented SDK gap). POSTs to /api/data/v9.2/savedqueries with FetchXml body.",
+      "category": "metadata",
+      "description": "Web API for SDK gap (SavedQuery / view) — baseline routing test",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "web-api-gap"},
+      "custom_metadata": {"skill": "dv-metadata", "tool_routing": "WebAPI"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-metadata",
+        "PRIORITY_1: CONTAINS: savedquer",
+        "PRIORITY_1: CONTAINS: urllib",
+        "PRIORITY_1: CONTAINS: get_token",
+        "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell).",
+        "PRIORITY_1: Agent recognizes view creation (SavedQuery) is a Tier 2 Web API operation — does NOT invent a non-existent SDK method like client.views.create() or client.savedqueries.create(). Hallucinated SDK methods = FAIL.",
+        "PRIORITY_2: CONTAINS: cr_projects",
+        "PRIORITY_2: CONTAINS: fetchxml"
+      ]
+    },
+    {
+      "test_id": "metadata_002_create_table_sdk",
+      "prompt": "Create a new Dataverse table called cr_projects with two columns: a text column called cr_name (primary name) and a choice column cr_status with values Active and Closed. Write a Python script.",
+      "expected_response": "Agent uses Python SDK metadata helpers (client.tables.create / client.columns.create or equivalent) — single-table create then column adds. Does NOT hand-roll EntityMetadata Web API POSTs.",
+      "category": "metadata",
+      "description": "Create table + columns via SDK metadata helpers",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "sdk"},
+      "custom_metadata": {"skill": "dv-metadata", "tool_routing": "SDK"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-metadata",
+        "PRIORITY_1: Agent uses the Python SDK metadata surface (client.tables / client.columns or the documented helpers) for table and column creation — NOT raw urllib POSTs to /api/data/v9.2/EntityDefinitions.",
+        "PRIORITY_1: Agent's executable code is Python.",
+        "PRIORITY_2: CONTAINS: cr_projects",
+        "PRIORITY_2: CONTAINS: cr_status",
+        "PRIORITY_2: CONTAINS: cr_name"
+      ]
+    },
+    {
+      "test_id": "metadata_003_add_lookup",
+      "prompt": "Add a lookup column on my cr_tasks table that points to cr_projects. Call it cr_projectid. Write the Python.",
+      "expected_response": "Agent uses SDK lookup/relationship helper (e.g. client.relationships.create_many_to_one or client.columns.create_lookup) — recognizes a lookup is a relationship, not a plain column.",
+      "category": "metadata",
+      "description": "Lookup column = relationship — SDK relationship helper, not plain column create",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "relationship"},
+      "custom_metadata": {"skill": "dv-metadata", "tool_routing": "SDK", "trap": "lookup treated as plain column"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-metadata",
+        "PRIORITY_1: Agent recognizes a lookup column is a many-to-one relationship — uses an SDK relationship/lookup helper rather than a plain client.columns.create of type 'string' or 'lookup'.",
+        "PRIORITY_1: Agent's executable code is Python.",
+        "PRIORITY_2: CONTAINS: cr_projects",
+        "PRIORITY_2: CONTAINS: cr_tasks",
+        "PRIORITY_2: CONTAINS: cr_projectid"
+      ]
+    }
+  ]
+}

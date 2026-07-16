@@ -14,7 +14,12 @@ trigger:
 pr:
 - main
 
-name: $(Date:yyyyMMdd)$(Rev:.r) • ${{ parameters.mode }} • ${{ parameters.label }} • ${{ parameters.testFile }}
+# Use only ASCII characters in the pipeline name — BUILD_BUILDNUMBER flows into LER's runId
+# which becomes the `x-ms-correlation-id` HTTP header on the LER -> BICEP request. Non-ASCII
+# characters (bullets, em-dashes, NBSP, etc.) trigger
+# `System.Net.Http.HttpRequestException: Request headers must contain only ASCII characters`
+# in the .NET HttpClient. See https://microsoft.ghe.com/bic/LocalEvalRunner/issues/418
+name: $(Date:yyyyMMdd)$(Rev:.r) - ${{ parameters.mode }} - ${{ parameters.label }} - ${{ parameters.testFile }}
 
 pool:
   name: 'Azure Pipelines'

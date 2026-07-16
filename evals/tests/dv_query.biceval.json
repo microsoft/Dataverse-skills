@@ -1,0 +1,95 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Query",
+  "description": "Verifies dv-query SDK patterns for reading records — auto-paginating bulk reads, filters, and FetchXML/Web API fallback only where the SDK has documented gaps.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
+      "passing_score": 3,
+      "priority": 1,
+      "settings": {
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+      }
+    },1
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/SEVAL/LMChecklist.prompty",
+      "passing_score": 3,
+      "priority": 1
+    }
+  ],
+  "tests": [
+    {
+      "test_id": "query_001_bulk_read",
+      "prompt": "Show me all records in the cr_customers table from my Dataverse environment. Write a Python script.",
+      "expected_response": "Agent uses Python SDK: DataverseClient + client.records.get('cr_customers') (or client.dataframe.get / equivalent). Auto-paginates — does NOT manually construct $skip/$top URL parameters.",
+      "category": "query",
+      "description": "Bulk read via SDK — auto-paginating, no manual OData paging",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "SDK"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: CONTAINS: cr_customers",
+        "PRIORITY_1: Agent uses the official Python SDK (DataverseClient.records.get / dataframe.get / equivalent) — raw urllib/requests for a basic read the SDK already supports = FAIL.",
+        "PRIORITY_1: Agent's executable code is Python.",
+        "PRIORITY_2: Agent does NOT manually construct OData $skip/$top URL parameters for a basic 'show me records' query — relies on the SDK's auto-pagination."
+      ]
+    },
+    {
+      "test_id": "query_002_filtered_read",
+      "prompt": "Read all cr_customers where statecode = 0 (active) and city = 'Seattle'. Python.",
+      "expected_response": "Agent uses the SDK's filter parameter (e.g. client.records.get('cr_customers', filter=\"statecode eq 0 and city eq 'Seattle'\")) — server-side filter, not a client-side Python comprehension after fetching everything.",
+      "category": "query",
+      "description": "Filtered read — server-side filter via SDK, not client-side filter on a full table fetch",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query", "Type": "filter"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "SDK", "trap": "client-side filter antipattern"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: CONTAINS: cr_customers",
+        "PRIORITY_1: Agent pushes the filter to the server via the SDK filter/OData parameter — does NOT fetch the whole table and filter in a Python list comprehension or pandas mask.",
+        "PRIORITY_2: CONTAINS: statecode",
+        "PRIORITY_2: CONTAINS: Seattle"
+      ]
+    },
+    {
+      "test_id": "query_003_aggregate_fetchxml",
+      "prompt": "Get the count of cr_orders per cr_customerid for the top 10 customers by order count. Write Python.",
+      "expected_response": "Agent recognizes aggregates require FetchXML (Web API) — uses urllib.request + get_token to POST FetchXML with <attribute aggregate='count'> + <order descending='true'> + count(1) groupby, OR uses the documented SDK FetchXML helper.",
+      "category": "query",
+      "description": "Aggregation requires FetchXML — SDK gap, must use Web API or SDK FetchXML helper",
+      "priority": 1,
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query", "Type": "aggregation"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "WebAPI"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: CONTAINS: fetchxml",
+        "PRIORITY_1: Agent uses FetchXML (via Web API urllib+get_token, or the SDK's FetchXML helper) for the aggregation — does NOT fetch all rows and aggregate client-side in pandas.",
+        "PRIORITY_2: CONTAINS: cr_orders",
+        "PRIORITY_2: CONTAINS: cr_customerid",
+        "PRIORITY_2: Agent's FetchXML includes an aggregate attribute (count) and a groupby."
+      ]
+    },
+    {
+      "test_id": "query_004_single_record_mcp_or_sdk",
+      "prompt": "Look up a single Dataverse cr_customers record by id 11111111-2222-3333-4444-555555555555 and print its name.",
+      "expected_response": "Agent uses a targeted single-record read — MCP (read_record) for an interactive lookup, or SDK client.records.get_by_id. Does NOT fetch the entire table and filter.",
+      "category": "query",
+      "description": "Single-record by id — targeted read, not full-table scan",
+      "priority": 2,
+      "tags": {"Suite": "Regression", "Domain": "Query", "Skill": "dv-query", "Type": "single-record"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "SDK"},
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: CONTAINS: cr_customers",
+        "PRIORITY_1: Agent performs a targeted single-record read (by id) — does NOT fetch the whole cr_customers table and filter in memory.",
+        "PRIORITY_2: Agent uses the Python SDK get-by-id pattern or MCP read_record — not a hand-rolled urllib request when the SDK supports it."
+      ]
+    }
+  ]
+}
