@@ -18,7 +18,7 @@ When the user asks a question about their data, pick the approach by **what they
 | User asks... | Approach | Why |
 |---|---|---|
 | "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.get()` with `$filter` | Small result, no aggregation |
-| "how many X" / simple count | **MCP** `read_query` or `client.records.get()` with `count=True` | Single number |
+| "how many X" / simple count | **MCP** `read_query` or `client.records.get()` with `count=True` | Single number — but `count` caps at 5,000; for true totals above that see **Advanced OData filters & limits** |
 | Single-table aggregation (most/sum/avg/top-N) | **`$apply`** server-side aggregation (raw Web API) | One HTTP call, returns only grouped results |
 | Cross-table aggregation | **`client.dataframe.get()`** with minimal `$select` + `pd.merge()` | Server can't join; pandas merge is fast with minimal columns |
 | "show me X with related Y" / resolve lookups | `client.records.get()` with `$expand` or **QueryBuilder** (b8+) | Lookup resolution |
@@ -182,8 +182,43 @@ For aggregations and many-to-many expansion, the SDK doesn't have direct support
 
 **Quick reference:**
 - **`$expand` on N:N relationships:** `GET /<entitySet>?$expand=<n:n_nav>($select=...)` — single page only; follow `@odata.nextLink` for >5,000 results.
-- **`$apply` for aggregations:** runs server-side, returns grouped results in one call. Patterns: `groupby((col),aggregate(metric with sum as total))`, `aggregate($count as count)`, `aggregate(amount with average as avg)`. 50K source-record limit.
+- **`$apply` for aggregations:** runs server-side, returns grouped results in one call. Patterns: `groupby((col),aggregate(metric with sum as total))`, `aggregate($count as count)`, `aggregate(amount with average as avg)`. 50K source-record limit — see **Advanced OData filters & limits** below for the >50K workaround.
 - **Cross-table aggregation:** `$apply` only works within one entity set. Use `client.dataframe.get(entity, select=[...])` per table → `pd.merge()` → `groupby()`. Always pass `select=`; without it transfers 10-20× more data.
+
+## Advanced OData filters & limits
+
+These OData constructs are not expressible in the SQL subset (`client.query.sql()` / MCP `read_query`). The expressions below are portable: pass them through the SDK's `filter=` / `apply=` arguments where possible, or build the request URL with raw Web API when **parameter aliases** are required (see `In`/`ContainValues` below) — the same exception that already applies to `$apply` and N:N `$expand`.
+
+**Filter a parent table by a condition on a related collection — lambda `any` / `all`:**
+- "Has at least one related row matching X": `<nav>/any(o:o/<field> gt 1000)` — bind a range variable (`o:`) and reference related fields through it (`o/<field>`).
+- "Has no related rows at all": `not <nav>/any()`.
+- `all()` returns **true for an empty collection** (vacuous truth) — account for that when using `all`.
+- Navigation property names are **case-sensitive**. Do all of this server-side; do not fetch the related rows and filter in Python.
+
+**Match a column against a list of values — `In` / `NotIn`:** Prefer this over chaining many `or` equalities (a `$filter` is limited to ~500 conditions). **These functions require parameter aliases — inline arrays inside the function call are NOT supported and return 400:**
+```
+$filter=Microsoft.Dynamics.CRM.In(PropertyName=@p1,PropertyValues=@p2)&@p1='statuscode'&@p2=[1,2,3]
+```
+The aliases (`@p1`, `@p2`) are separate URL query parameters, so issue these via raw Web API. Do **not** write `In(PropertyName='statuscode',PropertyValues=[1,2,3])` inline.
+
+**Match a multi-select choice (MultiSelectPicklist) — `ContainValues` / `DoesNotContainValues`:** plain `eq` or string `contains()` do **not** work on multi-select columns. Use (option values as strings; parameter aliases required, same as `In`):
+```
+$filter=Microsoft.Dynamics.CRM.ContainValues(PropertyName=@p1,PropertyValues=@p2)&@p1='<col>'&@p2=['2','3']
+```
+
+**Relative-date filters:** `Microsoft.Dynamics.CRM.Today`/`ThisMonth`/`LastXDays`/`OlderThanXDays`/`On`/`Between`, etc. — e.g. `LastXDays(PropertyName=@p1,PropertyValue=@p2)&@p1='createdon'&@p2=30`. Evaluated in the **user's time zone**. (No-arg functions like `Today` take only `PropertyName=@p1`.)
+
+**Server-side filter inside `$expand`:** expand options are separated by **semicolons**; a single-level `$expand` supports `$select`, `$filter`, `$orderby`, and `$top`:
+```
+$expand=Account_Tasks($select=subject;$filter=contains(subject,'urgent');$orderby=createdon desc;$top=3)
+```
+Inside a **nested** expand (expand within expand), `$orderby` and `$top` are **not** supported.
+
+You also **cannot order the parent rows by a related/expanded field** — a top-level `$orderby=parentaccountid/name` (sorting opportunities by their account's name) is not supported. Retrieve the rows with `$expand`/`$select` and sort **client-side in Python** (e.g. `sorted(rows, key=...)`).
+
+**Counting rows — the 5,000 cap:** `$count=true` / `@odata.count` and `/<entityset>/$count` are **hard-capped at 5,000** (500 for elastic tables). For a true total above 5,000, call the **`RetrieveTotalRecordCount`** function (24-hour snapshot) or page through all matching rows and count client-side. Do **not** report the capped `@odata.count` / `count=True` value as the true total when more than 5,000 rows can match.
+
+**Aggregation over >50,000 rows:** `$apply=aggregate(...)` (and FetchXML aggregates) fail past **50,000 source rows** (`0x8004E023 AggregateQueryRecordLimit`). There is no single-query bypass: **segment** the source with `$filter` (e.g. date ranges or a categorical column) so each aggregate covers <50,000 rows, run one aggregate per segment, and combine the partials client-side.
 
 ## QueryBuilder — Fluent Query API (SDK b8+)
 
