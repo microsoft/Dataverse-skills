@@ -74,6 +74,23 @@ codex plugin marketplace upgrade dataverse-skills
 
 The listing is published at [cursor.com/marketplace/microsoft-dataverse](https://cursor.com/marketplace/microsoft-dataverse).
 
+### opencode
+
+opencode doesn't have a marketplace for skill bundles (its own `plugin` concept is for npm-based JS/TS hooks, not skills). opencode does, however, natively auto-discover skills placed under `.claude/skills/<name>/SKILL.md` — its built-in Claude Code compatibility layer. Use the installer script from a clone of this repo to copy the skills there:
+
+```bash
+git clone https://github.com/microsoft/Dataverse-skills.git
+cd Dataverse-skills
+
+# Install into a project (defaults to the current directory)
+python .github/plugins/dataverse/scripts/install-opencode.py --target /path/to/your/project
+
+# Or install globally (available in every project)
+python .github/plugins/dataverse/scripts/install-opencode.py --global
+```
+
+The script is idempotent — re-run it after pulling updates to refresh your copy. Restart (or start a new) opencode session afterward; skills are discovered at session startup.
+
 ## Verify the install
 
 After installation, ask your agent:

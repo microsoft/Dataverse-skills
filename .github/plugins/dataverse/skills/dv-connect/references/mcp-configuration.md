@@ -1,6 +1,6 @@
 # MCP Server Configuration Reference
 
-Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, Cursor, or Codex.
+Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, Cursor, Codex, or opencode.
 
 The environment URL should already be known from the `dv-connect` flow (stored in `DATAVERSE_URL` in `.env`). If it's not set, go back to Step 2 of the `dv-connect` skill to discover and select the environment first.
 
@@ -10,7 +10,7 @@ The parameters for the MCP server should be determined from context or environme
 
 ## 0. Determine which tool to configure
 
-Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, or Codex:
+Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, Codex, or opencode:
 - If explicitly mentioned in prompt, use that.
 - Otherwise, determine which tool the user is running from the context.
 - Only if choosing based on the context is impossible, ask the user:
@@ -20,12 +20,13 @@ Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, or C
 > 2. **Claude**
 > 3. **Cursor**
 > 4. **Codex**
+> 5. **opencode**
 
-Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, `cursor`, or `codex`. Store this for use in all subsequent steps.
+Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, `cursor`, `codex`, or `opencode`. Store this for use in all subsequent steps.
 
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
-- If `claude`, `cursor`, or `codex`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
+- If `claude`, `cursor`, `codex`, or `opencode`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
 - If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
 ---
@@ -84,6 +85,16 @@ Based on the scope, set the `CONFIG_PATH` variable:
 
 Store this path for use in steps 2 and 5.
 
+**If TOOL_TYPE is `opencode`:**
+
+opencode reads MCP server definitions from its own JSON config, not from any other tool's config file. The options are:
+1. **Project** (default, available only in this project) — `opencode.json` (relative to the current working directory)
+2. **Global** (available in all projects) — `~/.config/opencode/opencode.json` (use the user's home directory)
+
+Based on the scope, set the `CONFIG_PATH` variable accordingly.
+
+Store this path for use in steps 2 and 5.
+
 ---
 
 ## 2. Check already-configured MCP servers
@@ -130,6 +141,12 @@ If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP serv
 **If TOOL_TYPE is `codex`:**
 
 Read the `config.toml` file at `CONFIG_PATH` (determined in step 1) to check for already-configured servers. The file is TOML — look for `[mcp_servers.<name>]` tables and extract the environment URL from each table's `args` array (the URL is the argument that follows `"mcp"`). Store the URLs as `CONFIGURED_URLS`. If the file doesn't exist or has no `[mcp_servers.*]` tables, treat `CONFIGURED_URLS` as empty (`[]`).
+
+If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
+
+**If TOOL_TYPE is `opencode`:**
+
+Read the JSON configuration file at `CONFIG_PATH` (determined in step 1) to check for already-configured servers. The file is opencode's own config schema — look under the top-level `mcp` key; each entry is `{ "type": "local", "command": [...], ... }`. Extract the environment URL from each entry's `command` array (the URL is the argument that follows `"mcp"`, e.g. in `["npx", "-y", "@microsoft/dataverse@latest", "mcp", "https://org.crm.dynamics.com"]`). Store the URLs as `CONFIGURED_URLS`. If the file doesn't exist or has no `mcp` key, treat `CONFIGURED_URLS` as empty (`[]`). This step must never block the skill.
 
 If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
 
@@ -436,6 +453,49 @@ Where:
 - If `[mcp_servers.{SERVER_NAME}]` already exists, replace that table (and its `.env` sub-table) with the new values; otherwise append the new tables
 - After writing, ask the user to **restart Codex** for the new MCP server to load
 
+**If TOOL_TYPE is `opencode`:**
+
+Update the JSON configuration file at `CONFIG_PATH` (determined in step 1) to add the new server. opencode's config schema defines MCP servers under the top-level `mcp` key, using `type: "local"` for a stdio subprocess (same proxy pattern as Cursor/Codex) — never `type: "remote"` with a direct `url`, since the Dataverse MCP HTTP endpoint requires the npx proxy to handle authentication.
+
+**Generate a unique server name** from the `USER_URL`:
+1. Extract the subdomain (organization identifier) from the URL
+   - Example: `https://orgbc9a965c.crm10.dynamics.com` → `orgbc9a965c`
+2. Use lowercase format: `dataverse-{orgid}`
+   - Example: `dataverse-orgbc9a965c`
+
+This is the `SERVER_NAME`.
+
+**Update the configuration file:**
+
+1. Read the existing configuration file at `CONFIG_PATH`, or create a new empty config if it doesn't exist:
+   ```json
+   {}
+   ```
+
+2. Add or update the server entry under `mcp`:
+   ```json
+   {
+     "mcp": {
+       "{SERVER_NAME}": {
+         "type": "local",
+         "command": ["npx", "-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
+         "environment": {
+           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=opencode"
+         }
+       }
+     }
+   }
+   ```
+
+   Append `"--preview"` to the `command` array if the user chose the Preview endpoint in step 4.
+
+3. Write the updated configuration back to `CONFIG_PATH` with proper JSON formatting (2-space indentation).
+
+**Important notes:**
+- Do NOT overwrite other top-level keys or sibling `mcp.*` entries — preserve the existing structure
+- If `SERVER_NAME` already exists, update it with the new `command`/`environment`
+- After writing, ask the user to **restart the opencode session** (exit and relaunch `opencode`, or start a new session) for the new MCP server to load
+
 ---
 
 ## 6. Ensure tenant-level admin consent (one-time per tenant)
@@ -443,7 +503,7 @@ Where:
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot, Claude, Cursor, or Codex) from step 0
+- Tool type (Copilot, Claude, Cursor, Codex, or opencode) from step 0
 - Scope from step 1
 - Environment URL from step 3
 - Endpoint (GA or Preview) from step 4
@@ -572,6 +632,24 @@ Tell the user:
 
 Pause and give the user a chance to restart Codex before proceeding.
 
+**If TOOL_TYPE is `opencode`:**
+
+Tell the user:
+
+> ✅ Dataverse MCP server `{SERVER_NAME}` written to `{CONFIG_PATH}`.
+>
+> **IMPORTANT: opencode loads MCP servers at session startup.** **Restart the opencode session** (exit and relaunch `opencode`, or start a new session) for the Dataverse tools to appear — the current session cannot call them yet.
+>
+> After restart, you will be able to:
+> - List all tables in your Dataverse environment
+> - Query records from any table
+> - Create, update, or delete records
+> - Explore your schema and relationships
+
+**Do not claim the Dataverse MCP tools are callable in the current session.** They become available only after a restart. If the user asks you to run an MCP query before restarting, explain that the tools load on restart — do **not** spin up a separate `npx @microsoft/dataverse mcp` stdio proxy as a workaround, and if the user explicitly required MCP, do **not** silently fall back to the SDK or Web API. Surface the restart requirement instead.
+
+Pause and give the user a chance to restart the opencode session before proceeding.
+
 ---
 
 ## 9. Troubleshooting
@@ -609,3 +687,9 @@ If something goes wrong, help the user check:
   - If `--validate` returns **403 Forbidden** on the GA endpoint, the client isn't allowlisted yet — run `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A), then re-validate.
   - Confirm the server entry exists: look for `[mcp_servers.{SERVER_NAME}]` in `~/.codex/config.toml` (global) or `.codex/config.toml` (project).
   - If `npx` can't be found when Codex launches the server, ensure Node.js 18+ is on PATH; on Windows the proxy command may need `cmd /c` wrapping (see Step 5).
+- **If TOOL_TYPE is `opencode`:**
+  - The Dataverse MCP tools load only when opencode starts a session, after `opencode.json` (or `~/.config/opencode/opencode.json`) is written — the session that wrote the config cannot see them yet. Do not treat their absence in the current session as a failure.
+  - Confirm the server entry exists: look for `mcp.{SERVER_NAME}` in the file at `CONFIG_PATH`. Verify with `opencode mcp list` after restarting.
+  - If `npx` can't be found when opencode launches the server, ensure Node.js 18+ is on PATH.
+  - If `--validate` returns **403 Forbidden** on the GA endpoint, the client isn't allowlisted yet — run `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A), then re-validate.
+  - opencode also reads project skills from `.claude/skills/` automatically — if `dv-*` skills aren't showing up, confirm they were installed via `scripts/install-opencode.py` (see the README's opencode install section) rather than assuming a marketplace install happened.
