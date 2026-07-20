@@ -147,8 +147,7 @@ It does **not** cover:
 - Power Automate flows (use the maker portal or Power Automate Management API)
 - Canvas apps (use `pac canvas` or the maker portal)
 - Azure infrastructure beyond what's needed for service principal setup
-- Business Central or other Dynamics products
-- ERP X++ source authoring and package compilation
+- Business Central, or Dynamics product customization beyond the ERP data plane (X++, package compilation)
 
 ---
 

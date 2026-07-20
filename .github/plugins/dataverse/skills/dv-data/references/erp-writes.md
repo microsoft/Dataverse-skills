@@ -32,6 +32,6 @@ dataverse data delete --target erp --table CustomerGroups \
 | Primary key | single GUID | composite, usually includes `dataAreaId` |
 | Lookup binding | `@odata.bind` to navigation property | Set the FK property directly on the body |
 | Bulk write | `CreateMultiple` via SDK | **No bulk API** — DMF is the platform path |
-| Custom actions | bound/unbound via Web API | bound via `data invoke` or `api invoke --target erp` for unbound services |
+| Custom actions | bound/unbound via Web API | bound and unbound via `dataverse api invoke --target erp` |
 
 For the broader ERP routing model (when to use which tool, ERP MCP setup), see [`erp-target.md`](../../dv-overview/references/erp-target.md) in `dv-overview`.
