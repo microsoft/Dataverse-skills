@@ -50,6 +50,7 @@ Never create tables or columns outside a solution.
 | Create, update, or delete data records | **dv-data** |
 | Query or read records | **dv-query** |
 | Export or deploy solutions | **dv-solution** |
+| ERP schema | dv-query `--target erp` |
 
 ---
 

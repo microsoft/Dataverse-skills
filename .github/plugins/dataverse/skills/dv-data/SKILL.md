@@ -20,6 +20,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 | Query or read records | **dv-query** |
 | Create tables, columns, relationships, forms, views | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
+| ERP writes | Use ERP MCP or `dataverse data create/update/delete --target erp` (CLI). See [Writing ERP data](#writing-erp-data) below. |
 
 ---
 
@@ -322,6 +323,12 @@ except HttpError as e:
     # 404 — table or record not found
     # 429 — rate limited; SDK retries automatically, reduce batch size if persistent
 ```
+
+---
+
+## Writing ERP data
+
+On ERP-linked envs, ERP writes do not go through the Python SDK. See [`references/erp-writes.md`](references/erp-writes.md).
 
 ---
 
