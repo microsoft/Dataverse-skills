@@ -12,13 +12,11 @@ pac org who
 
 If the output surfaces an `erpUrl` field, capture it. (PAC CLI ERP-discovery rollout is in flight at the time of writing — this field may not appear yet.)
 
-If PAC does not surface it, fall back to the Dataverse CLI:
+If PAC does not surface it, fall back to the Dataverse CLI (uses the active profile set up in Step 2b):
 
 ```
-dataverse org who --environment <DATAVERSE_URL> --json
+dataverse org who --json
 ```
-
-Pass `--environment` explicitly — the Dataverse CLI keeps its own active profile separate from PAC's, and without it `org who` may target a stale URL. Reuse the `DATAVERSE_URL` resolved earlier.
 
 A non-null `erpUrl` / `ErpUrl` in either output is the ERP endpoint. In Step 3, when writing `.env`, append `ERP_URL=<value>` so `--target erp` routing works. If neither surfaces it, the env is Dataverse-only — skip `ERP_URL`.
 

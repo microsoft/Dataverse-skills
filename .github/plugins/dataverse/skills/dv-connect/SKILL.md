@@ -118,7 +118,7 @@ If this fails with permissions error, guide the user to [Power Platform Admin Ce
 dataverse auth who
 dataverse org who      # or: pac org who
 ```
-Parse the output to extract `DATAVERSE_URL` and `TENANT_ID`.
+Parse the output to extract `DATAVERSE_URL` and `TENANT_ID`. On ERP-linked envs, also detect the ERP endpoint — see [`erp-detection.md`](references/erp-detection.md).
 
 If neither command shows a tenant ID, fall back to:
 ```bash

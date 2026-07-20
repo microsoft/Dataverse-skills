@@ -11,6 +11,7 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 > 2. **Settings allowlist is hard.** Only the 37 PPAC toggles in [Allowed settings](#allowed-settings--hard-allowlist) may be read or updated. Any other setting **must be refused**: *"That setting is out of scope for dv-admin. Use the Power Platform admin center."*
 > 3. **Recycle bin disable is PATCH, never DELETE.** `PATCH statecode=1, statuscode=2, isreadyforrecyclebin=false`. DELETE enqueues async opt-out and orphans per-entity configs — see [`references/recycle-bin.md`](references/recycle-bin.md).
 > 4. **System tables warning.** Unfiltered bulk delete on `systemuser`, `businessunit`, `organization`, or `role` breaks the environment. Warn additionally before running.
+> 5. **ERP batch cancel is destructive and asynchronous.** Never cancel jobs in terminal statuses (`Finished`, `Error`, `Cancelled`). Before running `dataverse erp batch cancel <BatchJobRecId>`, echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` and require exactly `yes, cancel <BatchJobRecId>` — bare `yes` rejected. See [`references/erp-batch.md`](references/erp-batch.md).
 
 **Four mechanisms — pick based on where the setting lives:**
 
