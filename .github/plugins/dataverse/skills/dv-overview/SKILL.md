@@ -26,43 +26,42 @@ ls .env scripts/auth.py 2>/dev/null
 
 Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The connect flow produces the correct file structure. Skipping it is the #1 cause of broken setups.
 
-### 1. Python Only — No Exceptions
+### 1. Python for automation logic — CLIs and MCP are first-class
 
-All scripts, data operations, and automation MUST use **Python**. This plugin's entire toolchain — `scripts/auth.py`, the Dataverse SDK, all skill examples — is Python-based.
+Python is the language for automation **logic** (transformation, control flow, retry, CSV). The toolchain (`scripts/auth.py`, the SDK, skill examples) is Python-based. But MCP tools, the Dataverse CLI (`dataverse`), the Python SDK, and the PAC CLI (`pac`) are all **first-class tool invocations** — use whichever fits. `pac` is invoked freely across the solution, metadata, and plug-in skills; the Dataverse CLI has the same standing.
 
 **NEVER:**
-- Run `npm init`, `npm install`, or any Node.js/JavaScript tooling
-- Install packages via `npm`, `yarn`, or `pnpm`
-- Write scripts in JavaScript, TypeScript, PowerShell, or any language other than Python
+- Write automation *logic* in JavaScript/TypeScript/Node.js (`npm`, `yarn`, `pnpm`, `package.json`, `node_modules/`)
 - Use `@azure/msal-node`, `@azure/identity`, or any Node.js Azure SDK
-- Import or reference `node_modules/`
+- Implement a bespoke MSAL / device-code flow — auth is `scripts/auth.py`, `pac auth`, and the Dataverse CLI
 
 **ALWAYS:**
-- Use `pip install` for Python packages
-- Use `scripts/auth.py` for authentication tokens and credentials
-- Use the Python Dataverse SDK (`PowerPlatform-Dataverse-Client`) for data and schema operations
-- Use `azure-identity` (Python) for Azure credential flows
+- Use `pip install` and the Python SDK (`PowerPlatform-Dataverse-Client`) for data and schema logic
+- Use `scripts/auth.py` for tokens/credentials; `azure-identity` (Python) for Azure credential flows
+- Treat `pac` and the Dataverse CLI (`dataverse`) as allowed first-party CLIs
 
-If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read Hard Rule 1 above.
+About to run `npm` or create a `package.json`? STOP — that is off-rails. Reaching for `pac` or the Dataverse CLI is not.
 
-### 2. MCP → SDK → Web API (in that order)
+### 2. Pick the surface that fits — capability awareness, not a fixed order
 
-**Before writing ANY code, ask: can MCP handle this?** If MCP tools are available in your tool list (`list_tables`, `describe_table`, `read_query`, `create_record`, etc.):
+No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in. Soft defaults, not a required sequence.
 
-- **Writes:** ≤10 records → use MCP directly. 10+ records → use Python SDK (`dv-data`).
-- **Reads:** Simple filter, small result set (no paging needed) → use MCP. Multi-page iteration, DataFrame loading, aggregation, or queries hitting SQL limits (DISTINCT, HAVING, subqueries) → use Python SDK (`dv-query`).
+- **MCP tools** (`list_tables`, `read_query`, `create_record`, ...): fastest for small, interactive reads/writes when available. Results are held in memory, so large reads, DataFrame loads, and bulk writes can exceed its ceiling — use the SDK.
+- **Python SDK** (`PowerPlatform-Dataverse-Client`): default for automation logic — bulk CRUD (`CreateMultiple`), paged reads, DataFrames, schema creation, multi-step workflows. Managed auth, paging, retry, geo routing.
+- **Dataverse CLI (`dataverse`) / PAC CLI (`pac`)**: first-party CLIs for auth, solution lifecycle, plug-in registration, and the raw-Web-API escape hatch (`dataverse api`). Reuse the shared token cache.
+- **Raw Web API** (`get_token()` + `urllib`): only for capabilities none of the above expose (list below). Prefer `dataverse api` over hand-rolled `urllib`.
 
-Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", "show me the columns on the contact table", "create an account named Contoso."
+**Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData. Bulk record work → SDK `CreateMultiple`.
 
 **If MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
 
 **SDK checklist — evaluate EVERY time you write a script:**
 - Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
 - Bulk record operations? → `client.records.create(table, [list_of_dicts])` — see `dv-data`
-- Querying or filtering records? → `client.records.get(table, select=[...], filter="...")` — see `dv-query`
+- Querying or filtering records? → `client.records.list(table, filter="...", select=[...])` — see `dv-query`
 - Aggregation (top-N, sum, count by group, "most/least")? → Single-table: `$apply` server-side aggregation (raw Web API). Cross-table: `client.dataframe.get()` with `$select` + `pd.merge()` — see `dv-query`. Do NOT load all records without `$select` and aggregate in Python.
 - Loading data into pandas? → `client.dataframe.get(table)` — see `dv-query`
-- Single record by GUID? → `client.records.get(table, guid)` — see `dv-query`
+- Single record by GUID? → `client.records.retrieve(table, guid)` (returns `None` if not found) — see `dv-query`
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
 
@@ -74,7 +73,7 @@ Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", 
 - Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
 - Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
 - Table, column, or relationship creation — use `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` (see `dv-metadata`)
-- Querying records — use `client.records.get()` or `client.query.builder()` (see `dv-query`)
+- Querying records — use `client.records.list()` / `.retrieve()` or `client.query.builder()` (see `dv-query`)
 
 If an SDK method fails or a PAC CLI command doesn't exist, **consult the relevant skill** before falling back to raw HTTP. Improvising raw Web API calls is the #1 cause of off-rails behavior.
 
@@ -94,13 +93,11 @@ Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.p
 
 If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the `dv-connect` skill.
 
-### 4. Follow Skill Instructions, Don't Improvise
+### 4. Be honest about gaps — don't hallucinate
 
-Each skill documents a specific, tested sequence of steps. Follow them. If a skill says "use the Python SDK," use the Python SDK — do not substitute a raw HTTP call, a different library, or a different language. If a skill says "run this command," run that command — do not invent an alternative.
+Each skill documents a tested sequence — follow it when it fits. The skills are the source of truth for the supported, non-deprecated API. If a call fails with `AttributeError`, the installed SDK version may not have it — check the skill's version note and use the documented alternative.
 
-**Do NOT introspect the SDK** with `dir()`, `inspect.signature()`, or `help()` to discover APIs. The skills document the exact methods and parameters to use. If a method call fails with `AttributeError`, the installed SDK version may not have it — check the version note in the skill and fall back to the documented alternative. Introspecting the SDK wastes time and leads to using deprecated or internal APIs.
-
-If you hit a gap (something the skills don't cover), say so honestly and suggest a workaround. Do not hallucinate a path or improvise a solution using tools the skills don't mention.
+**The honesty guard:** if you hit a gap the skills don't cover, say so and suggest a workaround. **Do not hallucinate an unsupported path** — do not invent a method, parameter, or endpoint that isn't documented. If unsure, say so.
 
 ---
 

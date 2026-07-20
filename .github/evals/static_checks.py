@@ -88,6 +88,14 @@ CAT-10 Manifest Asset References
        Checks that relative 'logo' paths in plugin manifests resolve to files
        that actually exist, so an icon can't silently 404 in the marketplace.
        EVAL-ASSET-01  Every relative logo path points to an existing file
+
+CAT-11 Deprecated SDK Read API Gate
+       Hard gate against the deprecated records.get() read API drifting back
+       into a taught code sample. On the GA SDK (>=1.0.0), reads use
+       records.list() (flat), records.list_pages() (streaming), or
+       records.retrieve() (single by GUID). Only python fenced code blocks are
+       scanned (SKILL.md and references/), so prose deprecation notes are fine.
+       EVAL-DEPRECATED-01  No python code block calls records.get(
 """
 
 import argparse
@@ -187,6 +195,29 @@ def check_python_blocks(name, text):
                     f"EVAL-PY-06 [{label}] os.environ accessed without calling load_env() first"
                 )
 
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-11  Deprecated SDK Read API Gate
+# ---------------------------------------------------------------------------
+
+def check_deprecated_read_api(name, text):
+    """EVAL-DEPRECATED-01: records.get() must not appear in any python code block.
+
+    records.get() is deprecated on the GA SDK (>=1.0.0). Reads use
+    records.list() (flat QueryResult), records.list_pages() (streaming), or
+    records.retrieve() (single by GUID). Only python fenced blocks are scanned,
+    so a prose migration note ("records.get() is deprecated; use ...") is fine.
+    """
+    failures = []
+    for i, block in extract_fenced_blocks(text, "python"):
+        if ".records.get(" in block:
+            failures.append(
+                f"EVAL-DEPRECATED-01 [{name} python-block-{i}] uses deprecated "
+                f"'records.get(' -- use records.list() (flat), records.list_pages() "
+                f"(streaming), or records.retrieve() (single by GUID) on the GA SDK"
+            )
     return failures
 
 
@@ -825,6 +856,13 @@ def main():
         all_failures.extend(check_completeness(name, text, all_skill_names))
         all_failures.extend(check_allowlist(name, text))
         all_failures.extend(check_token_budget(name, text, f.parent))
+        all_failures.extend(check_deprecated_read_api(name, text))
+
+    # CAT-11 also covers reference files (Level 3), which teach the same read API
+    for rf in sorted(skills_dir.glob("*/references/*.md")):
+        rtext = rf.read_text(encoding="utf-8")
+        rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
+        all_failures.extend(check_deprecated_read_api(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
@@ -860,7 +898,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"10 categories checked"
+            f"11 categories checked"
         )
 
 

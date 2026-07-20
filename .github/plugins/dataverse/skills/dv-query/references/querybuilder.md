@@ -1,8 +1,8 @@
 # QueryBuilder — Fluent Query API (SDK b8+)
 
-> **Version check:** QueryBuilder requires SDK version b8 or later (`pip show PowerPlatform-Dataverse-Client` → Version ≥ 0.1.0b8). If you're on b7 or earlier, `client.query.builder()` does not exist — use `client.records.get()` instead (documented above). Do NOT introspect the SDK with `dir()` or `inspect` to discover APIs — if a method isn't documented here, it doesn't exist in the installed version.
+> **Version check:** QueryBuilder is available on the GA SDK (`>=1.0.0`). `client.records.list()` / `.list_pages()` cover the same reads without the fluent chain if you prefer. The skills document the supported API — if a method isn't documented here, don't assume it exists; check the skill's version notes.
 
-QueryBuilder offers composable filters, OR/AND logic, and `.to_dataframe()` in one chain. It calls `client.records.get()` internally — it is a convenience layer, not a replacement.
+QueryBuilder offers composable filters, OR/AND logic, and `.to_dataframe()` in one chain. It is a convenience layer over the same flat-read path as `client.records.list()` — not a replacement.
 
 ```python
 # Basic — flat record iteration
@@ -49,19 +49,19 @@ for page in client.query.builder("opportunity").select("name").execute(by_page=T
 
 ## Pandas DataFrame Handoff
 
-**Prefer `client.dataframe.get()` for any read that involves analysis, verification, comparison, or export.** Use `client.records.get()` with page iteration only when you need per-page processing (e.g., streaming to a file) or when the table is too large to fit in memory.
+**Prefer `client.dataframe.get()` for any read that involves analysis, verification, comparison, or export.** Use `client.records.list_pages()` (streaming, one page at a time) only when you need per-page processing (e.g., streaming to a file) or when the table is too large to fit in memory.
 
 | Task | Use | Why |
 |---|---|---|
 | Aggregate, group, pivot | `client.dataframe.get()` | pandas does this natively |
-| Compare counts after import | `client.records.get()` with single-column select | Page-count is memory-efficient; no need to load full DataFrame for a count |
+| Compare counts after import | `client.records.list_pages()` with single-column select | Page-count is memory-efficient; no need to load full DataFrame for a count |
 | Build a lookup map (small table) | `client.dataframe.get()` | `dict(zip(df["src_id"], df["guid"]))` — 1 line |
-| Build a lookup map (100K+ rows) | `client.records.get()` | Page iterator uses less memory |
+| Build a lookup map (100K+ rows) | `client.records.list_pages()` | Streaming pages use less memory |
 | Export to CSV/Excel | `client.dataframe.get()` | `df.to_csv("out.csv")` |
-| Stream large result to file | `client.records.get()` | Page-at-a-time avoids loading all into memory |
+| Stream large result to file | `client.records.list_pages()` | Page-at-a-time avoids loading all into memory |
 | Cross-table join/aggregation | `client.dataframe.get()` both tables with `$select` + `pd.merge()` | pandas merge is sub-second; use `$select` to minimize network transfer |
 
-**Always pass `select=` when calling `client.dataframe.get()` or `client.records.get()`.** Omitting `select` returns every column — on a 100K-row table with 20 columns, this transfers 10-20x more data than needed and turns a 15-second query into a 90-second query. Only request the columns you need.
+**Always pass `select=` when calling `client.dataframe.get()`, `client.records.list()`, or `client.records.list_pages()`.** Omitting `select` returns every column — on a 100K-row table with 20 columns, this transfers 10-20x more data than needed and turns a 15-second query into a 90-second query. Only request the columns you need.
 
 Use `client.dataframe.get()` to pull Dataverse records directly into a pandas DataFrame — no manual page iteration needed:
 
@@ -89,7 +89,7 @@ guids = client.dataframe.create("opportunity", df_new_records)
 
 ```python
 all_records = []
-for page in client.records.get("opportunity",
+for page in client.records.list_pages("opportunity",
     select=["name", "estimatedvalue", "statuscode"],
 ):
     all_records.extend([dict(r) for r in page])  # convert Record objects to dicts

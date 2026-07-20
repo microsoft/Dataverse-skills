@@ -17,10 +17,9 @@ Then query existing publishers and show them — the user may want to reuse one:
 ```python
 # Publisher discovery + solution creation — use SDK (never raw Web API).
 # See dv-solution for the full publisher discovery flow.
-pages = client.records.get("publisher",
+publishers = client.records.list("publisher",
     filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation'",
     select=["publisherid", "uniquename", "friendlyname", "customizationprefix"], top=10)
-publishers = [p for page in pages for p in page]
 # MANDATORY: Show existing publishers to user and ask which to use or create new
 ```
 
@@ -396,13 +395,42 @@ After creating tables / columns / alternate keys, Dataverse runs internal metada
 
 For the `retry_metadata` helper that catches transient lock errors and the full phased-creation sequence, see [`references/metadata-propagation.md`](references/metadata-propagation.md).
 
+## Inspect Existing Schema
+
+Before changing a model, inspect what already exists. These read-only calls return raw
+metadata dictionaries (PascalCase property names) and are safe to run anytime.
+
+```python
+# Columns on a table (optionally filtered / projected)
+columns = client.tables.list_columns("account", select=["LogicalName", "AttributeType", "SchemaName"])
+for col in columns:
+    print(f"{col['LogicalName']} ({col.get('AttributeType')})")
+
+# All relationships for one table (1:N, N:1, and N:N combined)
+rels = client.tables.list_table_relationships("account")
+for rel in rels:
+    print(f"{rel['SchemaName']} -> {rel.get('@odata.type')}")
+
+# All relationships in the environment (optionally filtered)
+all_rels = client.tables.list_relationships(select=["SchemaName", "ReferencedEntity", "ReferencingEntity"])
+```
+
+For SQL-queryable column discovery (virtual/computed columns excluded), `dv-query` also has
+`client.query.sql_columns(table)`.
+
 ## Session Closing: Pull to Repo
 
 **After every metadata session, perform the pull-to-repo sequence** — see dv-overview "After Any Change: Pull to Repo" for the full export/unpack/commit commands.
 
 If you used the `MSCRM.SolutionName` header during creation, verify components were added before exporting:
-```bash
-pac solution list-components --solutionUniqueName <SOLUTION_NAME> --environment <url>
+```python
+sol = client.records.list("solution",
+    filter="uniquename eq '<SOLUTION_NAME>'", select=["solutionid"], top=1).first()
+if sol is not None:
+    components = client.records.list("solutioncomponent",
+        filter=f"_solutionid_value eq {sol['solutionid']}",
+        select=["componenttype", "objectid"])
+    print(f"{len(components)} components in the solution")
 ```
 
 ---

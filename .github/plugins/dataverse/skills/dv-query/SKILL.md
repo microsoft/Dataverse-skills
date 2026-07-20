@@ -17,14 +17,14 @@ When the user asks a question about their data, pick the approach by **what they
 
 | User asks... | Approach | Why |
 |---|---|---|
-| "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.get()` with `$filter` | Small result, no aggregation |
-| "how many X" / simple count | **MCP** `read_query` or `client.records.get()` with `count=True` | Single number |
+| "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.list(table, filter=...)` | Small result, no aggregation |
+| "how many X" / simple count | **MCP** `read_query` or `len(client.records.list(table, filter=...))` | Single number |
 | Single-table aggregation (most/sum/avg/top-N) | **`$apply`** server-side aggregation (raw Web API) | One HTTP call, returns only grouped results |
 | Cross-table aggregation | **`client.dataframe.get()`** with minimal `$select` + `pd.merge()` | Server can't join; pandas merge is fast with minimal columns |
-| "show me X with related Y" / resolve lookups | `client.records.get()` with `$expand` or **QueryBuilder** (b8+) | Lookup resolution |
+| "show me X with related Y" / resolve lookups | `client.records.list(table, expand=...)` or **QueryBuilder** (b8+) | Lookup resolution |
 | "export this data" / bulk extract | **`client.dataframe.get()`** with `select=` | Direct to DataFrame → CSV |
 | "load into notebook" / interactive analysis | **`client.dataframe.get()`** or **QueryBuilder** `.to_dataframe()` (b8+) | pandas native |
-| "find duplicates" / complex filter | `client.records.get()` with `$filter` or **QueryBuilder** (b8+) | SDK handles pagination |
+| "find duplicates" / complex filter | `client.records.list(table, filter=...)` or **QueryBuilder** (b8+) | SDK handles pagination |
 | Simple filtered read (<5K rows) | **`client.query.sql()`** | Lightweight SQL SELECT with WHERE, ORDER BY, TOP |
 
 **Key principle:** Let the server do the work. For single-table aggregation, use `$apply` — it runs server-side and returns only grouped results. For cross-table questions, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()` — the merge itself is sub-second; the bottleneck is network transfer, which `$select` minimizes.
@@ -52,6 +52,43 @@ for r in results:
 ```
 
 **Do NOT use for:** Tables >5K rows (results silently truncated), aggregation (no GROUP BY), or cross-table queries (no JOINs). Use `$apply` for single-table aggregation and `client.dataframe.get()` + `pd.merge()` for cross-table.
+
+## FetchXML — server-side joins and aggregates
+
+For SQL-JOIN scenarios or aggregates the OData builder cannot express, use FetchXML. `client.query.fetchxml(xml)` returns an inert query object — no HTTP is made until you call `.execute()` (eager, all pages) or `.execute_pages()` (lazy, one page at a time). Both return `QueryResult` pages with `.to_dataframe()`.
+
+```python
+query = client.query.fetchxml("""
+  <fetch top="50">
+    <entity name="account">
+      <attribute name="name" />
+      <link-entity name="contact" from="parentcustomerid" to="accountid" alias="c" link-type="inner">
+        <attribute name="fullname" />
+      </link-entity>
+    </entity>
+  </fetch>
+""")
+
+result = query.execute()          # collect all pages
+df = result.to_dataframe()
+
+# Or stream one page at a time for large results:
+for page in query.execute_pages():
+    print(page.to_dataframe().shape)
+```
+
+## Discover queryable columns — `client.query.sql_columns()`
+
+Before writing a SQL or `$select` read, list the columns the SQL endpoint can actually query — virtual and computed lookup-display columns are excluded. Each entry has `name`, `type`, `is_pk`, `is_name`, and `label`.
+
+```python
+for c in client.query.sql_columns("account"):
+    print(f"{c['name']:30s} {c['type']:20s} PK={c['is_pk']}")
+```
+
+For deeper schema inspection — full column metadata and table relationships — use `dv-metadata`
+(`client.tables.list_columns()`, `client.tables.list_relationships()`,
+`client.tables.list_table_relationships()`).
 
 ## Skill boundaries
 
@@ -94,32 +131,50 @@ Getting this wrong causes 400 errors.
 
 ---
 
-## Query Records (multi-page)
+## Query Records
 
-`client.records.get()` is the primary read method — works on all SDK versions (b6+). It returns a page iterator for multi-record queries and a single Record for by-GUID fetch. **Always use `select=` to limit columns.**
+`client.records.list()` is the primary read method on the GA SDK. It collects all pages and returns a flat `QueryResult` you iterate directly (records, not pages). For very large result sets, `client.records.list_pages()` streams one `QueryResult` per HTTP page. **Always use `select=` to limit columns.**
 
 ```python
-for page in client.records.get(
+# list() -- flat QueryResult, iterate records directly
+result = client.records.list(
     "new_ticket",
     select=["new_name", "new_priority", "new_status"],
     filter="new_status eq 100000000",
     orderby=["new_name asc"],
     top=50,
-):
-    for r in page:
-        print(r["new_name"], r["new_priority"])
+)
+for r in result:
+    print(r["new_name"], r["new_priority"])
+
+print(f"{len(result)} tickets")   # QueryResult supports len(), indexing, .first(), .to_dataframe()
 ```
 
-`client.records.get()` returns a page iterator — always iterate pages and then records within each page. Each record is a `Record` object that supports dict-like access: `r["column"]`, `r.get("column")`, `r.keys()`. Do not use `r.data.get()` — use `r.get()` directly.
+For large tables where you do not want every row in memory at once, stream pages:
+
+```python
+for page in client.records.list_pages("new_ticket", select=["new_name"], page_size=200):
+    for r in page:          # each page is a QueryResult
+        print(r["new_name"])
+```
+
+Each record is a `Record` object that supports dict-like access: `r["column"]`, `r.get("column")`, `r.keys()`. Do not use `r.data.get()` -- use `r.get()` directly.
+
+> **Migrating from `records.get()`:** `records.get()` is deprecated on the GA SDK. Replace `for page in client.records.get(...): for r in page:` with `for r in client.records.list(...):` (flat), or keep the page loop using `list_pages(...)`. Replace a by-GUID `records.get(table, guid)` with `records.retrieve(table, guid)` (returns `None` if not found).
 
 ---
 
 ## Fetch a Single Record by ID
 
+`client.records.retrieve()` returns the record, or `None` if no row has that GUID (no exception on 404).
+
 ```python
-record = client.records.get("new_ticket", "<record-guid>",
+record = client.records.retrieve("new_ticket", "<record-guid>",
     select=["new_name", "new_priority", "new_status"])
-print(record["new_name"])
+if record is not None:
+    print(record["new_name"])
+else:
+    print("Ticket not found")
 ```
 
 ---
@@ -129,13 +184,12 @@ print(record["new_name"])
 To show display names instead of GUIDs, request the formatted value annotation via `include_annotations`:
 
 ```python
-for page in client.records.get("opportunity",
+for r in client.records.list("opportunity",
     select=["name", "estimatedvalue", "_parentaccountid_value"],
     include_annotations="OData.Community.Display.V1.FormattedValue",
 ):
-    for r in page:
-        account_name = r.get("_parentaccountid_value@OData.Community.Display.V1.FormattedValue")
-        print(f"{r['name']} — {account_name}")
+    account_name = r.get("_parentaccountid_value@OData.Community.Display.V1.FormattedValue")
+    print(f"{r['name']} — {account_name}")
 ```
 
 **You MUST pass `include_annotations`** — without it, the `Prefer: odata.include-annotations` header is not sent and formatted values are not in the response. Use `"*"` for all annotations or the specific annotation name above.
@@ -147,13 +201,12 @@ Formatted values are available for lookup, choice, status, and owner fields.
 ## $expand — Resolve Lookup to Full Related Record
 
 ```python
-for page in client.records.get("opportunity",
+for r in client.records.list("opportunity",
     select=["name", "estimatedvalue"],
     expand=["parentaccountid($select=name)"],   # nested $select avoids fetching all account columns
 ):
-    for r in page:
-        account = r.get("parentaccountid") or {}
-        print(f"{r['name']} — {account.get('name', 'Unknown')}")
+    account = r.get("parentaccountid") or {}
+    print(f"{r['name']} — {account.get('name', 'Unknown')}")
 ```
 
 Always use nested `$select` inside `$expand` — without it, Dataverse returns every column on the related entity, which wastes bandwidth and memory.
@@ -161,15 +214,14 @@ Always use nested `$select` inside `$expand` — without it, Dataverse returns e
 ### $expand with multiple custom lookups
 
 ```python
-for page in client.records.get(
+for r in client.records.list(
     "new_ticket",
     select=["new_name", "new_priority", "new_status"],
     expand=["new_CustomerId($select=new_name)", "new_AgentId($select=new_name)"],  # nested $select + case-sensitive nav props
 ):
-    for r in page:
-        customer = r.get("new_CustomerId") or {}
-        agent    = r.get("new_AgentId") or {}
-        print(f"{r['new_name']} | {customer.get('new_name','')} | {agent.get('new_name','')}")
+    customer = r.get("new_CustomerId") or {}
+    agent    = r.get("new_AgentId") or {}
+    print(f"{r['new_name']} | {customer.get('new_name','')} | {agent.get('new_name','')}")
 ```
 
 > `expand` uses the Navigation Property Name (`new_CustomerId`), not the lowercase logical name (`new_customerid`). Using lowercase causes a 400 error.

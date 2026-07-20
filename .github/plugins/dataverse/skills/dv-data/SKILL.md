@@ -23,9 +23,9 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 ---
 
-## Before Writing ANY Script — Check MCP First
+## Choosing MCP vs the SDK for writes
 
-**If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, or operations the SDK supports that MCP cannot (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
+**If MCP tools are available** (`create_record`, `update_record`), they are the quickest path for a **small, interactive** set of writes — no script needed. The SDK is the default when the task needs bulk writes (it holds rows in memory, so a large batch can exceed the MCP memory ceiling), data transformation, retry logic, CSV import, or SDK-only operations (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
 
 ## SDK-First Rule
 
@@ -258,9 +258,8 @@ If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs
 ```python
 # Build email -> GUID map first
 email_to_guid = {}
-for page in client.records.get("new_customer", select=["new_customerid", "new_email"]):
-    for r in page:
-        email_to_guid[r["new_email"]] = r["new_customerid"]
+for r in client.records.list("new_customer", select=["new_customerid", "new_email"]):
+    email_to_guid[r["new_email"]] = r["new_customerid"]
 
 # Use it during import
 records = []

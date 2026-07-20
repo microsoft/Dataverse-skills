@@ -77,11 +77,10 @@ def bulk_upsert(logical_name, items, chunk_size=1000, retries=3):
 def build_map(logical_name, src_col, id_col):
     """Query Dataverse to build source_id -> GUID map after upsert."""
     result = {}
-    for page in client.records.get(logical_name, select=[src_col, id_col]):
-        for r in page:
-            src_val = r.get(src_col)
-            if src_val is not None:
-                result[src_val] = r[id_col]
+    for r in client.records.list(logical_name, select=[src_col, id_col]):
+        src_val = r.get(src_col)
+        if src_val is not None:
+            result[src_val] = r[id_col]
     return result
 
 def upsert_table(logical_name, items, chunk_size=1000):
@@ -164,7 +163,7 @@ After all levels are imported, verify record counts match the source. Count by i
 
 ```python
 def count_records(logical_name, id_col):
-    return sum(len(page) for page in client.records.get(logical_name, select=[id_col]))
+    return sum(len(page) for page in client.records.list_pages(logical_name, select=[id_col]))
 
 # Build expected counts from source data (e.g., len(rows) per table from earlier import phases)
 expected = {"prefix_department": 12, "prefix_employee": 500, "prefix_timesheet": 15000}
