@@ -71,6 +71,13 @@ steps:
   displayName: 'Checkout evaluator prompts'
   fetchDepth: 1
 
+# The Execute template runs an external script (execute-biceval.ps1) from the
+# LocalEvalRunner repo via scriptPath, so that repo must be present in the
+# workspace. Multi-repo checkout places it at $(Build.SourcesDirectory)/LocalEvalRunner.
+- checkout: LocalEvalRunner
+  displayName: 'Checkout LocalEvalRunner (eval scripts)'
+  fetchDepth: 1
+
 # Setup: .NET, NuGet auth, LocalEvalRunner install, Copilot CLI, auth token
 - template: .pipelines/templates/steps/BicEval-SetupTemplate.yml@LocalEvalRunner
   parameters:
@@ -99,6 +106,9 @@ steps:
     azureServiceConnection: ${{ parameters.azureServiceConnection }}
     concurrency: ${{ parameters.concurrency }}
     serviceName: 'DataverseSkillsPlugin'
+    # Resolve the external eval script from the checked-out LocalEvalRunner repo:
+    # $(Build.SourcesDirectory)/LocalEvalRunner/.pipelines/scripts/execute-biceval.ps1
+    scriptsDirectory: 'LocalEvalRunner/.pipelines/scripts'
 
 # Publish: test results + artifacts
 - template: .pipelines/templates/steps/BicEval-PublishTemplate.yml@LocalEvalRunner
