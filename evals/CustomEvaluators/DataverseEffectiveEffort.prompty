@@ -15,8 +15,9 @@ description: >
   selected, effective-effort ratio, transient-failure count, timing basis,
   outcome, owner/pipeline) so results can be trended, thresholded, and compared
   across MCP / SDK / CLI approaches. Runs ALONGSIDE the correctness / assertion
-  evaluators — it does NOT replace them and is informational (set passing_score
-  0 in the suite) so its metrics act purely as additional judge context.
+  evaluators — it does NOT replace them and is informational (a passing_score of
+  1 in the suite stays non-gating because every score is >= 1) so its metrics
+  act purely as additional judge context.
 score_min: 1
 score_max: 5
 threshold: 3
