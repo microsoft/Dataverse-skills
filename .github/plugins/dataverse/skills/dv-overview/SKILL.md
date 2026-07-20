@@ -46,12 +46,12 @@ About to run `npm` or create a `package.json`? STOP — that is off-rails. Reach
 
 No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in. Soft defaults, not a required sequence.
 
-- **MCP tools** (`list_tables`, `read_query`, `create_record`, ...): fastest for small, interactive reads/writes when available. Results are held in memory, so large reads, DataFrame loads, and bulk writes can exceed its ceiling — use the SDK.
+- **MCP tools** (`list_tables`, `read_query`, `create_record`, ...): fastest for small, interactive reads/writes when available. Held in memory, so large reads, DataFrame loads, and bulk writes can exceed its ceiling — use the SDK.
 - **Python SDK** (`PowerPlatform-Dataverse-Client`): default for automation logic — bulk CRUD (`CreateMultiple`), paged reads, DataFrames, schema creation, multi-step workflows. Managed auth, paging, retry, geo routing.
-- **Dataverse CLI (`dataverse`) / PAC CLI (`pac`)**: first-party CLIs for auth, solution lifecycle, plug-in registration, and the raw-Web-API escape hatch (`dataverse api`). Reuse the shared token cache.
+- **PAC CLI (`pac`)** = control plane: solution ALM (export/import/pack), environment/tenant admin, plug-in registration. **Dataverse CLI (`dataverse`)** = data plane, headless: `dataverse api` Web API calls (data + metadata) and the MCP proxy. Shared token cache.
 - **Raw Web API** (`get_token()` + `urllib`): only for capabilities none of the above expose (list below). Prefer `dataverse api` over hand-rolled `urllib`.
 
-**Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData. Bulk record work → SDK `CreateMultiple`.
+**Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData.
 
 **If MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
 
