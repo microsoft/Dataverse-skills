@@ -10,9 +10,13 @@ description: >
   propagation delays) and the retries needed to recover from them. Isolates how
   well the dv-skills taught the agent to work like an expert Dataverse developer:
   correct outcome, most direct path, right tool the first time, least wasted
-  effort. Runs ALONGSIDE the correctness / assertion evaluators — it does NOT
-  replace them and is informational (set passing_score 0 in the suite) so its
-  score + reasoning act purely as additional judge context.
+  effort. Emits several named metrics — EffectiveEffort, PathOptimality,
+  OutcomeAchieved, ExecutionEfficiency — plus an extra_outputs bag (path
+  selected, effective-effort ratio, transient-failure count, timing basis,
+  outcome, owner/pipeline) so results can be trended, thresholded, and compared
+  across MCP / SDK / CLI approaches. Runs ALONGSIDE the correctness / assertion
+  evaluators — it does NOT replace them and is informational (set passing_score
+  0 in the suite) so its metrics act purely as additional judge context.
 score_min: 1
 score_max: 5
 threshold: 3
@@ -23,7 +27,7 @@ model:
     top_p: 1.0
     presence_penalty: 0
     frequency_penalty: 0
-    max_tokens: 900
+    max_tokens: 1200
     response_format:
       type: json_object
 
@@ -65,12 +69,49 @@ Scoring (1-5):
 1 → Ineffective. Low productive fraction; wrong-tool-first and repeated missteps dominate, or never reached a correct, direct solution.
 
 Guidance:
-- Prefer TIMING evidence if the tool chain or conversation exposes per-step durations or timestamps: sum effective vs agent-wasted time and reason about that ratio. If no timing is present, use step/turn COUNT as the time proxy. State which basis you used.
+- Prefer TIMING evidence if the tool chain or conversation exposes per-step durations or timestamps: sum effective vs agent-wasted time and reason about that ratio. If no timing is present, use step/turn COUNT as the time proxy. Record which in duration_basis.
 - Judge directness against the Expected expert approach and the routing implied by Context (custom_metadata: skill, tool_routing, trap). E.g., MCP for <=10 records; SDK CreateMultiple / UpdateMultiple for bulk; query-then-delete for bulk delete; get_credential for SDK vs get_token for Web API.
 - Cite [L##] line numbers from the conversation for each class (A) exclusion and each class (B) waste you count.
 
-Return ONLY a JSON object:
-{"score": <1-5>, "reasoning": "<state basis (timing|steps); list class (A) exclusions with [L##]; list class (B) agent waste with [L##]; give the effective-effort estimate; if score < 5, add ONE concrete dv-skills improvement that would have made the agent more efficient>"}
+STEP 3 — Emit tracked metrics (for dashboards, threshold gating, and path comparison).
+Alongside EffectiveEffort, produce these named metrics so results can be trended and compared across runs, models, and approaches:
+- PathOptimality (1-5): identify the PRIMARY path the agent actually used (MCP vs Python SDK vs PAC CLI vs raw Web API) and score whether it matches the ideal routing for THIS task. 5 = optimal path on the first try; 1 = wrong path (e.g., per-record MCP loop or raw Web API for a bulk SDK task).
+- OutcomeAchieved (1-5): outcome-based, customer-facing result — did the agent actually accomplish what the prompt asked, verified against the org where possible? 5 = fully achieved and verified; 3 = partial; 1 = not achieved. This is about the END RESULT, independent of how tidy the path was.
+- ExecutionEfficiency (1-5): time/latency AFTER excluding class (A). 5 = minimal wall-clock/steps for this task; 1 = very slow or step-heavy due to class (B) waste. Use timing if exposed, else step/turn count.
+
+Also populate extra_outputs with raw tracked data (all values as strings):
+- path_selected: MCP | SDK | PAC_CLI | WebAPI | mixed
+- duration_basis: timing | steps  (basis used for ExecutionEfficiency)
+- effective_effort_ratio: 0.00-1.00  (productive / (productive + agent-wasted))
+- transient_failures_excluded: integer count of class (A) infra/connectivity events you excluded
+- agent_waste_events: integer count of class (B) agent-controlled missteps
+- estimated_effective_units: e.g. "6 steps" or "42s"
+- estimated_wasted_units: e.g. "1 step" or "8s"
+- outcome: achieved | partial | not_achieved
+- owner: echo custom_metadata.owner if present, else "unspecified"
+- pipeline: echo custom_metadata.pipeline if present, else "unspecified"
+
+Return ONLY a JSON object in exactly this shape (each score is an integer 1-5; keep every reason short and cite [L##]):
+{
+  "scores": {
+    "EffectiveEffort":     {"score": <1-5>, "reason": "<basis timing|steps; class-A exclusions [L##]; class-B waste [L##]; effective-effort estimate; if <5, ONE concrete dv-skills fix>"},
+    "PathOptimality":      {"score": <1-5>, "reason": "<path actually used and whether it was optimal for this task [L##]>"},
+    "OutcomeAchieved":     {"score": <1-5>, "reason": "<was the requested outcome achieved/verified [L##]>"},
+    "ExecutionEfficiency": {"score": <1-5>, "reason": "<time/latency after excluding class-A; basis timing|steps [L##]>"}
+  },
+  "extra_outputs": {
+    "path_selected": "<MCP|SDK|PAC_CLI|WebAPI|mixed>",
+    "duration_basis": "<timing|steps>",
+    "effective_effort_ratio": "<0.00-1.00>",
+    "transient_failures_excluded": "<integer>",
+    "agent_waste_events": "<integer>",
+    "estimated_effective_units": "<number+unit>",
+    "estimated_wasted_units": "<number+unit>",
+    "outcome": "<achieved|partial|not_achieved>",
+    "owner": "<custom_metadata.owner or unspecified>",
+    "pipeline": "<custom_metadata.pipeline or unspecified>"
+  }
+}
 
 user:
 ## Task (what the user asked)
