@@ -28,7 +28,7 @@ Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. Th
 
 ### 1. Python for automation logic — CLIs and MCP are first-class
 
-Python is the language for automation **logic** (transformation, control flow, retry, CSV). The toolchain (`scripts/auth.py`, the SDK, skill examples) is Python-based. But MCP tools, the Dataverse CLI (`dataverse`), the Python SDK, and the PAC CLI (`pac`) are all **first-class tool invocations** — use whichever fits. `pac` is invoked freely across the solution, metadata, and plug-in skills; the Dataverse CLI has the same standing.
+Python is the language for automation **logic** (transformation, control flow, retry, CSV). The toolchain (`scripts/auth.py`, the SDK, skill examples) is Python-based. But MCP tools, the Dataverse CLI (`dataverse`), the Python SDK, and the PAC CLI (`pac`) are all **first-class tool invocations** — use whichever fits. The Dataverse CLI has the same standing as `pac`, which is invoked freely across the solution, metadata, and plug-in skills.
 
 **NEVER:**
 - Write automation *logic* in JavaScript/TypeScript/Node.js (`npm`, `yarn`, `pnpm`, `package.json`, `node_modules/`)
@@ -38,7 +38,7 @@ Python is the language for automation **logic** (transformation, control flow, r
 **ALWAYS:**
 - Use `pip install` and the Python SDK (`PowerPlatform-Dataverse-Client`) for data and schema logic
 - Use `scripts/auth.py` for tokens/credentials; `azure-identity` (Python) for Azure credential flows
-- Treat `pac` and the Dataverse CLI (`dataverse`) as allowed first-party CLIs
+- Treat the Dataverse CLI (`dataverse`) and `pac` as allowed first-party CLIs
 
 About to run `npm` or create a `package.json`? STOP — that is off-rails. Reaching for `pac` or the Dataverse CLI is not.
 
@@ -48,7 +48,7 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 
 - **MCP tools** (`list_tables`, `read_query`, `create_record`, ...): fastest for small, interactive reads/writes when available. Held in memory, so large reads, DataFrame loads, and bulk writes can exceed its ceiling — use the SDK.
 - **Python SDK** (`PowerPlatform-Dataverse-Client`): default for automation logic — bulk CRUD (`CreateMultiple`), paged reads, DataFrames, schema creation, multi-step workflows. Managed auth, paging, retry, geo routing.
-- **PAC CLI (`pac`)** = control plane: solution ALM (export/import/pack), environment/tenant admin, plug-in registration. **Dataverse CLI (`dataverse`)** = data plane, headless: `dataverse api` Web API calls (data + metadata) and the MCP proxy. Shared token cache.
+- **Dataverse CLI (`dataverse`)** = data plane, headless: `dataverse api` Web API calls (data + metadata) and the MCP proxy. **PAC CLI (`pac`)** = control plane: solution ALM (export/import/pack), environment/tenant admin, plug-in registration. Shared token cache.
 - **Raw Web API** (`get_token()` + `urllib`): only for capabilities none of the above expose (list below). Prefer `dataverse api` over hand-rolled `urllib`.
 
 **Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData.
