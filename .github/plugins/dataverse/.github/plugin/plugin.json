@@ -1,7 +1,7 @@
 {
   "name": "dataverse",
-  "description": "Agent skills for building on, analyzing, and managing Microsoft Dataverse — with Dataverse MCP, PAC CLI, and Python SDK.",
-  "version": "1.5.0",
+  "description": "Microsoft Dataverse plugin for coding agents — powering CRUD, bulk data operations, advanced queries, schema lifecycle, and environment management through intelligent skills that unify MCP, CLI, and SDK workflows.",
+  "version": "1.6.0",
   "author": {
     "name": "Microsoft",
     "url": "https://www.microsoft.com"
