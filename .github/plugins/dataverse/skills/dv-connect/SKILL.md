@@ -96,11 +96,7 @@ dataverse auth create --environment <url>          # interactive (WAM broker on 
 dataverse auth create --environment <url> --deviceCode   # headless / remote / SSH
 ```
 
-On first run in a tenant, AAD may prompt for admin consent for app `0c412cc3-0dd6-449b-987f-05b053db9457`. If the user lacks consent rights, ask an admin to visit:
-
-```
-https://login.microsoftonline.com/<tenant-id>/adminconsent?client_id=0c412cc3-0dd6-449b-987f-05b053db9457
-```
+If the user hits an admin-consent error, the CLI prints the correct scope-scoped consent URL to share with a tenant admin — do not synthesize one.
 
 **To switch between existing DV CLI profiles:**
 ```
@@ -118,7 +114,7 @@ If this fails with permissions error, guide the user to [Power Platform Admin Ce
 dataverse auth who
 dataverse org who      # or: pac org who
 ```
-Parse the output to extract `DATAVERSE_URL` and `TENANT_ID`.
+Parse the output to extract `DATAVERSE_URL`, `TENANT_ID`, and — on ERP-linked envs — `ERP_URL` (see [`erp-detection.md`](references/erp-detection.md)).
 
 If neither command shows a tenant ID, fall back to:
 ```bash

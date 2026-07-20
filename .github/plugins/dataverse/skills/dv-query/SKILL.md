@@ -11,6 +11,8 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 **All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
 
+**ERP target is a separate path.** ERP (Finance and Operations), when linked to a Dataverse env, does not go through the Python SDK. See [`references/erp-reads.md`](references/erp-reads.md).
+
 ## How to Answer Data Questions
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:
@@ -57,7 +59,8 @@ for r in results:
 
 | Need | Use instead |
 |---|---|
-| Create, update, delete records | **dv-data** |
+| Create, update, delete records (Dataverse) | **dv-data** |
+| Query, create, update, delete records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) and [`erp-writes`](../dv-data/references/erp-writes.md) |
 | Create tables, columns, relationships | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
 
@@ -76,7 +79,7 @@ from auth import get_client
 client = get_client("dv-query")
 ```
 
-`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup.
+`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup. For ERP, use ERP MCP or the Dataverse CLI `--target erp` path — see [`references/erp-reads.md`](references/erp-reads.md).
 
 ---
 
@@ -192,6 +195,10 @@ Available in `PowerPlatform-Dataverse-Client` b8+. Chainable builder for complex
 ## Jupyter Notebook Setup
 
 For interactive querying in notebooks (auth + DataverseClient + DataFrame display), see [`references/jupyter-setup.md`](references/jupyter-setup.md).
+
+## Querying ERP data
+
+On ERP-linked envs, ERP reads do not go through `DataverseClient`. Use ERP MCP or `dataverse data query/get/count --target erp`. See [`references/erp-reads.md`](references/erp-reads.md).
 
 ## Common Query Errors
 
