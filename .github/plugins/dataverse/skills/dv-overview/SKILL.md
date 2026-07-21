@@ -5,7 +5,7 @@ description: Tool routing and cross-cutting rules for Dataverse work — which s
 
 # Skill: Overview — What to Use and When
 
-This skill provides cross-cutting context that no individual skill owns: what the plugin covers, the tool-capability reference, safety rules, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here.
+This skill provides cross-cutting context that no individual skill owns: what the plugin covers, the tool-capability reference, safety rules, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
 
 ---
 
@@ -228,20 +228,4 @@ git push
 ```
 
 The repo is always the source of truth.
-
----
-
-## UX Principle: Natural Language First
-
-Users should never need to invoke skills or slash commands directly. The intended workflow is:
-
-1. Install the plugin
-2. Describe what you want in plain English
-3. The agent figures out the right sequence of tools, APIs, and scripts
-
-**Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
-
-From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
-
-Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
 
