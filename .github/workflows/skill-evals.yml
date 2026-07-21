@@ -3,10 +3,6 @@ name: Skill Evals
 on:
   pull_request:
     branches: [main]
-    paths:
-      - '.github/plugins/dataverse/**'
-      - '.github/evals/**'
-      - '.github/plugin/marketplace.json'
 
 jobs:
   static-checks:
