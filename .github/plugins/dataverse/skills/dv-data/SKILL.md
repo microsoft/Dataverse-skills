@@ -281,7 +281,7 @@ guids = client.records.create("new_interaction", records)
 Before bulk-creating in a system table (account, contact, opportunity):
 1. Create a single test record with your intended minimal payload
 2. If `HttpError` 400 is raised, the error message names the missing required field
-3. Some required fields are plugin-enforced and not visible in `describe_table`
+3. Some required fields are plugin-enforced and not visible in `describe`
 4. Delete the test record, then proceed with bulk create
 
 ---

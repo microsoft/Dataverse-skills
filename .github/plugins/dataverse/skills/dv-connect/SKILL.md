@@ -295,7 +295,7 @@ claude mcp list
 ```
 This proves the MCP server process starts and speaks the MCP protocol. It does NOT by itself prove that data operations work — authentication, environment allowlisting, and endpoint reachability are only exercised on the first real tool call.
 
-**Check 2: Agent successfully calls `list_tables` and returns data**
+**Check 2: Agent successfully lists tables via `describe`/`search` and returns data**
 > "List the tables in my Dataverse environment."
 
 This proves end-to-end wiring: auth, tenant consent, environment allowlist, and endpoint reachability are all correct. If the agent falls back to PAC CLI or Web API, see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting.
@@ -305,7 +305,7 @@ Only when **both** checks pass is the setup verified.
 **Interpreting failures:**
 
 - If Check 1 fails (server not ✓ Connected): the MCP server itself cannot start. Re-run Step 6 and check that `npx`/Node.js are installed and the MCP registration succeeded.
-- If Check 1 passes but Check 2 fails (server starts but `list_tables` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
+- If Check 1 passes but Check 2 fails (server starts but `describe`/`search` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
 
 **Diagnostic — `--validate` (for failure investigation only):**
 ```
@@ -331,7 +331,7 @@ This exercises two Dataverse MCP endpoints with a fresh authentication handshake
 |---|---|
 | Create/read/update/delete data records | MCP server |
 | Create a new table | MCP server |
-| Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
+| Explore what tables/columns exist | MCP server (`search`, `describe`) |
 | Add a column to an existing table | MCP server (`update_table`) for basic columns; SDK or Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
 | Create a relationship / lookup | SDK (see `dv-metadata`) |
 | Create or modify a form | Web API (see `dv-metadata`) |

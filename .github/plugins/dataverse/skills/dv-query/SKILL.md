@@ -250,7 +250,7 @@ For interactive querying in notebooks (auth + DataverseClient + DataFrame displa
 | Status | Cause | Fix |
 |---|---|---|
 | 400 | Wrong field casing in `$select`/`$filter` (must be lowercase LogicalName) or `$expand` (must be case-sensitive Navigation Property Name) | Verify names via `EntityDefinitions(LogicalName='...')/Attributes` |
-| 400 | Unsupported SQL — MCP `read_query` rejects DISTINCT/HAVING/subqueries/OFFSET/UNION/JOIN/GROUP BY; `client.query.sql()` rejects `SELECT *`/subqueries/CTE/HAVING/UNION/RIGHT/FULL/CROSS JOIN/functions (but **allows** INNER/LEFT JOIN, GROUP BY, DISTINCT) | Use `fetchxml()`/`$apply` for shapes `sql()` can't express, or pandas for cross-table |
+| 400 | Unsupported SQL — MCP `read_query` rejects DISTINCT/HAVING/subqueries/OFFSET/UNION/CAST/CONVERT/CASE/date-functions (but **allows** JOIN + GROUP BY); `client.query.sql()` rejects `SELECT *`/subqueries/CTE/HAVING/UNION/RIGHT/FULL/CROSS JOIN/functions (but **allows** INNER/LEFT JOIN, GROUP BY, DISTINCT) | Use `fetchxml()`/`$apply` for shapes `sql()` can't express, or pandas for cross-table |
 | 404 | Table logical name not found | Check spelling — use `client.tables.get("<name>")` to verify |
 | 429 | Rate limited | SDK retries automatically; reduce page size or add delays between pages |
 

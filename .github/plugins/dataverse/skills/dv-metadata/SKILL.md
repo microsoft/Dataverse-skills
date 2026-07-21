@@ -494,7 +494,7 @@ This matters for import scripts that need to discover entity set names (e.g., `n
 
 When using MCP `create_table` or `update_table`:
 
-- **Timeouts don't mean failure.** Always `describe_table` before retrying. If the table exists, skip creation.
+- **Timeouts don't mean failure.** Always `describe` (e.g. `describe('tables/{name}')`) before retrying. If the table exists, skip creation.
 - **Self-referential lookups** (e.g., Parent → same table) must be added via `update_table` after the table is created.
-- **Metadata cache delays.** After `create_table`, call `describe_table` before `update_table` to force cache refresh.
-- **Column name normalization.** Spaces in column names become underscores: `"Specialty Area"` → `cr9ac_specialty_area`. Always verify with `describe_table`.
+- **Metadata cache delays.** After `create_table`, call `describe` before `update_table` to force cache refresh.
+- **Column name normalization.** Spaces in column names become underscores: `"Specialty Area"` → `cr9ac_specialty_area`. Always verify with `describe`.
