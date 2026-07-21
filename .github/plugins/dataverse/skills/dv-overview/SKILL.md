@@ -1,24 +1,36 @@
 ---
 name: dv-overview
-description: Tool routing, the tool-capability reference, and cross-cutting rules for Dataverse work — which surface and which specialist skill fits each task, plus the safe change lifecycle (confirm environment, confirm solution, pull to repo). Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; load this first for orientation. Specialist skills self-route via their own frontmatter triggers.
 ---
 
 # Skill: Overview — What to Use and When
 
-Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
 
 ---
 
 ## What This Plugin Covers
 
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics).
+Dataverse / Power Platform **pro-dev**, delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
 
-It does **not** cover:
+| Area | Skill |
+| --- | --- |
+| Connect, authenticate, configure MCP, verify the environment | `dv-connect` |
+| Schema — tables, columns, relationships, forms, views; inspect existing schema | `dv-metadata` |
+| Data writes — record CRUD, bulk create/update/upsert, CSV/FK-ordered import, sample data | `dv-data` |
+| Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
+| Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
+| Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
+| Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 
-- Power Automate flows (use the maker portal or Power Automate Management API)
-- Canvas apps (use `pac canvas` or the maker portal)
-- Azure infrastructure beyond what's needed for service principal setup
-- Business Central or other Dynamics products
+**Model-driven apps:** the building blocks (tables, forms, views) are covered by `dv-metadata`; composing the app shell itself — site map and navigation — is **not yet** a first-class skill.
+
+**Out of scope:**
+
+- **Canvas apps** — a different technology; use `pac canvas` or the maker portal
+- **Power Automate flows** — use the maker portal or the Power Automate Management API
+- **Azure infrastructure** beyond what's needed for service-principal setup
+- **Business Central** or other Dynamics products
 
 ---
 
@@ -198,22 +210,6 @@ git push
 ```
 
 The repo is always the source of truth.
-
----
-
-## Available Skills
-
-Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent uses for automatic routing. This index is for human reference only.
-
-| Skill | What it covers |
-| --- | --- |
-| **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
-| **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API); inspect existing schema (list columns and relationships) |
-| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts, sample data generation |
-| **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, aggregation + N:N joins via FetchXML (or `$apply` on Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
-| **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
-| **dv-admin** | Bulk delete, data retention/archival, org settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric), recycle bin. PAC CLI for bulk delete/retention/org settings; Python SDK for OrgDB XML and recycle bin. Multi-environment: parallel with `&` and `wait` |
-| **dv-security** | Role assignment (`pac admin assign-user`), self-elevation (`pac admin self-elevate`). **PAC CLI only** |
 
 ---
 
