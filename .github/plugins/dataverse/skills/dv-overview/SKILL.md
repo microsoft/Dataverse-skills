@@ -51,7 +51,7 @@ ls .env scripts/auth.py 2>/dev/null
 
 Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The connect flow produces the correct file structure. Skipping it is the #1 cause of broken setups.
 
-### 1. Python for automation logic — CLIs and MCP are first-class
+### 1. Python for scripting; the CLIs and MCP are first-class
 
 Python is the language for automation **logic** (transformation, control flow, retry, CSV). The toolchain (`scripts/auth.py`, the SDK, skill examples) is Python-based. But MCP tools, the Dataverse CLI (`dataverse`), the Python SDK, and the PAC CLI (`pac`) are all **first-class tool invocations** — use whichever fits. The Dataverse CLI has the same standing as `pac`, which is invoked freely across the solution, metadata, and plug-in skills.
 
