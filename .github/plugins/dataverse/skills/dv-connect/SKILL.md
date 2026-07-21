@@ -327,15 +327,7 @@ This exercises two Dataverse MCP endpoints with a fresh authentication handshake
 
 ### MCP Server Capabilities
 
-| Task | Use |
-|---|---|
-| Create/read/update/delete data records | MCP server |
-| Create a new table | MCP server |
-| Explore what tables/columns exist | MCP server (`search`, `describe`) |
-| Add a column to an existing table | MCP server (`update_table`) for basic columns; SDK or Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
-| Create a relationship / lookup | SDK (see `dv-metadata`) |
-| Create or modify a form | Web API (see `dv-metadata`) |
-| Create or modify a view | Web API (see `dv-metadata`) |
+For what MCP can and can't do (data CRUD + batch up to 25, table/column creation incl. choice/lookup, `search`/`describe`, file upload/download) versus the SDK / Web API, see the **overview** skill's Tool Capabilities matrix.
 
 After verifying MCP works, tell the user:
 

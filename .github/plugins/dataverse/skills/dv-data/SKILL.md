@@ -25,7 +25,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 ## Choosing MCP vs the SDK for writes
 
-**If MCP tools are available** (`create_record`, `update_record`), they are the quickest path for a **small, interactive** set of writes — no script needed. The SDK is the default when the task needs bulk writes (it holds rows in memory, so a large batch can exceed the MCP memory ceiling), data transformation, retry logic, CSV import, or SDK-only operations (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
+**If MCP tools are available** (`create_record`, `update_record`, `delete_record`), they are the quickest path for a **small, interactive** set of writes — they batch up to 25 records per call, no script needed. The SDK is the default when the task needs bulk writes beyond 25 (it holds rows in memory for large batches), data transformation, retry logic, CSV import, or SDK-only operations (upsert — MCP has no upsert tool). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
 
 ## When you script a write, use the SDK — not hand-rolled HTTP
 
@@ -163,7 +163,7 @@ guids = client.records.create("new_ticket", records)
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: MCP `create_record` for 1-10 records. SDK for 10+ records.
+Volume guidance: MCP `create_record` batches up to 25 records per call. SDK `CreateMultiple` for larger bulk.
 
 **Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse has no fixed record count limit — the constraints are payload size and request timeout (SDK default: 120s for POST). For larger datasets, you **must** chunk in your script. The `bulk_upsert` and `bulk_create` helpers below use adaptive chunking: start at 1,000, double on success (up to 4,000), halve on payload/timeout failure, and cap at the last successful size. Tables with few columns can handle larger chunks than tables with many columns.
 
