@@ -75,16 +75,6 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 - **Raw Web API is the last-resort escape hatch** for surfaces with no managed path (forms, views, global option sets, and anything without a first-class SDK/CLI command) — and even then prefer `dataverse api` (managed auth, exit codes) over hand-rolled `urllib`/`get_token`. Aggregation and N:N joins are *not* raw-only: use `client.query.fetchxml()` (aggregates + link-entity), or the CLI's `data associate` for N:N writes.
 - If an SDK method fails or a PAC command seems missing, check the relevant skill before hand-rolling raw HTTP.
 
-**SDK checklist — operation → method:**
-- Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
-- Bulk record operations? → `client.records.create(table, [list_of_dicts])` — see `dv-data`
-- Querying or filtering records? → `client.records.list(table, filter="...", select=[...])` — see `dv-query`
-- Aggregation (top-N, sum, count by group, "most/least")? → Single-table: `$apply` server-side aggregation (raw Web API). Cross-table: `client.dataframe.get()` with `$select` + `pd.merge()` — see `dv-query`. Do NOT load all records without `$select` and aggregate in Python.
-- Loading data into pandas? → `client.dataframe.get(table)` — see `dv-query`
-- Single record by GUID? → `client.records.retrieve(table, guid)` (returns `None` if not found) — see `dv-query`
-- Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
-- Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
-
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
 **Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
@@ -132,6 +122,22 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 **Volume guidance:** MCP for a handful of records or simple filters; the SDK's `CreateMultiple` for bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads (streams pages, avoids MCP SQL limits); Web API for `$apply` aggregation.
 
 Note: The Python SDK is in **preview** — breaking changes possible.
+
+**Common operations → SDK method** (see the noted skill for the full pattern):
+
+| Operation | SDK call | Skill |
+| --- | --- | --- |
+| Create / update / delete records | `client.records.create()` / `.update()` / `.delete()` (pass a list for bulk) | `dv-data` |
+| Upsert on an alternate key | `client.records.upsert()` | `dv-data` |
+| Query / filter records | `client.records.list(...)` (flat) or `.list_pages(...)` (streaming) | `dv-query` |
+| One record by GUID | `client.records.retrieve(table, guid)` (`None` if missing) | `dv-query` |
+| Aggregation / server-side joins | `client.query.fetchxml(xml)` (aggregates + link-entity) | `dv-query` |
+| Limited SQL read | `client.query.sql("SELECT ...")` | `dv-query` |
+| Load into pandas | `client.dataframe.get(table, select=[...])` | `dv-query` |
+| Upload to a file column | `client.files.upload(...)` | `dv-data` |
+| Create tables / columns / lookups / N:N | `client.tables.create()` / `.add_columns()` / `.create_lookup_field()` / `.create_many_to_many_relationship()` | `dv-metadata` |
+| Inspect existing schema | `client.tables.list_columns()` / `.list_relationships()` | `dv-metadata` |
+| Create publisher / solution | `client.records.create("publisher" / "solution", {...})` | `dv-solution` |
 
 ### MCP Availability Check
 
