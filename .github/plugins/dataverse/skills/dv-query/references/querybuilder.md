@@ -5,10 +5,12 @@
 QueryBuilder offers composable filters and OR/AND logic, executed via `.execute()` (then `.to_dataframe()` on the result). It is a convenience layer over the same flat-read path as `client.records.list()` — not a replacement.
 
 ```python
+from PowerPlatform.Dataverse.models.filters import eq
+
 # Basic — flat record iteration
 for record in client.query.builder("opportunity") \
         .select("name", "estimatedvalue", "statuscode") \
-        .filter_eq("statuscode", 1) \
+        .where(eq("statuscode", 1)) \
         .order_by("estimatedvalue", descending=True) \
         .top(100) \
         .execute():
@@ -20,7 +22,7 @@ for record in client.query.builder("opportunity") \
 ```python
 df = client.query.builder("opportunity") \
     .select("name", "estimatedvalue", "statuscode") \
-    .filter_eq("statuscode", 1) \
+    .where(eq("statuscode", 1)) \
     .execute() \
     .to_dataframe()
 ```
