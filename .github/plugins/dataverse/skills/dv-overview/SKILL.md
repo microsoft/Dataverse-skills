@@ -5,7 +5,20 @@ description: Tool routing and cross-cutting rules for Dataverse work — which s
 
 # Skill: Overview — What to Use and When
 
-This skill provides cross-cutting context that no individual skill owns: tool capabilities, UX principles, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here.
+This skill provides cross-cutting context that no individual skill owns: what the plugin covers, the tool-capability reference, safety rules, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here.
+
+---
+
+## What This Plugin Covers
+
+This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics).
+
+It does **not** cover:
+
+- Power Automate flows (use the maker portal or Power Automate Management API)
+- Canvas apps (use `pac canvas` or the maker portal)
+- Azure infrastructure beyond what's needed for service principal setup
+- Business Central or other Dynamics products
 
 ---
 
@@ -44,18 +57,13 @@ About to run `npm` or create a `package.json`? STOP — that is off-rails. Reach
 
 ### 2. Pick the surface that fits — capability awareness, not a fixed order
 
-No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in. Soft defaults, not a required sequence.
+No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in — soft defaults, not a required sequence. The full matrix is in **Tool Capabilities** below; the principles:
 
-- **MCP tools** (`list_tables`, `read_query`, `create_record`, ...): fastest for small, interactive reads/writes when available. Held in memory, so large reads, DataFrame loads, and bulk writes can exceed its ceiling — use the SDK.
-- **Python SDK** (`PowerPlatform-Dataverse-Client`): default for automation logic — bulk CRUD (`CreateMultiple`), paged reads, DataFrames, schema creation, multi-step workflows. Managed auth, paging, retry, geo routing.
-- **Dataverse CLI (`dataverse`)** = data plane, headless: `dataverse api` Web API calls (data + metadata) and the MCP proxy. **PAC CLI (`pac`)** = control plane: solution ALM (export/import/pack), environment/tenant admin, plug-in registration. Shared token cache.
-- **Raw Web API** (`get_token()` + `urllib`): only for capabilities none of the above expose (list below). Prefer `dataverse api` over hand-rolled `urllib`.
+- Prefer a managed surface (MCP, the Dataverse CLI, or the SDK) over hand-rolled raw OData — they carry auth, paging, retry, and geo routing that raw HTTP re-implements. When MCP can't handle it (bulk, large reads, schema creation, multi-step workflows, analytics, or MCP isn't available), the **Python SDK** is the default.
+- **Raw Web API (`get_token()` + `urllib`) is the escape hatch** for what MCP, the SDK, and the CLI don't expose: forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Prefer `dataverse api` over hand-rolled `urllib`. If the operation isn't in that list, the SDK covers it — use `from auth import get_client`, not `get_token`.
+- If an SDK method fails or a PAC command seems missing, check the relevant skill before hand-rolling raw HTTP.
 
-**Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData.
-
-**When MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP isn't available), the **Python SDK** is the default — it carries the managed auth, paging, and retry that hand-rolled raw HTTP does not.
-
-**SDK checklist — evaluate EVERY time you write a script:**
+**SDK checklist — operation → method:**
 - Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
 - Bulk record operations? → `client.records.create(table, [list_of_dicts])` — see `dv-data`
 - Querying or filtering records? → `client.records.list(table, filter="...", select=[...])` — see `dv-query`
@@ -64,18 +72,6 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 - Single record by GUID? → `client.records.retrieve(table, guid)` (returns `None` if not found) — see `dv-query`
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
-
-**Before reaching for `from auth import get_token` or `import requests`:** if the operation isn't in the Raw Web API list below, the SDK covers it — prefer `from auth import get_client`. The SDK carries auth, paging, and retry; raw HTTP re-implements all three.
-
-**Raw Web API (`get_token()`) is the surface for what MCP and the SDK don't expose:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
-
-**These have first-class SDK methods — prefer them over raw Web API:**
-- Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
-- Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
-- Table, column, or relationship creation — use `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` (see `dv-metadata`)
-- Querying records — use `client.records.list()` / `.retrieve()` or `client.query.builder()` (see `dv-query`)
-
-If an SDK method fails or a PAC command seems missing, check the relevant skill before hand-rolling raw HTTP — and prefer `dataverse api` over `urllib` for genuine escape-hatch calls.
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
@@ -101,22 +97,6 @@ Each skill documents a tested sequence — follow it when it fits. The skills ar
 
 ---
 
-## UX Principle: Natural Language First
-
-Users should never need to invoke skills or slash commands directly. The intended workflow is:
-
-1. Install the plugin
-2. Describe what you want in plain English
-3. The agent figures out the right sequence of tools, APIs, and scripts
-
-**Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
-
-From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
-
-Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
-
----
-
 ## Multi-Environment Rule (MANDATORY)
 
 Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
@@ -132,19 +112,6 @@ Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and m
 **Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment.
 
 Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
-
----
-
-## What This Plugin Covers
-
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics).
-
-It does **not** cover:
-
-- Power Automate flows (use the maker portal or Power Automate Management API)
-- Canvas apps (use `pac canvas` or the maker portal)
-- Azure infrastructure beyond what's needed for service principal setup
-- Business Central or other Dynamics products
 
 ---
 
@@ -207,27 +174,13 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent u
 
 ## Scripts
 
-The plugin ships utility scripts in `scripts/`:
-
-| Script | Purpose |
-| --- | --- |
-| `auth.py` | Azure Identity token/credential acquisition — used by all other scripts and the SDK |
-
-For data write operations (create, update, bulk import), see `dv-data`. For queries, aggregation, and analytics, see `dv-query`. For post-import validation queries, see `dv-solution`.
-
-Any Web API call that goes beyond a one-off query should be written as a Python script and committed to `/scripts/`. Use `scripts/auth.py` for token acquisition.
+The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition — used by all other scripts and the SDK). Any Web API call beyond a one-off query should be a Python script committed to `/scripts/`, using `scripts/auth.py` for tokens. For writes see `dv-data`; queries and analytics see `dv-query`; post-import validation see `dv-solution`.
 
 ---
 
-## Windows Scripting Rules
+## Windows Scripting
 
-When running in a Unix-style shell on Windows (Git Bash is the default for Claude Code on Windows; Cursor and Copilot may use PowerShell — the same rules apply, adapt path/quoting syntax as needed):
-
-- **ASCII only in `.py` files.** Curly quotes, em dashes, or other non-ASCII characters cause `SyntaxError`. Use straight quotes and regular dashes.
-- **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
-- **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
-- **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
-- **Background job output may be empty on Windows.** Agent background task runners on Windows (e.g., Claude Code's "Running in the background") can silently produce no output. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
+Platform-specific shell rules (ASCII in `.py`, no multiline `python -c`, PAC PowerShell wrapper, unbuffered background output) live in [`references/windows-scripting.md`](references/windows-scripting.md). Read it when running on Windows.
 
 ---
 
@@ -272,4 +225,20 @@ git push
 ```
 
 The repo is always the source of truth.
+
+---
+
+## UX Principle: Natural Language First
+
+Users should never need to invoke skills or slash commands directly. The intended workflow is:
+
+1. Install the plugin
+2. Describe what you want in plain English
+3. The agent figures out the right sequence of tools, APIs, and scripts
+
+**Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
+
+From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
+
+Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
 
