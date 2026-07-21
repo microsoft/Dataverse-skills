@@ -1,17 +1,42 @@
 ---
 name: dv-overview
-description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; load this first for orientation. Specialist skills self-route via their own frontmatter triggers.
 ---
 
 # Skill: Overview — What to Use and When
 
-This skill provides cross-cutting context that no individual skill owns: tool capabilities, UX principles, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here.
+Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+
+---
+
+## What This Plugin Covers
+
+Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
+
+| Area | Skill |
+| --- | --- |
+| Connect, authenticate, configure MCP, verify the environment | `dv-connect` |
+| Schema — tables, columns, relationships, forms, views; inspect existing schema | `dv-metadata` |
+| Data writes — record CRUD, bulk create/update/upsert, CSV/FK-ordered import, sample data | `dv-data` |
+| Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
+| Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
+| Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
+| Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
+
+**Model-driven apps:** the building blocks (tables, forms, views) are covered by `dv-metadata`; composing the app shell itself — site map and navigation — is **not yet** a first-class skill.
+
+**Out of scope:**
+
+- **Canvas apps** — a different technology; use `pac canvas` or the maker portal
+- **Power Automate flows** — use the maker portal or the Power Automate Management API
+- **Azure infrastructure** beyond what's needed for service-principal setup
+- **Business Central** or other Dynamics products
 
 ---
 
 ## Hard Rules — Read These First
 
-These rules are non-negotiable. Violating any of them means the task is going off-rails.
+The safety rules (init state, auth, environment confirmation, no bespoke MSAL) are non-negotiable. The tool-selection guidance (Rules 1, 2, 4) is capability-based — strong defaults, not rigid mandates.
 
 ### 0. Check Init State Before Anything Else
 
@@ -26,128 +51,56 @@ ls .env scripts/auth.py 2>/dev/null
 
 Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The connect flow produces the correct file structure. Skipping it is the #1 cause of broken setups.
 
-### 1. Python Only — No Exceptions
+### 1. Python for scripting; the CLIs and MCP are first-class
 
-All scripts, data operations, and automation MUST use **Python**. This plugin's entire toolchain — `scripts/auth.py`, the Dataverse SDK, all skill examples — is Python-based.
+Python is the language for automation **logic** (transformation, control flow, retry, CSV). The toolchain (`scripts/auth.py`, the SDK, skill examples) is Python-based. But MCP tools, the Dataverse CLI (`dataverse`), the Python SDK, and the PAC CLI (`pac`) are all **first-class tool invocations** — use whichever fits. The Dataverse CLI has the same standing as `pac`, which is invoked freely across the solution and metadata skills.
 
 **NEVER:**
-- Run `npm init`, `npm install`, or any Node.js/JavaScript tooling
-- Install packages via `npm`, `yarn`, or `pnpm`
-- Write scripts in JavaScript, TypeScript, PowerShell, or any language other than Python
+- Write automation *logic* in JavaScript/TypeScript/Node.js (`npm`, `yarn`, `pnpm`, `package.json`, `node_modules/`)
 - Use `@azure/msal-node`, `@azure/identity`, or any Node.js Azure SDK
-- Import or reference `node_modules/`
+- Implement a bespoke MSAL / device-code flow — auth is `scripts/auth.py`, `pac auth`, and the Dataverse CLI
 
 **ALWAYS:**
-- Use `pip install` for Python packages
-- Use `scripts/auth.py` for authentication tokens and credentials
-- Use the Python Dataverse SDK (`PowerPlatform-Dataverse-Client`) for data and schema operations
-- Use `azure-identity` (Python) for Azure credential flows
+- Use `pip install` and the Python SDK (`PowerPlatform-Dataverse-Client`) for data and schema logic
+- Use `scripts/auth.py` for tokens/credentials; `azure-identity` (Python) for Azure credential flows
+- Treat the Dataverse CLI (`dataverse`) and `pac` as allowed first-party CLIs
 
-If you find yourself about to run `npm` or create a `package.json`, STOP. You are going off-rails. Re-read Hard Rule 1 above.
+About to run `npm` or create a `package.json`? STOP — that is off-rails. Reaching for `pac` or the Dataverse CLI is not.
 
-### 2. MCP → SDK → Web API (in that order)
+### 2. Pick the surface that fits — capability awareness, not a fixed order
 
-**Before writing ANY code, ask: can MCP handle this?** If MCP tools are available in your tool list (`list_tables`, `describe_table`, `read_query`, `create_record`, etc.):
+No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in — soft defaults, not a required sequence. The full matrix is in **Tool Capabilities** below; the principles:
 
-- **Writes:** ≤10 records → use MCP directly. 10+ records → use Python SDK (`dv-data`).
-- **Reads:** Simple filter, small result set (no paging needed) → use MCP. Multi-page iteration, DataFrame loading, aggregation, or queries hitting SQL limits (DISTINCT, HAVING, subqueries) → use Python SDK (`dv-query`).
+- Prefer a managed surface (MCP, the Dataverse CLI, or the SDK) over hand-rolled raw OData — they carry auth, paging, retry, and geo routing that raw HTTP re-implements. When MCP can't handle it (bulk >25 records, large reads, advanced schema like forms/views/N:N relationships/global option sets/alternate keys, multi-step workflows, analytics, or MCP isn't available), the **Python SDK** is the default.
+- **Raw Web API is the last-resort escape hatch** for surfaces with no managed path (forms, views, global option sets, and anything without a first-class SDK/CLI command) — and even then prefer `dataverse api` (managed auth, exit codes) over hand-rolled `urllib`/`get_token`. Aggregation and N:N joins are *not* raw-only: use `client.query.fetchxml()` (aggregates + link-entity), or the CLI's `data associate` for N:N writes.
+- If an SDK method fails or a PAC command seems missing, check the relevant skill before hand-rolling raw HTTP.
 
-Examples where MCP is sufficient: "how many accounts have 'jeff' in the name?", "show me the columns on the contact table", "create an account named Contoso."
-
-**If MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
-
-**SDK checklist — evaluate EVERY time you write a script:**
-- Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
-- Bulk record operations? → `client.records.create(table, [list_of_dicts])` — see `dv-data`
-- Querying or filtering records? → `client.records.get(table, select=[...], filter="...")` — see `dv-query`
-- Aggregation (top-N, sum, count by group, "most/least")? → Single-table: `$apply` server-side aggregation (raw Web API). Cross-table: `client.dataframe.get()` with `$select` + `pd.merge()` — see `dv-query`. Do NOT load all records without `$select` and aggregate in Python.
-- Loading data into pandas? → `client.dataframe.get(table)` — see `dv-query`
-- Single record by GUID? → `client.records.get(table, guid)` — see `dv-query`
-- Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
-- Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
-
-**Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import get_client` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
-
-**Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
-
-**NEVER use raw Web API (`get_token()` / `urllib` / `requests`) for:**
-- Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
-- Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
-- Table, column, or relationship creation — use `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` (see `dv-metadata`)
-- Querying records — use `client.records.get()` or `client.query.builder()` (see `dv-query`)
-
-If an SDK method fails or a PAC CLI command doesn't exist, **consult the relevant skill** before falling back to raw HTTP. Improvising raw Web API calls is the #1 cause of off-rails behavior.
-
-**Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
+**Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** provide the correct SchemaName casing on `@odata.bind` keys (e.g., `new_AccountId@odata.bind`); the SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
 **Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
 
 ### 3. Use Documented Auth Patterns
 
-Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.py` (for Python scripts and the SDK).
+Three entry points, one shared sign-in:
+- **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache under the DataverseCLI app registration. That single sign-in serves the CLI, the `@microsoft/dataverse` MCP proxy, **and** `scripts/auth.py` — which silently reuses the same cache via `msal-extensions` (the sanctioned MSAL API, not raw-file parsing), so Python scripts and the SDK don't prompt again.
+- **`scripts/auth.py`** is the auth entry point for all Python/SDK code. Its order: service principal (`CLIENT_ID` + `CLIENT_SECRET` in `.env`) → shared Dataverse CLI cache → device-code fallback. Use `get_client(skill)` (SDK) or `get_plugin_headers(skill, get_token())` (raw Web API) — both stamp the skill attribution; bare `get_token()` does not.
+- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution` and `dv-admin`.
+
+**Telemetry attribution (keep it deterministic):** every request carries a closed-schema `app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>` context so the server sees which skill routed each OData call. It is baked in — `get_client(skill)` and `get_plugin_headers(skill, ...)` stamp it on the SDK and raw-HTTP paths; the Dataverse CLI auto-stamps `DataverseCli/<ver>` + the command, and you add the skill with `--context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"` (the CLI wraps it in parentheses itself — do not pre-wrap). Never modify, omit, or free-form this context — it is a closed schema (allowlisted skill/agent, no PII).
 
 **NEVER:**
-- Read or parse raw token cache files (e.g., `tokencache_msalv3.dat`)
+- Read or parse raw token cache files (e.g., `tokencache_msalv3.dat`) — reuse the cache only through `scripts/auth.py` / `msal-extensions`
 - Implement your own MSAL device-code flow
 - Hard-code tokens or credentials in scripts
 - Invent a new auth mechanism
 
-If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the `dv-connect` skill.
+If auth is expired or missing, re-run `dataverse auth create` (or `pac auth create` for `pac`), or check `.env` credentials. See the `dv-connect` skill.
 
-### 4. Follow Skill Instructions, Don't Improvise
+### 4. Be honest about gaps — don't hallucinate
 
-Each skill documents a specific, tested sequence of steps. Follow them. If a skill says "use the Python SDK," use the Python SDK — do not substitute a raw HTTP call, a different library, or a different language. If a skill says "run this command," run that command — do not invent an alternative.
+Each skill documents a tested sequence — follow it when it fits. The skills are the source of truth for the supported, non-deprecated API. If a call fails with `AttributeError`, the installed SDK version may not have it — check the skill's version note and use the documented alternative.
 
-**Do NOT introspect the SDK** with `dir()`, `inspect.signature()`, or `help()` to discover APIs. The skills document the exact methods and parameters to use. If a method call fails with `AttributeError`, the installed SDK version may not have it — check the version note in the skill and fall back to the documented alternative. Introspecting the SDK wastes time and leads to using deprecated or internal APIs.
-
-If you hit a gap (something the skills don't cover), say so honestly and suggest a workaround. Do not hallucinate a path or improvise a solution using tools the skills don't mention.
-
----
-
-## UX Principle: Natural Language First
-
-Users should never need to invoke skills or slash commands directly. The intended workflow is:
-
-1. Install the plugin
-2. Describe what you want in plain English
-3. The agent figures out the right sequence of tools, APIs, and scripts
-
-**Example prompt:** *"I want to create an extension called IronHandle for Dynamics CRM in this Git repo folder that adds a 'nickname' column to the account table and populates it with a clever nickname every time a new account is created."*
-
-From that single prompt, the agent should orchestrate the full sequence: check if the workspace is initialized → create metadata via Web API → write and deploy a C# plugin → pull the solution to the repo. No skill names, no commands — just intent.
-
-Skills exist as **the agent's knowledge**, not as user-facing commands. Each skill documents how to do one thing well. The agent chains them together based on what the user describes. If a capability gap exists (e.g., prompt columns aren't programmatically creatable yet), say so honestly and suggest workarounds rather than hallucinating a path.
-
----
-
-## Multi-Environment Rule (MANDATORY)
-
-Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
-
-**Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
-
-1. Show the user the environment URL you intend to use
-2. Ask them to confirm it is correct
-3. Run `pac org who` to verify the active connection matches
-
-> "I'm about to make changes to `<URL>`. Is this the correct target environment?"
-
-**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment.
-
-Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
-
----
-
-## What This Plugin Covers
-
-This plugin covers **Dataverse / Power Platform development**: solutions, tables, columns, forms, views, and data operations (CRUD, bulk, analytics).
-
-It does **not** cover:
-
-- Power Automate flows (use the maker portal or Power Automate Management API)
-- Canvas apps (use `pac canvas` or the maker portal)
-- Azure infrastructure beyond what's needed for service principal setup
-- Business Central or other Dynamics products
+**The honesty guard:** if you hit a gap the skills don't cover, say so and suggest a workaround. **Do not hallucinate an unsupported path** — do not invent a method, parameter, or endpoint that isn't documented. If unsure, say so.
 
 ---
 
@@ -157,25 +110,40 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 | Tool | Use for | Does NOT support |
 | --- | --- | --- |
-| **MCP Server** | Data CRUD (create/read/update/delete records), table create/update/delete/list/describe, column add via `update_table`, keyword search, single-record fetch | Forms, Views, Relationships, Option Sets, Solutions. **Note:** table creation may timeout but still succeed — always `describe_table` before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL limitations:** The `read_query` tool uses Dataverse SQL, which does NOT support: `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, or date functions. For analytical queries that need these (e.g., finding duplicates, unmatched records, filtered aggregates), use `$apply` (single-table aggregation) or `client.dataframe.get()` with pandas (cross-table) — see `dv-query`. **Bulk operations:** MCP `create_record` creates one record at a time. For 10+ records, use the Python SDK `CreateMultiple` instead — see `dv-data`. |
-| **Python SDK (`dv-data`)** | **Preferred for all scripted data writes.** Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, table/column/relationship creation (use `dv-metadata`), custom action invocation |
-| **Python SDK (`dv-query`)** | **Preferred for bulk reads and analytics.** Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API (b8+), GUID-free display (formatted values), `$expand` to resolve lookups, pandas DataFrame handoff (`client.dataframe.get()`) for cross-table joins and exports, Jupyter notebook snippets | `$apply` aggregation (use Web API), N:N `$expand` (use Web API) |
-| **Web API** | Everything — forms, views, relationships, option sets, columns, table definitions, unbound actions, `$ref` association | Nothing (full MetadataService + OData access) |
-| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), solution component management | Data CRUD, metadata creation (tables/columns/forms) |
+| **MCP Server** | Data CRUD (create/read/update/delete records, batch up to 25 per call), table create/update/delete + column add (incl. local choice/multiselect + lookup/customer), schema + record inspection via `describe`, metadata search (`search`), data + file-content search (`search_data`, when Dataverse search is enabled), file upload/download | Forms, Views, **global** Option Sets, **N:N** relationships, alternate keys, Solutions (lookup + local choice/multiselect columns **are** supported via `create_table`/`update_table`). **Note:** table creation may timeout but still succeed — always `describe` (e.g. `describe('tables/{name}')`) before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL (`read_query`):** supports `JOIN`, `GROUP BY` (COUNT/SUM/AVG/MIN/MAX), `TOP`, `WHERE`, `ORDER BY`; does NOT support `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, CTE, or date functions. For those, use `client.query.sql()` (also allows `DISTINCT`, <5K rows), `$apply`, or a builder->DataFrame with pandas — see `dv-query`. **Bulk:** MCP `create_record`/`update_record`/`delete_record` batch up to 25 records per call; for larger bulk use the SDK `CreateMultiple` — see `dv-data`. |
+| **Python SDK (`dv-data`)** | Scripted data writes, especially at volume. Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | Forms, Views, global Option Sets, record association (`$ref`), `$apply` aggregation, N:N `$expand`, table/column/relationship creation (use `dv-metadata`), custom action invocation |
+| **Python SDK (`dv-query`)** | Bulk reads and analytics. Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API, GUID-free display (formatted values), `$expand` to resolve lookups, **aggregation and N:N joins via `client.query.fetchxml()`** (aggregate FetchXML + link-entity), pandas DataFrame handoff (`client.query.builder(...).execute().to_dataframe()`) for exports, Jupyter notebook snippets | OData `$apply` and N:N `$expand` on the OData builder path (use `fetchxml` or raw Web API instead) |
+| **Dataverse CLI (`dataverse`)** | Headless data plane (no Python script needed): `data` CRUD (`query/get/create/update/upsert/delete/count`), `data associate`/`disassociate` (N:N + lookups via `$ref`), `data upload` (file columns); `api request`/`invoke` (managed Web API escape hatch); `api list`/`describe` for Custom API discovery; shared `auth`/`org` token cache | Metadata/schema creation (use SDK — `dv-metadata`), solution ALM (use PAC), forms/views authoring |
+| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), add solution components (`pac solution add-solution-component`) | Data CRUD, metadata creation (tables/columns/forms), listing solution components (no `list-components` — query `solutioncomponent` via SDK/CLI) |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
+| **Raw Web API** (last resort) | Only when **no** managed surface exposes the operation — i.e. not doable via MCP, the Python SDK, the Dataverse CLI, or the `dataverse api` escape hatch. Genuine cases: form/view (FormXml) authoring, global option sets, and similar edge cases. Even then, prefer `dataverse api` (managed auth + skill attribution) over hand-rolled `urllib`. | Functionally nothing (full OData/MetadataService) — but raw `urllib` bypasses managed auth, paging, retry, and skill attribution, so treat it as the path of last resort |
 
-**Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
+**Routing:** the table shows what each surface does; the *how to choose* principle (soft defaults, not a fixed order) is Hard Rule 2. MCP tools not in your list? Load `dv-connect`.
 
-**Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for large datasets, chunk in your script starting at 1,000 and adapt up or down based on success (see `dv-data` for the adaptive pattern).
+**Volume guidance:** MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads (streams pages, avoids MCP SQL limits); Web API for `$apply` aggregation.
 
-**Volume guidance — reads:** MCP `read_query` for simple filters and small result sets (no paging needed). For bulk reads (multi-page iteration, all-records loads, DataFrame handoff), use `dv-query` SDK — it streams pages automatically and avoids MCP SQL limitations. For aggregation queries (`$apply`), use the Web API directly (see `dv-query`).
+**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface — MCP tools appear in your tool list and the CLI self-documents via `dataverse --help`, but SDK calls surface nowhere, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
 
-Note: The Python SDK is in **preview** — breaking changes possible.
+| Operation | SDK call | Skill |
+| --- | --- | --- |
+| Create / update / delete records | `client.records.create()` / `.update()` / `.delete()` (pass a list for bulk) | `dv-data` |
+| Upsert on an alternate key | `client.records.upsert()` | `dv-data` |
+| Query / filter records | `client.records.list(...)` (flat) or `.list_pages(...)` (streaming) | `dv-query` |
+| One record by GUID | `client.records.retrieve(table, guid)` (`None` if missing) | `dv-query` |
+| Aggregation / server-side joins | `client.query.fetchxml(xml)` (aggregates + link-entity) | `dv-query` |
+| Fluent query build (chainable) | `client.query.builder(Table).where(...).execute()` | `dv-query` |
+| Limited SQL read | `client.query.sql("SELECT ...")` | `dv-query` |
+| Load into pandas | `client.query.builder(table).select(...).execute().to_dataframe()` | `dv-query` |
+| Upload to a file column | `client.files.upload(...)` | `dv-data` |
+| Create tables / columns / lookups / N:N | `client.tables.create()` / `.add_columns()` / `.create_lookup_field()` / `.create_many_to_many_relationship()` | `dv-metadata` |
+| Create an alternate key (enables upsert) | `client.tables.create_alternate_key(...)` | `dv-metadata` |
+| Inspect existing schema | `client.tables.list_columns(table)` / `.list_table_relationships(table)` | `dv-metadata` |
+| Create publisher / solution | `client.records.create("publisher" / "solution", {...})` | `dv-solution` |
 
 ### MCP Availability Check
 
-If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `list_tables`, `describe_table`, `read_query`, `create_record`).
+If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `search`, `describe`, `read_query`, `create_record`).
 
 **If MCP tools are NOT available and the user explicitly asked for MCP** (e.g., "use MCP to query", "why isn't MCP working"):
 1. **Do NOT silently fall back** to the Python SDK or Web API
@@ -193,49 +161,25 @@ The distinction matters: explicit MCP request → block and set up MCP. Implicit
 
 ---
 
-## Available Skills
+## The Change Lifecycle — Operate Safely
 
-Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent uses for automatic routing. This index is for human reference only.
+For any real change, walk these three steps in order: confirm **where**, confirm the **container**, then persist the **result**.
 
-| Skill | What it covers |
-| --- | --- |
-| **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
-| **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API) |
-| **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts, sample data generation |
-| **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, `$apply` aggregation (Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
-| **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
-| **dv-admin** | Bulk delete, data retention/archival, org settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric), recycle bin. PAC CLI for bulk delete/retention/org settings; Python SDK for OrgDB XML and recycle bin. Multi-environment: parallel with `&` and `wait` |
-| **dv-security** | Role assignment (`pac admin assign-user`), self-elevation (`pac admin self-elevate`). **PAC CLI only** |
+### Step 1 — Confirm the Environment (MANDATORY)
 
----
+Dataverse work often spans multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
 
-## Scripts
+**Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
 
-The plugin ships utility scripts in `scripts/`:
+1. Show the user the environment URL you intend to use
+2. Ask them to confirm it is correct
+3. Run `pac org who` to verify the active connection matches
 
-| Script | Purpose |
-| --- | --- |
-| `auth.py` | Azure Identity token/credential acquisition — used by all other scripts and the SDK |
+> "I'm about to make changes to `<URL>`. Is this the correct target environment?"
 
-For data write operations (create, update, bulk import), see `dv-data`. For queries, aggregation, and analytics, see `dv-query`. For post-import validation queries, see `dv-solution`.
+**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment. Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
 
-Any Web API call that goes beyond a one-off query should be written as a Python script and committed to `/scripts/`. Use `scripts/auth.py` for token acquisition.
-
----
-
-## Windows Scripting Rules
-
-When running in a Unix-style shell on Windows (Git Bash is the default for Claude Code on Windows; Cursor and Copilot may use PowerShell — the same rules apply, adapt path/quoting syntax as needed):
-
-- **ASCII only in `.py` files.** Curly quotes, em dashes, or other non-ASCII characters cause `SyntaxError`. Use straight quotes and regular dashes.
-- **No `python -c` for multiline code.** Shell quoting differences between Git Bash and CMD break multiline `python -c` commands. Write a `.py` file instead.
-- **PAC CLI may need a PowerShell wrapper.** If `pac` hangs or fails in Git Bash, use `powershell -Command "& pac.cmd <args>"`. See the setup skill for details.
-- **Generate GUIDs in Python scripts**, not via shell backtick-substitution: `str(uuid.uuid4())` inside the `.py` file.
-- **Background job output may be empty on Windows.** Agent background task runners on Windows (e.g., Claude Code's "Running in the background") can silently produce no output. Always use `python -u` (unbuffered stdout) and `print(..., flush=True)` in long-running scripts. For foreground execution with logging: `python -u scripts/import_data.py 2>&1 | tee /tmp/out.txt`. Do NOT assume a background task succeeded just because it appeared to finish.
-
----
-
-## Before Any Metadata Change: Confirm Solution
+### Step 2 — Confirm the Solution (before any metadata change)
 
 Before creating tables, columns, or other metadata, ensure a solution exists to contain the work:
 
@@ -260,9 +204,7 @@ solution_id = client.records.create("solution", {
 
 Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.
 
----
-
-## After Any Change: Pull to Repo (MANDATORY)
+### Step 3 — Pull to Repo (MANDATORY)
 
 Any time you make a metadata change (via MCP, Web API, or the maker portal), **you must** end the session by pulling:
 
@@ -276,3 +218,16 @@ git push
 ```
 
 The repo is always the source of truth.
+
+---
+
+## Scripts
+
+The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition — used by all other scripts and the SDK). Any Web API call beyond a one-off query should be a Python script committed to `/scripts/`, using `scripts/auth.py` for tokens. For writes see `dv-data`; queries and analytics see `dv-query`; post-import validation see `dv-solution`.
+
+---
+
+## Windows Scripting
+
+Platform-specific shell rules (ASCII in `.py`, no multiline `python -c`, PAC PowerShell wrapper, unbuffered background output) live in [`references/windows-scripting.md`](references/windows-scripting.md). Read it when running on Windows.
+
