@@ -123,8 +123,6 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Volume guidance:** MCP for a handful of records or simple filters; the SDK's `CreateMultiple` for bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads (streams pages, avoids MCP SQL limits); Web API for `$apply` aggregation.
 
-Note: The Python SDK is in **preview** — breaking changes possible.
-
 **Common operations → SDK method** (see the noted skill for the full pattern):
 
 | Operation | SDK call | Skill |
