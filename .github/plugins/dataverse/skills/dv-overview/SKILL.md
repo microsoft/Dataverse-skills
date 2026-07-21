@@ -100,24 +100,6 @@ Each skill documents a tested sequence — follow it when it fits. The skills ar
 
 ---
 
-## Multi-Environment Rule (MANDATORY)
-
-Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
-
-**Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
-
-1. Show the user the environment URL you intend to use
-2. Ask them to confirm it is correct
-3. Run `pac org who` to verify the active connection matches
-
-> "I'm about to make changes to `<URL>`. Is this the correct target environment?"
-
-**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment.
-
-Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
-
----
-
 ## Tool Capabilities — Which Tool for Which Job
 
 Understanding the real limits of each tool prevents hallucinated paths. This is the one piece of context no individual skill owns.
@@ -159,6 +141,66 @@ The distinction matters: explicit MCP request → block and set up MCP. Implicit
 
 ---
 
+## The Change Lifecycle — Operate Safely
+
+For any real change, walk these three steps in order: confirm **where**, confirm the **container**, then persist the **result**.
+
+### Step 1 — Confirm the Environment (MANDATORY)
+
+Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
+
+**Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
+
+1. Show the user the environment URL you intend to use
+2. Ask them to confirm it is correct
+3. Run `pac org who` to verify the active connection matches
+
+> "I'm about to make changes to `<URL>`. Is this the correct target environment?"
+
+**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment. Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
+
+### Step 2 — Confirm the Solution (before any metadata change)
+
+Before creating tables, columns, or other metadata, ensure a solution exists to contain the work:
+
+1. Ask the user: "What solution should these components go into?"
+2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
+3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
+
+```python
+# Quick reference — full pattern with publisher discovery is in dv-solution
+publisher_id = client.records.create("publisher", {
+    "uniquename": "<name>", "friendlyname": "<display>",
+    "customizationprefix": "<prefix>", "description": "<desc>",
+})
+solution_id = client.records.create("solution", {
+    "uniquename": "<Name>", "friendlyname": "<Display>",
+    "version": "1.0.0.0",
+    "publisherid@odata.bind": f"/publishers({publisher_id})",
+})
+```
+
+4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
+
+Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.
+
+### Step 3 — Pull to Repo (MANDATORY)
+
+Any time you make a metadata change (via MCP, Web API, or the maker portal), **you must** end the session by pulling:
+
+```bash
+pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
+pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
+rm ./solutions/<SOLUTION_NAME>.zip
+git add ./solutions/<SOLUTION_NAME>
+git commit -m "feat: <description>"
+git push
+```
+
+The repo is always the source of truth.
+
+---
+
 ## Available Skills
 
 Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent uses for automatic routing. This index is for human reference only.
@@ -184,48 +226,4 @@ The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition 
 ## Windows Scripting
 
 Platform-specific shell rules (ASCII in `.py`, no multiline `python -c`, PAC PowerShell wrapper, unbuffered background output) live in [`references/windows-scripting.md`](references/windows-scripting.md). Read it when running on Windows.
-
----
-
-## Before Any Metadata Change: Confirm Solution
-
-Before creating tables, columns, or other metadata, ensure a solution exists to contain the work:
-
-1. Ask the user: "What solution should these components go into?"
-2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
-
-```python
-# Quick reference — full pattern with publisher discovery is in dv-solution
-publisher_id = client.records.create("publisher", {
-    "uniquename": "<name>", "friendlyname": "<display>",
-    "customizationprefix": "<prefix>", "description": "<desc>",
-})
-solution_id = client.records.create("solution", {
-    "uniquename": "<Name>", "friendlyname": "<Display>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": f"/publishers({publisher_id})",
-})
-```
-
-4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
-
-Creating metadata without a solution means it exists only in the default solution and cannot be cleanly exported or deployed. Always solution-first.
-
----
-
-## After Any Change: Pull to Repo (MANDATORY)
-
-Any time you make a metadata change (via MCP, Web API, or the maker portal), **you must** end the session by pulling:
-
-```bash
-pac solution export --name <SOLUTION_NAME> --path ./solutions/<SOLUTION_NAME>.zip --managed false
-pac solution unpack --zipfile ./solutions/<SOLUTION_NAME>.zip --folder ./solutions/<SOLUTION_NAME>
-rm ./solutions/<SOLUTION_NAME>.zip
-git add ./solutions/<SOLUTION_NAME>
-git commit -m "feat: <description>"
-git push
-```
-
-The repo is always the source of truth.
 
