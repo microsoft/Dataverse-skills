@@ -123,7 +123,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Volume guidance:** MCP for a handful of records or simple filters; the SDK's `CreateMultiple` for bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads (streams pages, avoids MCP SQL limits); Web API for `$apply` aggregation.
 
-**Common operations → SDK method** (see the noted skill for the full pattern):
+**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface — MCP tools appear in your tool list and the CLI self-documents via `dataverse --help`, but SDK calls surface nowhere, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
 
 | Operation | SDK call | Skill |
 | --- | --- | --- |
