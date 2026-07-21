@@ -42,10 +42,9 @@ info = client.tables.get("<logical_name>")
 print(f"[{'PASS' if info else 'FAIL'}] Table '<logical_name>'")
 
 # Check import errors
-pages = client.records.get("msdyn_solutionhistory", filter="msdyn_status eq 1",
+errors = client.records.list("msdyn_solutionhistory", filter="msdyn_status eq 1",
     select=["msdyn_name", "msdyn_exceptionmessage"], orderby=["msdyn_starttime desc"], top=5)
-errors = [e for page in pages for e in page]
-print(f"[{'FAIL' if errors else 'PASS'}] {len(errors)} failed import(s)")
+print(f"[{'FAIL' if len(errors) else 'PASS'}] {len(errors)} failed import(s)")
 ```
 
 ## Metadata Conventions

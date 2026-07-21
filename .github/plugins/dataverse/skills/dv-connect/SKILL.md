@@ -22,7 +22,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
 2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
-4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert v>='0.1.0b9', f'SDK {v} is outdated, need >=0.1.0b9'"` exits 0
+4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
 **If all pass:** Tell the user you detected an existing setup, list what you found (URL, profile name, MCP server name), then jump to Step 7. Do not rewrite `.env`, do not re-register MCP, do not re-run `pip install`.
 
@@ -295,7 +295,7 @@ claude mcp list
 ```
 This proves the MCP server process starts and speaks the MCP protocol. It does NOT by itself prove that data operations work — authentication, environment allowlisting, and endpoint reachability are only exercised on the first real tool call.
 
-**Check 2: Agent successfully calls `list_tables` and returns data**
+**Check 2: Agent successfully lists tables via `describe`/`search` and returns data**
 > "List the tables in my Dataverse environment."
 
 This proves end-to-end wiring: auth, tenant consent, environment allowlist, and endpoint reachability are all correct. If the agent falls back to PAC CLI or Web API, see [mcp-configuration.md](references/mcp-configuration.md) troubleshooting.
@@ -305,7 +305,7 @@ Only when **both** checks pass is the setup verified.
 **Interpreting failures:**
 
 - If Check 1 fails (server not ✓ Connected): the MCP server itself cannot start. Re-run Step 6 and check that `npx`/Node.js are installed and the MCP registration succeeded.
-- If Check 1 passes but Check 2 fails (server starts but `list_tables` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
+- If Check 1 passes but Check 2 fails (server starts but `describe`/`search` errors): the server can speak MCP but cannot reach or read Dataverse. Run `--validate` below to diagnose.
 
 **Diagnostic — `--validate` (for failure investigation only):**
 ```
@@ -327,15 +327,7 @@ This exercises two Dataverse MCP endpoints with a fresh authentication handshake
 
 ### MCP Server Capabilities
 
-| Task | Use |
-|---|---|
-| Create/read/update/delete data records | MCP server |
-| Create a new table | MCP server |
-| Explore what tables/columns exist | MCP server (`list_tables`, `describe_table`) |
-| Add a column to an existing table | MCP server (`update_table`) for basic columns; SDK or Web API (see `dv-metadata`) for advanced options (choice columns, lookups, relationships) |
-| Create a relationship / lookup | SDK (see `dv-metadata`) |
-| Create or modify a form | Web API (see `dv-metadata`) |
-| Create or modify a view | Web API (see `dv-metadata`) |
+For what MCP can and can't do (data CRUD + batch up to 25, table/column creation incl. choice/lookup, `search`/`describe`, file upload/download) versus the SDK / Web API, see the **overview** skill's Tool Capabilities matrix.
 
 After verifying MCP works, tell the user:
 

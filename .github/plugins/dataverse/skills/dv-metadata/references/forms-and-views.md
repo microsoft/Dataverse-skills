@@ -72,7 +72,7 @@ url = (f"{env}/api/data/v9.2/systemforms"
        f"?$filter=objecttypecode eq 'new_projectbudget' and type eq 2"
        f"&$select=formid,name,formxml")
 req = urllib.request.Request(url, headers={
-    "Authorization": f"Bearer {token}",
+    **_headers,  # attribution-stamped auth from setup (get_plugin_headers)
     "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
 })
 with urllib.request.urlopen(req) as resp:
@@ -92,7 +92,7 @@ patch_body = json.dumps({"formxml": form_xml}).encode()
 req = urllib.request.Request(
     f"{env}/api/data/v9.2/systemforms({form_id})",
     data=patch_body,
-    headers={"Authorization": f"Bearer {token}",
+    headers={**_headers,
              "Content-Type": "application/json",
              "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
     method="PATCH"
@@ -104,7 +104,7 @@ with urllib.request.urlopen(req) as resp:
 
 ## Publish forms after create/modify
 
-Forms must be published to take effect. Do this immediately after creating or modifying a form. `env` and `token` come from the form creation setup block above — if publishing standalone, re-initialize them:
+Forms must be published to take effect. Do this immediately after creating or modifying a form. `env`, `token`, and `_headers` come from the form creation setup block above — if publishing standalone, re-initialize them:
 
 ```python
 # env and token must be initialized (see form creation setup above)
@@ -115,7 +115,7 @@ body = json.dumps({
 req = urllib.request.Request(
     f"{env}/api/data/v9.2/PublishXml",
     data=body,
-    headers={"Authorization": f"Bearer {token}",
+    headers={**_headers,
              "Content-Type": "application/json",
              "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
     method="POST"
