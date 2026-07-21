@@ -27,9 +27,9 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **If MCP tools are available** (`create_record`, `update_record`), they are the quickest path for a **small, interactive** set of writes — no script needed. The SDK is the default when the task needs bulk writes (it holds rows in memory, so a large batch can exceed the MCP memory ceiling), data transformation, retry logic, CSV import, or SDK-only operations (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
 
-## SDK-First Rule
+## SDK-first for supported operations
 
-**If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.**
+**For operations in the "supports" list below, the SDK is the default** — it carries auth, paging, and retry that hand-rolled `urllib`/`requests` re-implement. Raw HTTP is for the operations the SDK doesn't cover.
 
 **Correct import** (always preceded by `sys.path.insert` in a full script — see Setup below):
 ```

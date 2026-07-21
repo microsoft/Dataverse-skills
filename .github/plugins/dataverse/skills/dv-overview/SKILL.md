@@ -11,7 +11,7 @@ This skill provides cross-cutting context that no individual skill owns: tool ca
 
 ## Hard Rules — Read These First
 
-These rules are non-negotiable. Violating any of them means the task is going off-rails.
+The safety rules (init state, auth, environment confirmation, no bespoke MSAL) are non-negotiable. The tool-selection guidance (Rules 1, 2, 4) is capability-based — strong defaults, not rigid mandates.
 
 ### 0. Check Init State Before Anything Else
 
@@ -53,7 +53,7 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 
 **Soft default:** prefer a managed surface (Dataverse CLI or SDK) over hand-rolled raw OData.
 
-**If MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP tools aren't available), **use the Python SDK — not raw HTTP.** This is the most common mistake agents make.
+**When MCP can't handle it** (bulk operations, large reads, schema creation, multi-step workflows, analytics, or MCP isn't available), the **Python SDK** is the default — it carries the managed auth, paging, and retry that hand-rolled raw HTTP does not.
 
 **SDK checklist — evaluate EVERY time you write a script:**
 - Creating/updating/deleting records? → `client.records.create()`, `.update()`, `.delete()` — see `dv-data`
@@ -65,17 +65,17 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 - Creating tables, columns, relationships? → `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` — see `dv-metadata`
 - Creating publishers or solutions? → `client.records.create("publisher", {...})`, `client.records.create("solution", {...})` — see `dv-solution`
 
-**Before using `from auth import get_token` or `import requests`:** check whether the operation is in the Raw Web API list below. If it is not in that list — the SDK supports it — use `from auth import get_client` instead. Using raw HTTP for SDK-supported operations is the most common off-rails mistake.
+**Before reaching for `from auth import get_token` or `import requests`:** if the operation isn't in the Raw Web API list below, the SDK covers it — prefer `from auth import get_client`. The SDK carries auth, paging, and retry; raw HTTP re-implements all three.
 
-**Raw Web API (`get_token()`) is ONLY acceptable for:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions. Everything else MUST use MCP (if available) or the SDK.
+**Raw Web API (`get_token()`) is the surface for what MCP and the SDK don't expose:** forms, views, global option sets, N:N `$ref` associations, N:N `$expand`, `$apply` aggregation, memo columns, and unbound actions.
 
-**NEVER use raw Web API (`get_token()` / `urllib` / `requests`) for:**
+**These have first-class SDK methods — prefer them over raw Web API:**
 - Record CRUD or bulk operations — use `client.records.create()`, `.update()`, `.delete()` (see `dv-data`)
 - Publisher or solution creation — use `client.records.create("publisher", {...})` (see `dv-solution`)
 - Table, column, or relationship creation — use `client.tables.create()`, `.add_columns()`, `.create_lookup_field()` (see `dv-metadata`)
 - Querying records — use `client.records.list()` / `.retrieve()` or `client.query.builder()` (see `dv-query`)
 
-If an SDK method fails or a PAC CLI command doesn't exist, **consult the relevant skill** before falling back to raw HTTP. Improvising raw Web API calls is the #1 cause of off-rails behavior.
+If an SDK method fails or a PAC command seems missing, check the relevant skill before hand-rolling raw HTTP — and prefer `dataverse api` over `urllib` for genuine escape-hatch calls.
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** pre-b6 the SDK accidentally lowercased `@odata.bind` keys; b6+ no longer does — but you must still provide the correct SchemaName casing (e.g., `new_AccountId@odata.bind`). The SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
@@ -162,7 +162,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 
-**Tool priority (always follow this order):** MCP for simple reads/queries (small result set, no paging) and ≤10 record writes → Python SDK for bulk reads, scripted writes, bulk operations, and analysis → Web API for operations the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`) → PAC CLI for solution lifecycle. Schema creation (tables/columns/relationships) → SDK via `dv-metadata`. MCP tools not in your tool list? → Load `dv-connect` to set them up (see below).
+**Soft routing defaults (not a required order — see Hard Rule 2):** MCP for small interactive reads/writes; Python SDK for bulk reads, scripted writes, and analysis; Web API (prefer `dataverse api`) for what the SDK doesn't cover (forms, views, option sets, `$apply`, N:N `$expand`); PAC CLI for solution lifecycle; schema creation via the SDK (`dv-metadata`). MCP tools not in your list? Load `dv-connect`.
 
 **Volume guidance — writes:** MCP `create_record` for 1-10 records. For 10+ records, use `dv-data` (`client.records.create(table, list_of_dicts)`) — it uses `CreateMultiple` internally. **Note:** the SDK does not chunk automatically; for large datasets, chunk in your script starting at 1,000 and adapt up or down based on success (see `dv-data` for the adaptive pattern).
 

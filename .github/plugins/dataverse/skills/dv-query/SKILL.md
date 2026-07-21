@@ -7,9 +7,9 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 > **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. See the overview skill's Hard Rules.
 
-## SDK-First Rule for Reads
+## SDK-first for reads
 
-**All reads use the SDK — not `urllib`, `requests`, or raw HTTP.** This is the same rule as dv-data's SDK-First Rule, applied to reads. If you find yourself writing `urllib.request` or `get_token()` for a query, STOP — the SDK handles it. The only exceptions are `$apply` aggregation and N:N `$expand`, documented below.
+**Reads default to the SDK** — it handles auth, paging, and retry, so hand-rolled `urllib`/`get_token()` is rarely worth it. The documented exceptions are `$apply` aggregation and N:N `$expand` (below), which the SDK doesn't cover.
 
 ## How to Answer Data Questions
 

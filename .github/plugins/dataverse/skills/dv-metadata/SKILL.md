@@ -75,7 +75,7 @@ The only time you write files directly is when editing something that already ex
 - **Alternate Keys** — required for upsert; create immediately after each table
 - **Metadata Propagation Delays and Lock Contention** — phased creation to avoid lock errors
 
-**ALWAYS use the SDK unless you need full control over OwnershipType, HasActivities, or other advanced properties.** Do NOT use `requests` or `urllib` for table creation when the SDK can handle it.
+**Prefer the SDK for table creation** — use raw Web API only when you need full control over OwnershipType, HasActivities, or other advanced properties the SDK doesn't expose.
 
 **SDK approach (use this by default):**
 
