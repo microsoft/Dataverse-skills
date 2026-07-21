@@ -75,16 +75,16 @@ for r in top:
 
 **When `$apply` won't work** (cross-table questions, complex transforms):
 
-`$apply` only works within a single entity set. For cross-table aggregation, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()`. The merge itself is sub-second; the bottleneck is network transfer, which `$select` minimizes:
+`$apply` only works within a single entity set. For cross-table aggregation, prefer a server-side `client.query.sql()` JOIN or `client.query.fetchxml()` link-entity; when SQL can't express it, pull each table via the builder's `.execute().to_dataframe()` with minimal `select`, then `pd.merge()`. The merge itself is sub-second; the bottleneck is network transfer, which `select` minimizes:
 
 ```python
 import pandas as pd
 
 # Only the columns needed — always pass select= on large tables
-df_a = client.dataframe.get("prefix_tablea",
-    select=["prefix_keycolumn", "prefix_metric"])
-df_b = client.dataframe.get("prefix_tableb",
-    select=["prefix_keycolumn", "prefix_dimension"])
+df_a = client.query.builder("prefix_tablea") \
+    .select("prefix_keycolumn", "prefix_metric").execute().to_dataframe()
+df_b = client.query.builder("prefix_tableb") \
+    .select("prefix_keycolumn", "prefix_dimension").execute().to_dataframe()
 
 merged = pd.merge(df_a, df_b, on="prefix_keycolumn")
 top = merged.groupby("prefix_dimension")["prefix_metric"].sum().nlargest(10)
@@ -93,5 +93,5 @@ print(top)
 
 **Performance rules for client-side processing:**
 - Always use `$select` — fetching all columns on 100K rows transfers 10-20x more data than needed
-- Use `client.dataframe.get()`, not raw HTTP page iteration
+- Use the builder's `.execute().to_dataframe()`, not raw HTTP page iteration
 - pandas `merge` + `groupby` on 100K-300K rows takes seconds — the bottleneck is network transfer, not Python processing

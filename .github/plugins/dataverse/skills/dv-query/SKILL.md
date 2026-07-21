@@ -18,16 +18,16 @@ When the user asks a question about their data, pick the approach by **what they
 | User asks... | Approach | Why |
 |---|---|---|
 | "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.list(table, filter=...)` | Small result, no aggregation |
-| "how many X" / simple count | **MCP** `read_query` or `len(client.records.list(table, filter=...))` | Single number |
-| Single-table aggregation (most/sum/avg/top-N) | **`$apply`** server-side aggregation (raw Web API) | One HTTP call, returns only grouped results |
-| Cross-table aggregation | **`client.dataframe.get()`** with minimal `$select` + `pd.merge()` | Server can't join; pandas merge is fast with minimal columns |
+| "how many X" / simple count | **MCP** `read_query`, or `client.query.sql("SELECT COUNT(*) AS n FROM <table> WHERE ...")` | Server-side count (no row download) |
+| Single-table aggregation (most/sum/avg/top-N) | **`$apply`** (raw) or **`client.query.sql()`** GROUP BY | Both run server-side, return only grouped results |
+| Cross-table aggregation | **`client.query.sql("...INNER JOIN...GROUP BY...")`** or **`client.query.fetchxml(...)`** (server-side); else builder->DataFrame + `pd.merge()` | `sql()` supports INNER/LEFT JOIN + GROUP BY; pandas merge for shapes SQL can't express |
 | "show me X with related Y" / resolve lookups | `client.records.list(table, expand=...)` or **QueryBuilder** | Lookup resolution |
-| "export this data" / bulk extract | **`client.dataframe.get()`** with `select=` | Direct to DataFrame → CSV |
-| "load into notebook" / interactive analysis | **`client.dataframe.get()`** or **QueryBuilder** `.to_dataframe()` | pandas native |
+| "export this data" / bulk extract | **`client.query.builder(t).select(...).execute().to_dataframe()`** | Direct to DataFrame → CSV |
+| "load into notebook" / interactive analysis | **`client.query.builder(t).select(...).execute().to_dataframe()`** | pandas native |
 | "find duplicates" / complex filter | `client.records.list(table, filter=...)` or **QueryBuilder** | SDK handles pagination |
 | Simple filtered read (<5K rows) | **`client.query.sql()`** | Lightweight SQL SELECT with WHERE, ORDER BY, TOP |
 
-**Key principle:** Let the server do the work. For single-table aggregation, use `$apply` — it runs server-side and returns only grouped results. For cross-table questions, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()` — the merge itself is sub-second; the bottleneck is network transfer, which `$select` minimizes.
+**Key principle:** Let the server do the work. For single-table aggregation, use `$apply` (raw) or `client.query.sql()` GROUP BY — both run server-side and return only grouped results. For cross-table questions, prefer a server-side `sql()` JOIN (INNER/LEFT) or `fetchxml()` link-entity; when SQL can't express it, pull each table via `client.query.builder(t).select(...).execute().to_dataframe()` and `pd.merge()` — the merge is sub-second; the bottleneck is network transfer, which `select` minimizes.
 
 **Always query the live Dataverse environment.** Do not query local copies, cached files, or source databases when the user expects results from Dataverse. The data in Dataverse is the source of truth.
 
@@ -35,7 +35,7 @@ When the user asks a question about their data, pick the approach by **what they
 
 ## SQL Queries — `client.query.sql()`
 
-`client.query.sql()` uses the Dataverse Web API `?sql=` parameter — a **limited SQL subset** (same limitations as MCP `read_query`). It does NOT support GROUP BY, JOINs, HAVING, DISTINCT, or subqueries. Results are capped at ~5,000 rows.
+`client.query.sql()` uses the Dataverse Web API `?sql=` parameter — a **T-SQL subset**. It **supports** `SELECT` / `SELECT DISTINCT` / `SELECT TOP N` (0-5000), `INNER JOIN` / `LEFT JOIN`, `WHERE`, `GROUP BY`, `ORDER BY`, `OFFSET`/`FETCH`, and `COUNT/SUM/AVG/MIN/MAX`. It does **NOT** support `SELECT *`, subqueries, CTEs, `HAVING`, `UNION`, `RIGHT`/`FULL`/`CROSS JOIN`, `CASE`, or string/date/math functions. Results are capped at ~5,000 rows.
 
 **When to use:** Fast filtered reads on tables with <5K rows. For these, it's significantly faster (~2-6s) than page iteration or DataFrames because it's a single HTTP call.
 
@@ -51,7 +51,7 @@ for r in results:
     print(f"{r['name']}: ${r.get('estimatedvalue', 0):,.0f}")
 ```
 
-**Do NOT use for:** Tables >5K rows (results silently truncated), aggregation (no GROUP BY), or cross-table queries (no JOINs). Use `$apply` for single-table aggregation and `client.dataframe.get()` + `pd.merge()` for cross-table.
+**Do NOT use for:** Tables >5K rows (results silently truncated), `SELECT *`, subqueries/CTEs, `HAVING`, `UNION`, `RIGHT`/`FULL`/`CROSS JOIN`, or functions. `INNER`/`LEFT JOIN` and `GROUP BY` **are** supported — use them for server-side joins/aggregation on <5K-row results; for larger or unsupported shapes use `fetchxml()` or `$apply`.
 
 ## FetchXML — server-side joins and aggregates
 
@@ -228,14 +228,14 @@ for r in client.records.list(
 
 ---
 
-## Advanced query patterns (Web API only)
+## Advanced query patterns (raw Web API)
 
-For aggregations and many-to-many expansion, the SDK doesn't have direct support — use raw Web API. See [`references/web-api-advanced.md`](references/web-api-advanced.md) for full code samples.
+`$apply` aggregation and N:N `$expand` on the OData path are raw-only. Note the SDK **does** cover most aggregation/joins — `client.query.sql()` (INNER/LEFT JOIN, GROUP BY, COUNT/SUM/AVG) and `client.query.fetchxml()` (aggregate + link-entity). Reach for raw Web API only for the `$apply` transform and N:N `$expand`. See [`references/web-api-advanced.md`](references/web-api-advanced.md) for full code samples.
 
 **Quick reference:**
 - **`$expand` on N:N relationships:** `GET /<entitySet>?$expand=<n:n_nav>($select=...)` — single page only; follow `@odata.nextLink` for >5,000 results.
 - **`$apply` for aggregations:** runs server-side, returns grouped results in one call. Patterns: `groupby((col),aggregate(metric with sum as total))`, `aggregate($count as count)`, `aggregate(amount with average as avg)`. 50K source-record limit.
-- **Cross-table aggregation:** `$apply` only works within one entity set. Use `client.dataframe.get(entity, select=[...])` per table → `pd.merge()` → `groupby()`. Always pass `select=`; without it transfers 10-20× more data.
+- **Cross-table aggregation:** `$apply` only works within one entity set. Prefer `client.query.sql()` (INNER/LEFT JOIN + GROUP BY) or `fetchxml()` link-entity; else pull each table via `client.query.builder(t).select(...).execute().to_dataframe()` → `pd.merge()` → `groupby()`. Always pass `select`; without it transfers 10-20x more data.
 
 ## QueryBuilder — Fluent Query API
 
@@ -250,7 +250,7 @@ For interactive querying in notebooks (auth + DataverseClient + DataFrame displa
 | Status | Cause | Fix |
 |---|---|---|
 | 400 | Wrong field casing in `$select`/`$filter` (must be lowercase LogicalName) or `$expand` (must be case-sensitive Navigation Property Name) | Verify names via `EntityDefinitions(LogicalName='...')/Attributes` |
-| 400 | Unsupported SQL in MCP `read_query` or `client.query.sql()` (DISTINCT, HAVING, subqueries, OFFSET, JOINs, GROUP BY) | Use `$apply` for single-table aggregation, or `client.dataframe.get()` + pandas for cross-table |
+| 400 | Unsupported SQL — MCP `read_query` rejects DISTINCT/HAVING/subqueries/OFFSET/UNION/JOIN/GROUP BY; `client.query.sql()` rejects `SELECT *`/subqueries/CTE/HAVING/UNION/RIGHT/FULL/CROSS JOIN/functions (but **allows** INNER/LEFT JOIN, GROUP BY, DISTINCT) | Use `fetchxml()`/`$apply` for shapes `sql()` can't express, or pandas for cross-table |
 | 404 | Table logical name not found | Check spelling — use `client.tables.get("<name>")` to verify |
 | 429 | Rate limited | SDK retries automatically; reduce page size or add delays between pages |
 

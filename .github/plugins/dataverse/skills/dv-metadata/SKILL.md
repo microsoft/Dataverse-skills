@@ -287,7 +287,7 @@ After creating a table via API, add it to your solution so it gets pulled on exp
 ```
 pac solution add-solution-component \
   --solutionUniqueName <SOLUTION_NAME> \
-  --component <logical_name> \
+  --component <SchemaName> \
   --componentType 1 \
   --environment <url>
 ```
@@ -399,6 +399,8 @@ For the `retry_metadata` helper that catches transient lock errors and the full 
 
 Before changing a model, inspect what already exists. These read-only calls return raw
 metadata dictionaries (PascalCase property names) and are safe to run anytime.
+
+> Assumes `client` from the auth setup shown earlier in this skill (`from auth import get_client`).
 
 ```python
 # Columns on a table (optionally filtered / projected)

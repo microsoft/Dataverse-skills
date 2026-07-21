@@ -90,12 +90,14 @@ CAT-10 Manifest Asset References
        EVAL-ASSET-01  Every relative logo path points to an existing file
 
 CAT-11 Deprecated SDK Read API Gate
-       Hard gate against the deprecated records.get() read API drifting back
-       into a taught code sample. On the GA SDK (>=1.0.0), reads use
-       records.list() (flat), records.list_pages() (streaming), or
-       records.retrieve() (single by GUID). Only python fenced code blocks are
-       scanned (SKILL.md and references/), so prose deprecation notes are fine.
-       EVAL-DEPRECATED-01  No python code block calls records.get(
+       Hard gate against deprecated GA-SDK read APIs drifting back into a taught
+       code sample. On the GA SDK (>=1.0.0): records.get() -> records.list() /
+       list_pages() / retrieve(); dataframe.get() -> query.builder(t).select(...)
+       .execute().to_dataframe(); execute(by_page=True) -> execute_pages().
+       Regex-based so whitespace variants are caught. Only python fenced code
+       blocks are scanned (SKILL.md and references/), so prose deprecation notes
+       are fine.
+       EVAL-DEPRECATED-01  No python code block calls a deprecated read API
 """
 
 import argparse
@@ -202,22 +204,45 @@ def check_python_blocks(name, text):
 # CAT-11  Deprecated SDK Read API Gate
 # ---------------------------------------------------------------------------
 
-def check_deprecated_read_api(name, text):
-    """EVAL-DEPRECATED-01: records.get() must not appear in any python code block.
+# Deprecated GA-SDK read APIs (regex so whitespace variants like ".records.get ("
+# or a newline before "(" are still caught). Each entry: (pattern, label, fix).
+_DEPRECATED_READ_PATTERNS = [
+    (
+        re.compile(r"\.records\.get\s*\("),
+        "records.get(",
+        "use records.list() (flat), records.list_pages() (streaming), or records.retrieve() (single by GUID)",
+    ),
+    (
+        re.compile(r"\.dataframe\.get\s*\("),
+        "dataframe.get(",
+        "use client.query.builder(table).select(...).execute().to_dataframe()",
+    ),
+    (
+        re.compile(r"\.execute\s*\(\s*by_page\s*="),
+        "execute(by_page=...)",
+        "use .execute_pages() for lazy per-page iteration",
+    ),
+]
 
-    records.get() is deprecated on the GA SDK (>=1.0.0). Reads use
-    records.list() (flat QueryResult), records.list_pages() (streaming), or
-    records.retrieve() (single by GUID). Only python fenced blocks are scanned,
-    so a prose migration note ("records.get() is deprecated; use ...") is fine.
+
+def check_deprecated_read_api(name, text):
+    """EVAL-DEPRECATED-01: deprecated GA-SDK read APIs must not appear in python code blocks.
+
+    On the GA SDK (>=1.0.0) these read APIs are deprecated:
+      - records.get()          -> records.list() / list_pages() / retrieve()
+      - dataframe.get()        -> query.builder(t).select(...).execute().to_dataframe()
+      - execute(by_page=True)  -> execute_pages()
+    Only python fenced blocks are scanned, so a prose migration note
+    ("dataframe.get() is deprecated; use ...") is fine.
     """
     failures = []
     for i, block in extract_fenced_blocks(text, "python"):
-        if ".records.get(" in block:
-            failures.append(
-                f"EVAL-DEPRECATED-01 [{name} python-block-{i}] uses deprecated "
-                f"'records.get(' -- use records.list() (flat), records.list_pages() "
-                f"(streaming), or records.retrieve() (single by GUID) on the GA SDK"
-            )
+        for pattern, label, fix in _DEPRECATED_READ_PATTERNS:
+            if pattern.search(block):
+                failures.append(
+                    f"EVAL-DEPRECATED-01 [{name} python-block-{i}] uses deprecated "
+                    f"'{label}' -- {fix} on the GA SDK"
+                )
     return failures
 
 
