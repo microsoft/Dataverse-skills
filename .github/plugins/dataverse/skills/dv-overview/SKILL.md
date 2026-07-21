@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Tool routing and cross-cutting rules for Dataverse work — which skill applies to which task, environment-confirmation, and pull-to-repo. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
+description: Tool routing, the tool-capability reference, and cross-cutting rules for Dataverse work — which surface and which specialist skill fits each task, plus the safe change lifecycle (confirm environment, confirm solution, pull to repo). Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; this skill picks the specialist (dv-connect / dv-data / dv-metadata / dv-query / dv-solution / dv-admin / dv-security) for the request.
 ---
 
 # Skill: Overview — What to Use and When
@@ -208,9 +208,9 @@ Each skill's frontmatter contains WHEN/DO NOT USE WHEN triggers that the agent u
 | Skill | What it covers |
 | --- | --- |
 | **dv-connect** | Connect to Dataverse: install tools, authenticate, create `.env`, configure MCP, verify connection |
-| **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API) |
+| **dv-metadata** | Create/modify tables, columns, relationships (SDK), forms and views (Web API); inspect existing schema (list columns and relationships) |
 | **dv-data** | Record CRUD, bulk create/update/upsert, CSV import with lookup resolution, multi-table FK-ordered import, file uploads, alternate key upserts, sample data generation |
-| **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, `$apply` aggregation (Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
+| **dv-query** | Bulk reads, multi-page iteration, OData queries, QueryBuilder, `$expand`, aggregation + N:N joins via FetchXML (or `$apply` on Web API), GUID-free display, pandas DataFrame handoff, Jupyter notebook snippets |
 | **dv-solution** | Solution create/export/import/pack/unpack, post-import validation |
 | **dv-admin** | Bulk delete, data retention/archival, org settings (audit, plugin trace, session timeout), OrgDB settings (MCP, search, copilot, fabric), recycle bin. PAC CLI for bulk delete/retention/org settings; Python SDK for OrgDB XML and recycle bin. Multi-environment: parallel with `&` and `wait` |
 | **dv-security** | Role assignment (`pac admin assign-user`), self-elevation (`pac admin self-elevate`). **PAC CLI only** |
