@@ -55,9 +55,9 @@ Every `python` fenced block must contain at least one executable line. Comment-o
 
 ### Frontmatter description
 
-Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
+Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. **Describe the capability domain, not the execution tool** — tool choice belongs to the overview's Tool Capabilities matrix + Hard Rule 2, so a description says what the skill covers (e.g. `record CRUD and bulk operations`), not how it runs (e.g. `via the Python SDK`). Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
 
-Example: `Record-level CRUD and bulk operations via the Python SDK — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
+Example: `Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
 
 ### Token budget — Anthropic Skills spec
 

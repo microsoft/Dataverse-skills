@@ -1,6 +1,6 @@
 ---
 name: dv-metadata
-description: Dataverse schema authoring and inspection via the Python SDK and Web API — tables, columns, relationships, forms, and views. Use when the user wants to define, evolve, or inspect the data model — add a column, create a table, set up a lookup, customize a form, build a view, or list existing columns and relationships.
+description: Dataverse schema authoring and inspection — tables, columns, relationships, forms, and views. Use when the user wants to define, evolve, or inspect the data model — add a column, create a table, set up a lookup, customize a form, build a view, or list existing columns and relationships.
 ---
 
 # Skill: Metadata — Making Changes
