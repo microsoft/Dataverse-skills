@@ -88,6 +88,16 @@ CAT-10 Manifest Asset References
        Checks that relative 'logo' paths in plugin manifests resolve to files
        that actually exist, so an icon can't silently 404 in the marketplace.
        EVAL-ASSET-01  Every relative logo path points to an existing file
+
+CAT-11 Deprecated SDK Read API Gate
+       Hard gate against deprecated GA-SDK read APIs drifting back into a taught
+       code sample. On the GA SDK (>=1.0.0): records.get() -> records.list() /
+       list_pages() / retrieve(); dataframe.get() -> query.builder(t).select(...)
+       .execute().to_dataframe(); execute(by_page=True) -> execute_pages().
+       Regex-based so whitespace variants are caught. Only python fenced code
+       blocks are scanned (SKILL.md and references/), so prose deprecation notes
+       are fine.
+       EVAL-DEPRECATED-01  No python code block calls a deprecated read API
 """
 
 import argparse
@@ -187,6 +197,52 @@ def check_python_blocks(name, text):
                     f"EVAL-PY-06 [{label}] os.environ accessed without calling load_env() first"
                 )
 
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-11  Deprecated SDK Read API Gate
+# ---------------------------------------------------------------------------
+
+# Deprecated GA-SDK read APIs (regex so whitespace variants like ".records.get ("
+# or a newline before "(" are still caught). Each entry: (pattern, label, fix).
+_DEPRECATED_READ_PATTERNS = [
+    (
+        re.compile(r"\.records\.get\s*\("),
+        "records.get(",
+        "use records.list() (flat), records.list_pages() (streaming), or records.retrieve() (single by GUID)",
+    ),
+    (
+        re.compile(r"\.dataframe\.get\s*\("),
+        "dataframe.get(",
+        "use client.query.builder(table).select(...).execute().to_dataframe()",
+    ),
+    (
+        re.compile(r"\.execute\s*\(\s*by_page\s*="),
+        "execute(by_page=...)",
+        "use .execute_pages() for lazy per-page iteration",
+    ),
+]
+
+
+def check_deprecated_read_api(name, text):
+    """EVAL-DEPRECATED-01: deprecated GA-SDK read APIs must not appear in python code blocks.
+
+    On the GA SDK (>=1.0.0) these read APIs are deprecated:
+      - records.get()          -> records.list() / list_pages() / retrieve()
+      - dataframe.get()        -> query.builder(t).select(...).execute().to_dataframe()
+      - execute(by_page=True)  -> execute_pages()
+    Only python fenced blocks are scanned, so a prose migration note
+    ("dataframe.get() is deprecated; use ...") is fine.
+    """
+    failures = []
+    for i, block in extract_fenced_blocks(text, "python"):
+        for pattern, label, fix in _DEPRECATED_READ_PATTERNS:
+            if pattern.search(block):
+                failures.append(
+                    f"EVAL-DEPRECATED-01 [{name} python-block-{i}] uses deprecated "
+                    f"'{label}' -- {fix} on the GA SDK"
+                )
     return failures
 
 
@@ -825,6 +881,13 @@ def main():
         all_failures.extend(check_completeness(name, text, all_skill_names))
         all_failures.extend(check_allowlist(name, text))
         all_failures.extend(check_token_budget(name, text, f.parent))
+        all_failures.extend(check_deprecated_read_api(name, text))
+
+    # CAT-11 also covers reference files (Level 3), which teach the same read API
+    for rf in sorted(skills_dir.glob("*/references/*.md")):
+        rtext = rf.read_text(encoding="utf-8")
+        rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
+        all_failures.extend(check_deprecated_read_api(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
@@ -860,7 +923,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"10 categories checked"
+            f"11 categories checked"
         )
 
 
