@@ -173,7 +173,7 @@ for table, exp in expected.items():
     print(f"  {table}: {status} (expected {exp})", flush=True)
 ```
 
-For deeper verification (spot-check data values, not just counts), use `client.dataframe.get()` — see **dv-query**.
+For deeper verification (spot-check data values, not just counts), use `client.query.builder(t).select(...).execute().to_dataframe()` — see **dv-query**.
 
 ## First-Time Import (when you are certain no re-runs are needed)
 

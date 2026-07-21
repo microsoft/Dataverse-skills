@@ -182,7 +182,7 @@ client.records.update("new_ticket",
 
 ## DataFrame Write-Back
 
-To create or update records from a pandas DataFrame, use the `client.dataframe` namespace. This is documented in **dv-query** (alongside `client.dataframe.get()`) but is a write operation — include it in your data write workflow:
+To create or update records from a pandas DataFrame, use the `client.dataframe` namespace (`create`/`update`). This is documented in **dv-query** but is a write operation — include it in your data write workflow:
 
 ```python
 # Update records — DataFrame must include the primary key column
@@ -192,7 +192,7 @@ client.dataframe.update("opportunity", df_updates, id_column="opportunityid")
 guids = client.dataframe.create("opportunity", df_new_records)
 ```
 
-See **dv-query** for the full `client.dataframe` reference including `client.dataframe.get()`.
+See **dv-query** for the full `client.dataframe` write reference; for reads use `client.query.builder(...).execute().to_dataframe()`.
 
 ---
 
