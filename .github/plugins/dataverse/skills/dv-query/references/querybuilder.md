@@ -1,4 +1,4 @@
-# QueryBuilder — Fluent Query API (SDK b8+)
+# QueryBuilder — Fluent Query API
 
 > **Version check:** QueryBuilder is available on the GA SDK (`>=1.0.0`). `client.records.list()` / `.list_pages()` cover the same reads without the fluent chain if you prefer. The skills document the supported API — if a method isn't documented here, don't assume it exists; check the skill's version notes.
 

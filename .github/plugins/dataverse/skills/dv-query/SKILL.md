@@ -21,10 +21,10 @@ When the user asks a question about their data, pick the approach by **what they
 | "how many X" / simple count | **MCP** `read_query` or `len(client.records.list(table, filter=...))` | Single number |
 | Single-table aggregation (most/sum/avg/top-N) | **`$apply`** server-side aggregation (raw Web API) | One HTTP call, returns only grouped results |
 | Cross-table aggregation | **`client.dataframe.get()`** with minimal `$select` + `pd.merge()` | Server can't join; pandas merge is fast with minimal columns |
-| "show me X with related Y" / resolve lookups | `client.records.list(table, expand=...)` or **QueryBuilder** (b8+) | Lookup resolution |
+| "show me X with related Y" / resolve lookups | `client.records.list(table, expand=...)` or **QueryBuilder** | Lookup resolution |
 | "export this data" / bulk extract | **`client.dataframe.get()`** with `select=` | Direct to DataFrame → CSV |
-| "load into notebook" / interactive analysis | **`client.dataframe.get()`** or **QueryBuilder** `.to_dataframe()` (b8+) | pandas native |
-| "find duplicates" / complex filter | `client.records.list(table, filter=...)` or **QueryBuilder** (b8+) | SDK handles pagination |
+| "load into notebook" / interactive analysis | **`client.dataframe.get()`** or **QueryBuilder** `.to_dataframe()` | pandas native |
+| "find duplicates" / complex filter | `client.records.list(table, filter=...)` or **QueryBuilder** | SDK handles pagination |
 | Simple filtered read (<5K rows) | **`client.query.sql()`** | Lightweight SQL SELECT with WHERE, ORDER BY, TOP |
 
 **Key principle:** Let the server do the work. For single-table aggregation, use `$apply` — it runs server-side and returns only grouped results. For cross-table questions, use `client.dataframe.get()` with minimal `$select` on each table, then `pd.merge()` — the merge itself is sub-second; the bottleneck is network transfer, which `$select` minimizes.
@@ -237,9 +237,9 @@ For aggregations and many-to-many expansion, the SDK doesn't have direct support
 - **`$apply` for aggregations:** runs server-side, returns grouped results in one call. Patterns: `groupby((col),aggregate(metric with sum as total))`, `aggregate($count as count)`, `aggregate(amount with average as avg)`. 50K source-record limit.
 - **Cross-table aggregation:** `$apply` only works within one entity set. Use `client.dataframe.get(entity, select=[...])` per table → `pd.merge()` → `groupby()`. Always pass `select=`; without it transfers 10-20× more data.
 
-## QueryBuilder — Fluent Query API (SDK b8+)
+## QueryBuilder — Fluent Query API
 
-Available in `PowerPlatform-Dataverse-Client` b8+. Chainable builder for complex queries that would be awkward as a single OData URL or FetchXML string. Full reference and examples in [`references/querybuilder.md`](references/querybuilder.md).
+Chainable builder for complex queries that would be awkward as a single OData URL or FetchXML string. Full reference and examples in [`references/querybuilder.md`](references/querybuilder.md).
 
 ## Jupyter Notebook Setup
 

@@ -84,7 +84,7 @@ client = get_client("dv-data")
 
 `get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`.
 
-For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
+For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended). For notebooks and interactive sessions, the explicit client above is simpler.
 
 ---
 
@@ -113,7 +113,7 @@ print(f"Created: {guid}")
 ```
 
 **`@odata.bind` notes:**
-- Key is the Navigation Property Name: `new_AccountId@odata.bind` (the SDK preserves casing automatically as of b6, but matching the schema name is still the correct form)
+- Key is the Navigation Property Name: `new_AccountId@odata.bind` (the SDK preserves casing automatically, but matching the schema name is still the correct form)
 - Value is `"/<EntitySetName>(<guid>)"` — e.g., `"/accounts(<guid>)"`
 - If you just created the lookup column, wait 5–10 seconds before inserting. Metadata propagation delays cause "Invalid property" errors.
 - Choice columns use integer values, not strings: `"new_priority": 100000002` (not `"High"`)
