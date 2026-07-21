@@ -93,7 +93,7 @@ Every skill except `dv-overview` and `dv-connect` must have a `## Skill boundari
 ### Which surface to demonstrate — capability-based
 
 Show the surface that fits the operation's shape (mirrors the overview's **Tool Capabilities** matrix + Hard Rule 2 — peers, not a fixed order):
-- **MCP tools** — simple reads/writes (<=10 records, no paging)
+- **MCP tools** — simple reads/writes (<=25 records per call, no paging)
 - **Dataverse CLI** (`dataverse data ...`) — headless data-plane CRUD / associate / upload with no Python script, plus the `dataverse api` managed escape hatch
 - **Python SDK** (`DataverseClient`) — bulk operations, scripted workflows, and analytics
 - **Raw Web API** (`urllib.request`) — last resort, only for operations no managed surface exposes (forms, views, global option sets)
