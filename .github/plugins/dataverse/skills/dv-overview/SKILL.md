@@ -5,7 +5,7 @@ description: Tool routing, the tool-capability reference, and cross-cutting rule
 
 # Skill: Overview — What to Use and When
 
-This skill provides cross-cutting context that no individual skill owns: what the plugin covers, the tool-capability reference, safety rules, and the skill index. Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+Per-task routing is handled by each skill's WHEN/DO NOT USE WHEN frontmatter triggers — not duplicated here. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
 
 ---
 
