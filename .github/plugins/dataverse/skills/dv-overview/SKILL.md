@@ -79,15 +79,18 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 
 ### 3. Use Documented Auth Patterns
 
-Authentication is handled by `pac auth create` (for PAC CLI) and `scripts/auth.py` (for Python scripts and the SDK).
+Three entry points, one shared sign-in:
+- **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache under the DataverseCLI app registration. That single sign-in serves the CLI, the `@microsoft/dataverse` MCP proxy, **and** `scripts/auth.py` — which silently reuses the same cache via `msal-extensions` (the sanctioned MSAL API, not raw-file parsing), so Python scripts and the SDK don't prompt again.
+- **`scripts/auth.py`** is the auth entry point for all Python/SDK code. Its order: service principal (`CLIENT_ID` + `CLIENT_SECRET` in `.env`) → shared Dataverse CLI cache → device-code fallback. Use `get_client(skill)` (SDK) or `get_token()` (raw Web API).
+- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution` and `dv-admin`.
 
 **NEVER:**
-- Read or parse raw token cache files (e.g., `tokencache_msalv3.dat`)
+- Read or parse raw token cache files (e.g., `tokencache_msalv3.dat`) — reuse the cache only through `scripts/auth.py` / `msal-extensions`
 - Implement your own MSAL device-code flow
 - Hard-code tokens or credentials in scripts
 - Invent a new auth mechanism
 
-If auth is expired or missing, re-run `pac auth create` or check `.env` credentials. See the `dv-connect` skill.
+If auth is expired or missing, re-run `dataverse auth create` (or `pac auth create` for `pac`), or check `.env` credentials. See the `dv-connect` skill.
 
 ### 4. Be honest about gaps — don't hallucinate
 
