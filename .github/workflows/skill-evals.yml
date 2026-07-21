@@ -2,6 +2,9 @@ name: Skill Evals
 
 on:
   pull_request:
+    # No path filter: "Static skill checks" is a required status check for every PR to main.
+    # If we filtered by paths, PRs that don't touch skill/eval files would never trigger this
+    # workflow, causing those PRs to be permanently blocked waiting for a check that never runs.
     branches: [main]
 
 jobs:
