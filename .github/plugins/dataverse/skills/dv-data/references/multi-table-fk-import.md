@@ -40,7 +40,7 @@ def bulk_upsert(logical_name, items, chunk_size=1000, retries=3):
     """Upsert items in adaptive chunks with retry. Starts at chunk_size, doubles on
     success (up to max_size), halves on size/timeout failure. Caps at last successful
     size to avoid oscillation. Safe for re-runs."""
-    import requests as req_lib  # for timeout exception types
+
     current_size = chunk_size
     max_size = 4000
     i = 0
@@ -63,7 +63,7 @@ def bulk_upsert(logical_name, items, chunk_size=1000, retries=3):
                     print(f"  {logical_name}: chunk capped at {current_size}", flush=True)
                     break  # retry same offset with smaller chunk
                 raise
-            except req_lib.exceptions.RequestException:
+            except (TimeoutError, ConnectionError, OSError):
                 # Network timeout — SDK default is 120s for POST
                 if current_size > 100:
                     current_size = max(current_size // 2, 100)
@@ -77,11 +77,10 @@ def bulk_upsert(logical_name, items, chunk_size=1000, retries=3):
 def build_map(logical_name, src_col, id_col):
     """Query Dataverse to build source_id -> GUID map after upsert."""
     result = {}
-    for page in client.records.get(logical_name, select=[src_col, id_col]):
-        for r in page:
-            src_val = r.get(src_col)
-            if src_val is not None:
-                result[src_val] = r[id_col]
+    for r in client.records.list(logical_name, select=[src_col, id_col]):
+        src_val = r.get(src_col)
+        if src_val is not None:
+            result[src_val] = r[id_col]
     return result
 
 def upsert_table(logical_name, items, chunk_size=1000):
@@ -164,7 +163,7 @@ After all levels are imported, verify record counts match the source. Count by i
 
 ```python
 def count_records(logical_name, id_col):
-    return sum(len(page) for page in client.records.get(logical_name, select=[id_col]))
+    return sum(len(page) for page in client.records.list_pages(logical_name, select=[id_col]))
 
 # Build expected counts from source data (e.g., len(rows) per table from earlier import phases)
 expected = {"prefix_department": 12, "prefix_employee": 500, "prefix_timesheet": 15000}
@@ -174,7 +173,7 @@ for table, exp in expected.items():
     print(f"  {table}: {status} (expected {exp})", flush=True)
 ```
 
-For deeper verification (spot-check data values, not just counts), use `client.dataframe.get()` — see **dv-query**.
+For deeper verification (spot-check data values, not just counts), use `client.query.builder(t).select(...).execute().to_dataframe()` — see **dv-query**.
 
 ## First-Time Import (when you are certain no re-runs are needed)
 
@@ -183,7 +182,6 @@ If you control the environment and are certain the tables are empty, `client.rec
 ```python
 def bulk_create(logical_name, records, chunk_size=1000):
     """Import via create with adaptive chunking — faster but NOT safe for re-runs."""
-    import requests as req_lib
     all_guids = []
     current_size = chunk_size
     max_size = 4000
@@ -203,7 +201,7 @@ def bulk_create(logical_name, records, chunk_size=1000):
                 print(f"  {logical_name}: chunk capped at {current_size}", flush=True)
             else:
                 raise
-        except req_lib.exceptions.RequestException:
+        except (TimeoutError, ConnectionError, OSError):
             if current_size > 100:
                 current_size = max(current_size // 2, 100)
                 max_size = current_size

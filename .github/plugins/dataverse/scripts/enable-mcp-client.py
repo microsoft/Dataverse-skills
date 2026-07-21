@@ -19,13 +19,13 @@ from auth import get_client
 
 def find_client(client, app_id):
     """Find an allowedmcpclient record by applicationid."""
-    pages = client.records.get(
+    result = client.records.list(
         "allowedmcpclient",
         filter=f"applicationid eq '{app_id}'",
         select=["allowedmcpclientid", "applicationid", "isenabled"],
         top=1,
     )
-    return next((r for page in pages for r in page), None)
+    return result.first()
 
 
 def main():
