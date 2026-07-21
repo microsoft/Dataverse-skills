@@ -11,7 +11,7 @@ Load this skill first for any Dataverse work — it holds the cross-cutting cont
 
 ## What This Plugin Covers
 
-Dataverse / Power Platform **pro-dev**, delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
+Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
 
 | Area | Skill |
 | --- | --- |
@@ -165,7 +165,7 @@ For any real change, walk these three steps in order: confirm **where**, confirm
 
 ### Step 1 — Confirm the Environment (MANDATORY)
 
-Pro-dev scenarios involve multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
+Dataverse work often spans multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
 
 **Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
 
