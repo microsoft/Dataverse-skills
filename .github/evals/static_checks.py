@@ -187,7 +187,7 @@ def check_python_blocks(name, text):
         if "DataverseClient(" in block and "get_token" in block:
             failures.append(
                 f"EVAL-PY-05 [{label}] get_token() used in block containing DataverseClient() -- "
-                f"use get_credential() for SDK operations"
+                f"use get_client() for SDK operations"
             )
 
         # EVAL-PY-06: load_env() must precede os.environ access (except notebook blocks)

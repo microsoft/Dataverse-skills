@@ -40,14 +40,12 @@ import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_client                       # PREFERRED — SDK with plugin attribution
 # OR
-from auth import get_credential, load_env         # SDK without attribution (context manager, notebooks)
-# OR
 from auth import get_plugin_headers, get_token    # Raw Web API WITH skill attribution
 # OR
 from auth import get_token, load_env              # Raw Web API, no attribution (last resort)
 ```
 
-`get_client(skill)` is the preferred entry point — it handles auth, environment URL, and plugin attribution (User-Agent tagging) in one call. `get_credential()` is for advanced cases that need the raw credential (e.g., context manager pattern). `get_token()` is only for raw Web API calls that no managed surface covers (e.g., an in-process Python loop issuing many attributed requests in one session) — and for those, prefer `get_plugin_headers(skill, get_token())`, which stamps the same skill attribution the SDK path carries (a bare `get_token()` does not). Forms, views, and settings are ordinary entities served by the SDK (`client.records.*`), not urllib. Never use `get_token()` in a block containing `DataverseClient(`.
+`get_client(skill)` is the preferred entry point — it handles auth, environment URL, and plugin attribution (User-Agent tagging) in one call. `get_token()` is only for raw Web API calls that no managed surface covers (e.g., an in-process Python loop issuing many attributed requests in one session) — and for those, prefer `get_plugin_headers(skill, get_token())`, which stamps the same skill attribution the SDK path carries (a bare `get_token()` does not). Forms, views, and settings are ordinary entities served by the SDK (`client.records.*`), not urllib. Never use `get_token()` in a block containing `DataverseClient(`.
 
 The one exception: Jupyter notebook blocks use `InteractiveBrowserCredential` directly (no `scripts/` directory in a notebook environment). Mark this exception explicitly in prose above the block.
 
@@ -176,7 +174,7 @@ It compares your branch to `main` and flags common mistakes — e.g., adding a n
 **MAJOR (x)** — Breaking changes that require user action:
 - Renaming or removing a skill
 - Removing or renaming a required section in a skill (e.g., `## Skill boundaries`)
-- Changing the auth pattern (e.g., switching from `get_credential` to a new import)
+- Changing the auth pattern (e.g., switching the SDK auth import in `scripts/auth.py`)
 - Changing MCP server configuration structure
 - Removing supported tools (SDK, PAC CLI, Web API) from routing
 
