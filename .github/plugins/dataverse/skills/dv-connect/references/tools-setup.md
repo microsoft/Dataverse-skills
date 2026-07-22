@@ -177,14 +177,16 @@ source ~/.bashrc
 A valid auth token proves *identity*, not *customization rights*. Creating tables, columns, forms, or plug-in registrations requires the **`prvCreateEntity`** privilege. Both build exercises only discovered a missing privilege on the first `create`, mid-flow. Check it up front instead:
 
 ```bash
-# 1. Who am I? (returns UserId)
+# 1. Who am I? (returns UserId). --context carries plugin/skill/agent attribution.
 dataverse api request --target dataverse --method GET \
-  --path "/api/data/v9.2/WhoAmI" --environment <DATAVERSE_URL>
+  --path "/api/data/v9.2/WhoAmI" --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 
 # 2. List that user's security roles by name.
 dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/systemusers(<UserId>)/systemuserroles_association?%24select=name" \
-  --environment <DATAVERSE_URL>
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 
 **Least privilege:** the customization privileges (`prvCreateEntity` and its siblings for columns/forms/views) come from **System Customizer** — the minimal built-in role for metadata work. Do NOT grant System Administrator just to create tables.

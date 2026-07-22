@@ -68,12 +68,15 @@ pac admin assign-user --user <email-or-object-id> --role "System Administrator" 
 
 ```bash
 # Resolve the user's systemuserid, then list their assigned roles.
+# --context carries plugin/skill/agent attribution on the managed CLI call.
 dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/systemusers?%24select=systemuserid&%24filter=internalemailaddress eq 'user@contoso.com'" \
-  --environment <same-url-as-assign>
+  --environment <same-url-as-assign> \
+  --context "app=dataverse-skills/<ver>;skill=dv-security;agent=<agent>"
 dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/systemusers(<systemuserid>)/systemuserroles_association?%24select=name" \
-  --environment <same-url-as-assign>
+  --environment <same-url-as-assign> \
+  --context "app=dataverse-skills/<ver>;skill=dv-security;agent=<agent>"
 ```
 
 If the target role is absent, the assignment did not take — re-run, read the output, or fall back to self-elevate.

@@ -89,7 +89,7 @@ dataverse api request \
   --method POST \
   --path /api/data/v9.2/PublishXml \
   --body-file ./publish.json \
-  --context "(app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>)"
+  --context "app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>"
 ```
 
 Where `publish.json` contains (replace `new_projectbudget` with the modified entity's logical name):
@@ -105,7 +105,8 @@ A view is a `savedquery` record. The grid `layoutxml` needs the table's **numeri
 ```bash
 dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?%24select=ObjectTypeCode" \
-  --environment <DATAVERSE_URL>
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>"
 ```
 
 Then create the record with the SDK:

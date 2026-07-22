@@ -268,7 +268,8 @@ N:N `$expand` (like `systemuserroles_association`) isn't on the SDK's OData buil
 ```bash
 dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/systemusers?%24filter=internalemailaddress eq '<email>'&%24select=fullname&%24expand=systemuserroles_association(%24select=name)&%24top=1" \
-  --environment <DATAVERSE_URL>
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-solution;agent=<agent>"
 ```
 
 The response `value[0].systemuserroles_association` is the list of assigned roles (each with `name`).
