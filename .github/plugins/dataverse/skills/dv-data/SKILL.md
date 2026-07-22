@@ -29,7 +29,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 ## When you script a write, use the SDK — not hand-rolled HTTP
 
-The MCP-vs-SDK choice is capability-based (above; and see the overview's **Tool Capabilities** / Hard Rule 2). This section is narrower: **once you've decided to write via a script**, use the SDK for anything in its "supports" list rather than hand-rolled `urllib`/`requests` — the SDK carries the auth, paging, and retry those re-implement. Raw HTTP is only for operations the SDK doesn't cover.
+The MCP-vs-SDK choice is capability-based (above; and see the overview's **Tool Capabilities** / Hard Rule 2). This section is narrower: **once you've decided to write via a script**, use the SDK for anything in its "supports" list rather than hand-rolled `urllib`/`requests` — the SDK carries the auth, paging, and retry those re-implement. For the rare operation the SDK doesn't cover, use the `dataverse api` escape hatch — not hand-rolled `urllib`.
 
 **Correct import** (always preceded by `sys.path.insert` in a full script — see Setup below):
 ```

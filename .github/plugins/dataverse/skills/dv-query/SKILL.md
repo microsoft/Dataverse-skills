@@ -9,7 +9,7 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 ## Reads: prefer a managed surface, choose by shape
 
-Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the SDK fits bulk iteration and analytics. Hand-rolled `urllib`/`get_token()` is only worth it for the raw-only cases — `$apply` aggregation and N:N `$expand` (below) — that no managed surface covers.
+Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the SDK fits bulk iteration and analytics. For `$apply` aggregation and N:N `$expand`, prefer `client.query.fetchxml()` (aggregates + link-entity) or the managed `dataverse api` escape hatch; reach for hand-rolled `urllib`/`get_token()` **only** to stay in-process inside a tight Python loop (e.g. paging thousands of rows with client-side processing — see web-api-advanced.md).
 
 ## How to Answer Data Questions
 
