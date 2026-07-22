@@ -186,6 +186,8 @@ pac solution unpack \
   --packagetype Unmanaged
 ```
 
+> **Windows file-lock race.** Run export and unpack as **separate** commands (as above); chaining them immediately can hit a transient ZIP file-lock right after export. If `unpack` fails with a lock / "in use" error, retry after a moment, and verify the unpacked folder has the expected components before deleting the zip.
+
 Delete the zip — the unpacked folder is the source:
 ```
 rm ./solutions/<UniqueName>.zip
@@ -233,7 +235,7 @@ After importing a solution, verify that components are live. Use the Python SDK 
 ```python
 info = client.tables.get("<logical_name>")
 if info:
-    print(f"[PASS] Table '{info['LogicalName']}' exists")
+    print(f"[PASS] Table '{info.logical_name}' exists")
 else:
     print(f"[FAIL] Table '<logical_name>' not found")
 ```
@@ -261,29 +263,31 @@ views = client.records.list(
 )
 ```
 
-### Check a user's role assignment (Web API only)
+### Check a user's role assignment (N:N `$expand`)
 
-N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. This is one of the few cases where raw Web API is required:
+`records.list` passes `$expand` straight through, so read the N:N navigation property directly with the SDK:
 
 ```python
-# Web API required — SDK does not support N:N $expand
-import os, sys, urllib.request, json
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK can't do this
-
-load_env()
-env = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
-headers = get_plugin_headers("dv-solution", token)
-headers.update({"OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json"})
-req = urllib.request.Request(url, headers=headers)
-with urllib.request.urlopen(req) as resp:
-    users = json.loads(resp.read()).get("value", [])
-if users:
-    roles = [r["name"] for r in users[0].get("systemuserroles_association", [])]
-    print(f"Roles: {', '.join(roles)}")
+users = list(client.records.list(
+    "systemuser",
+    filter="internalemailaddress eq '<email>'",   # fallback: domainname eq '<upn>'
+    select=["fullname"],
+    expand=["systemuserroles_association($select=name)"],
+    top=1,
+))
+roles = [r["name"] for r in users[0].get("systemuserroles_association", [])] if users else []
 ```
+
+Alternatively, the managed **Dataverse CLI** escape hatch (`dataverse api request` — not `urllib`), or FetchXML with a link-entity:
+
+```bash
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/systemusers?%24filter=internalemailaddress eq '<email>'&%24select=fullname&%24expand=systemuserroles_association(%24select=name)&%24top=1" \
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-solution;agent=<agent>"
+```
+
+The response `value[0].systemuserroles_association` is the list of assigned roles (each with `name`).
 
 ### Check import errors
 

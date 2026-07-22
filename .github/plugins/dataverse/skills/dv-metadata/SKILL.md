@@ -308,15 +308,15 @@ body = {
 
 ## Forms and Views
 
-The MCP server and Python SDK do not support forms or views — both require raw Web API calls (`urllib`).
+`systemform` (forms) and `savedquery` (views) are **ordinary entities** — create/read/modify them with the **SDK's record CRUD** (no `urllib`). Only **publishing** (`PublishXml`, an unbound action) needs `dataverse api request`.
 
 **Quick reference:**
-- **Create form:** `POST /api/data/v9.2/systemforms` with `formxml` (form type: `2`=Main, `7`=Quick Create, `6`=Quick View, `11`=Card).
-- **Modify form:** `GET` filtered by `objecttypecode` + `type`, edit `formxml`, `PATCH` back, then publish.
-- **Publish:** `POST /api/data/v9.2/PublishXml` with `<importexportxml><entities><entity>...` — required for forms to take effect.
-- **Create view:** `POST /api/data/v9.2/savedqueries` with `fetchxml` + `layoutxml` (querytype: `0`=standard, `1`=advanced find default, `2`=associated, `4`=quick find).
+- **Create form:** `client.records.create("systemform", {...formxml..., "type": 2})` (`2`=Main, `7`=Quick Create, `6`=Quick View, `11`=Card).
+- **Modify form:** `records.list("systemform", filter=...)` for a template → mutate `formxml` → `records.update("systemform", id, {...})` → publish.
+- **Publish:** `dataverse api request` POST `PublishXml` — required for changes to take effect.
+- **Create view:** `client.records.create("savedquery", {...fetchxml..., ...layoutxml...})` (`0`=standard, `1`=advanced find, `2`=associated, `4`=quick find).
 
-For full code samples, the form-XML templates, the control `classid` table for editing existing forms, and the publish workflow, see [`references/forms-and-views.md`](references/forms-and-views.md).
+Full code, the template recipe, the `classid` table, and publish: [`references/forms-and-views.md`](references/forms-and-views.md).
 
 Key invariants:
 - All `id` attributes in form XML must be unique GUIDs (`str(uuid.uuid4()).upper()`).

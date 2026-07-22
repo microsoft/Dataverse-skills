@@ -1,149 +1,139 @@
-# Forms and Views — Web API patterns
+# Forms and Views — creating `systemform` / `savedquery` records
 
-Neither the MCP server nor the Python SDK supports forms or views. Use the Web API directly via `urllib`.
+`systemform` (forms) and `savedquery` (views) are **ordinary Dataverse entities**, so the **Python SDK's generic record CRUD creates and modifies them directly** — there is no dedicated helper, and none is needed. The SDK is the default here: it carries managed auth and paging, and you stay in Python to build and mutate the XML. The **only** operation the SDK can't do is **publishing** (`PublishXml` is an unbound Web API action with no SDK method) — route that one call through the **Dataverse CLI** (`dataverse api request`). **Do not use `urllib` for any of this.**
 
-## Create a form
+> **Solution membership is a separate step.** Unlike `tables.create(..., solution=)`, `records.create` has **no `solution=` parameter** — a form/view created this way lands in the **default** solution. After creating it, add it to your solution explicitly (see **Add the form or view to your solution** below), or the environment-first -> `pac solution export` journey won't capture it.
+
+> **The hard part is the XML, not the transport.** `formxml` / `fetchxml` / `layoutxml` are identical no matter how you send them. The reliable way to get valid XML is to **retrieve a live template and mutate it** (below) — not to hand-author the root envelope. A hand-authored `<form>` root is the #1 cause of "required id" / schema-rejection errors.
+
+## Create a form (SDK)
 
 ```python
-# POST /api/data/v9.2/systemforms
-import os, sys, json, urllib.request
+import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK does not support forms
+from auth import get_client
 
-load_env()
-env = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-_headers = get_plugin_headers("dv-metadata", token)
-_headers.update({"Content-Type": "application/json", "OData-MaxVersion": "4.0", "OData-Version": "4.0"})
+client = get_client("dv-metadata")
 
-form_xml = """<form type="7" name="Project Budget" id="{FORM-GUID}">
+# For valid XML, prefer the retrieve-a-template pattern below. This literal is
+# illustrative; keep the server's root envelope, element id GUIDs, and control
+# classids rather than hand-authoring them.
+form_xml = """<form>
   <tabs>
-    <tab name="{TAB-GUID}" id="{TAB-GUID}" expanded="true" showlabel="true">
+    <tab id="{TAB-GUID}" IsUserDefined="1" showlabel="true">
       <labels><label description="General" languagecode="1033" /></labels>
-      <columns><column width="100%">
-        <sections>
-          <section name="{SEC-GUID}" id="{SEC-GUID}" showlabel="false" showbar="false" columns="111">
-            <labels><label description="General" languagecode="1033" /></labels>
-            <rows>
-              <row>
-                <cell id="{CELL-GUID-1}" showlabel="true">
-                  <labels><label description="Name" languagecode="1033" /></labels>
-                  <control id="new_name" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}"
-                           datafieldname="new_name" disabled="false" />
-                </cell>
-              </row>
-            </rows>
-          </section>
-        </sections>
-      </column></columns>
+      <columns><column width="100%"><sections>
+        <section id="{SEC-GUID}" showlabel="true" showbar="true" IsUserDefined="1">
+          <labels><label description="General" languagecode="1033" /></labels>
+          <rows><row><cell id="{CELL-GUID}">
+            <labels><label description="Name" languagecode="1033" /></labels>
+            <control id="new_name" classid="{4273EDBD-AC1D-40d3-9FB2-095C621B552D}" datafieldname="new_name" />
+          </cell></row></rows>
+        </section>
+      </sections></column></columns>
     </tab>
   </tabs>
-  <header><rows /></header><footer><rows /></footer>
 </form>"""
 
-body = {
-    "name": "Project Budget Quick Create",
+form_id = client.records.create("systemform", {
+    "name": "Project Budget Main",
     "objecttypecode": "new_projectbudget",
-    "type": 7,           # 7 = quick create, 2 = main
+    "type": 2,                          # 2 = Main, 7 = Quick Create, 6 = Quick View, 11 = Card
     "formxml": form_xml,
-    "iscustomizable": {"Value": True}
-}
-
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/systemforms",
-    data=json.dumps(body).encode(),
-    headers=_headers,
-    method="POST"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Created. FormId: {resp.headers.get('OData-EntityId')}")
+    "iscustomizable": {"Value": True},
+})
+print(f"Created form: {form_id}")
+# Publish so it takes effect (see Publish section).
 ```
 
 **Form type codes:** `2` = Main, `7` = Quick Create, `6` = Quick View, `11` = Card
 
-## Retrieve and modify an existing form
+## Retrieve a template and modify it (SDK) — the reliable path
+
+Pull a live, environment-valid form as a template, mutate the XML string, and write it back. This inherits the server's correct root envelope, element `id` GUIDs, and control `classid`s for free — which is why it works when hand-authored XML doesn't.
 
 ```python
-# env and token must be initialized (see form creation setup above)
-import json, urllib.request  # SDK does not support forms — raw Web API required
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_client
 
-# Step 1: GET the form
-url = (f"{env}/api/data/v9.2/systemforms"
-       f"?$filter=objecttypecode eq 'new_projectbudget' and type eq 2"
-       f"&$select=formid,name,formxml")
-req = urllib.request.Request(url, headers={
-    **_headers,  # attribution-stamped auth from setup (get_plugin_headers)
-    "OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json",
-})
-with urllib.request.urlopen(req) as resp:
-    forms = json.loads(resp.read()).get("value", [])
+client = get_client("dv-metadata")
 
-if not forms:
-    raise ValueError("Form not found")
-
-form_id = forms[0]["formid"]
-form_xml = forms[0]["formxml"]
-
-# Step 2: Modify form_xml string as needed (e.g., add a control, reorder fields)
-# form_xml = form_xml.replace(...)
-
-# Step 3: PATCH the form back
-patch_body = json.dumps({"formxml": form_xml}).encode()
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/systemforms({form_id})",
-    data=patch_body,
-    headers={**_headers,
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
-    method="PATCH"
+# Step 1: retrieve an existing Main form for the table as a template.
+result = client.records.list(
+    "systemform",
+    select=["formid", "name", "formxml"],
+    filter="objecttypecode eq 'new_projectbudget' and type eq 2",
+    top=1,
 )
-with urllib.request.urlopen(req) as resp:
-    print(f"Updated. Status: {resp.status}")
-# Then publish (see Publish section below)
+rows = list(result)
+if not rows:
+    raise ValueError("No form found to use as a template")
+form_id = rows[0]["formid"]
+form_xml = rows[0]["formxml"]
+
+# Step 2: mutate the XML string — swap datafieldname / labels, add a cell, etc.
+# Keep the root envelope, id GUIDs, and classids from the template.
+# form_xml = form_xml.replace("new_oldfield", "new_newfield")
+
+# Step 3: write it back (generic record update — systemform is just an entity).
+client.records.update("systemform", form_id, {"formxml": form_xml})
+print("Form updated from template — publish next.")
 ```
 
-## Publish forms after create/modify
+## Publish after create/modify (Dataverse CLI — the one escape hatch)
 
-Forms must be published to take effect. Do this immediately after creating or modifying a form. `env`, `token`, and `_headers` come from the form creation setup block above — if publishing standalone, re-initialize them:
+Forms and views must be published to take effect. `PublishXml` is an **unbound Web API action** — the SDK has no method for it — so this is the single call that leaves the SDK. Use `dataverse api request` (managed auth, real exit code), **not** `urllib`:
 
-```python
-# env and token must be initialized (see form creation setup above)
-# SDK does not support form publishing — raw Web API required
-body = json.dumps({
-    "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>"
-}).encode()
-req = urllib.request.Request(
-    f"{env}/api/data/v9.2/PublishXml",
-    data=body,
-    headers={**_headers,
-             "Content-Type": "application/json",
-             "OData-MaxVersion": "4.0", "OData-Version": "4.0"},
-    method="POST"
-)
-with urllib.request.urlopen(req) as resp:
-    print(f"Published. Status: {resp.status}")
+```bash
+dataverse api request \
+  --target dataverse \
+  --method POST \
+  --path /api/data/v9.2/PublishXml \
+  --body-file ./publish.json \
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>"
 ```
 
-Replace `new_projectbudget` with the logical name of the entity whose form you modified.
+Where `publish.json` contains (replace `new_projectbudget` with the modified entity's logical name):
 
-## Create a view
+```json
+{ "ParameterXml": "<importexportxml><entities><entity>new_projectbudget</entity></entities></importexportxml>" }
+```
+
+## Create a view (SDK)
+
+A view is a `savedquery` record. The grid `layoutxml` needs the table's **numeric `ObjectTypeCode`** in its `object=` attribute — read that first (it's not on `TableInfo`, so use a one-shot metadata read via the CLI):
+
+```bash
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?%24select=ObjectTypeCode" \
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>"
+```
+
+Then create the record with the SDK:
 
 ```python
-# POST /api/data/v9.2/savedqueries
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_client
+
+client = get_client("dv-metadata")
+
+object_type_code = 10123  # from the EntityDefinitions read above
+
 fetch_xml = """<fetch version="1.0" output-format="xml-platform" mapping="logical">
   <entity name="new_projectbudget">
     <attribute name="new_name" />
     <attribute name="new_amount" />
     <attribute name="new_status" />
     <order attribute="new_name" descending="false" />
-    <filter type="and">
-      <condition attribute="statecode" operator="eq" value="0" />
-      <condition attribute="ownerid" operator="eq-userid" />
-    </filter>
+    <filter type="and"><condition attribute="statecode" operator="eq" value="0" /></filter>
   </entity>
 </fetch>"""
 
-layout_xml = """<grid name="resultset" jump="new_name" select="1" icon="1" preview="1">
+layout_xml = f"""<grid name="resultset" object="{object_type_code}" jump="new_name" select="1" icon="1" preview="1">
   <row name="result" id="new_projectbudgetid">
     <cell name="new_name" width="200" />
     <cell name="new_amount" width="125" />
@@ -151,20 +141,32 @@ layout_xml = """<grid name="resultset" jump="new_name" select="1" icon="1" previ
   </row>
 </grid>"""
 
-body = {
+view_id = client.records.create("savedquery", {
     "name": "My Open Budgets",
     "returnedtypecode": "new_projectbudget",
-    "querytype": 0,       # 0 = standard view
+    "querytype": 0,                     # 0 = standard view
     "fetchxml": fetch_xml,
     "layoutxml": layout_xml,
     "isdefault": False,
     "isprivate": False,
-    "isquickfindquery": False,
-}
-# POST to /api/data/v9.2/savedqueries
+})
+print(f"Created view: {view_id}")   # publish next
 ```
 
 **querytype values:** `0` = standard view, `1` = advanced find default, `2` = associated view, `4` = quick find
+
+## Add the form or view to your solution
+
+`records.create` can't stamp the solution the way `tables.create(..., solution=)` does, so the new form/view lands in the **default** solution. Add it as a solution component explicitly:
+
+```bash
+# Form -- componentType 60
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <formid> --componentType 60 --environment <DATAVERSE_URL>
+# View / savedquery -- componentType 26
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <savedqueryid> --componentType 26 --environment <DATAVERSE_URL>
+```
+
+Without this, the component is not part of your solution and `pac solution export` won't capture it.
 
 ## When to Edit Existing Form XML Directly
 
@@ -183,7 +185,7 @@ If the form is already in the repo (pulled via `pac solution unpack`), targeted 
 | Subgrid | `{E7A81278-8635-4d9e-8D4D-59480B391C5B}` |
 | Multiline Text (memo) | `{E0DECE4B-6FC8-4a8f-A065-082708572369}` |
 
-All `id` attributes in form XML must be unique GUIDs. Generate them inside your Python script:
+Structural `id`s — `<tab>`, `<section>`, and `<cell>` — must be unique GUIDs. A `<control id>` is the **field logical name** (e.g. `new_name`), and a view grid's `<row id>` is the **primary-key attribute** (e.g. `new_projectbudgetid`) — not GUIDs. Generate GUIDs for the structural ids inside your Python script:
 
 ```python
 import uuid

@@ -9,7 +9,14 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 ## Reads: prefer a managed surface, choose by shape
 
-Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the SDK fits bulk iteration and analytics. Hand-rolled `urllib`/`get_token()` is only worth it for the raw-only cases — `$apply` aggregation and N:N `$expand` (below) — that no managed surface covers.
+Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the SDK fits bulk iteration and analytics. For `$apply` aggregation and N:N `$expand`, prefer `client.query.fetchxml()` (aggregates + link-entity) or the managed `dataverse api` escape hatch; reach for hand-rolled `urllib`/`get_token()` **only** to stay in-process inside a tight Python loop (e.g. paging thousands of rows with client-side processing — see web-api-advanced.md).
+
+### Dataverse CLI gotchas (custom tables + Windows)
+
+When you drive the `dataverse` CLI directly (headless reads/CRUD), two empirical traps:
+
+- **Custom-table SQL pluralization.** `dataverse data query` in SQL mode auto-pluralizes the table name, and irregular plurals resolve wrong: `FROM im_category` looks up entity set `im_categorys` and returns a **404** that reads like "table missing." It is not — switch to OData mode with the explicit entity set: `dataverse data query --table im_categories --select im_name`. Discover the real `EntitySetName` from `EntityDefinitions` when unsure; never conclude the table doesn't exist from this 404.
+- **Windows shell quoting.** Wrap the whole `--path` value in double quotes so `cmd.exe`/PowerShell don't treat `&` as a command separator. Keep `&` **literal** — it separates OData query options; encoding it to `%26` merges them and breaks the query. Encode only `$`->`%24` (in PowerShell a bare `$select` is read as a variable). If an unquoted `&` splits the command, the wrapper can exit nonzero *even when the API returned valid JSON* — quoting prevents it. (This is why the `dataverse api request` examples in other skills quote the path, use `%24`, and leave `&` literal.)
 
 ## How to Answer Data Questions
 
