@@ -15,33 +15,25 @@ Before creating anything, confirm:
 
 ### Step 2: Inspect the table schema
 
-Use the EntityDefinitions metadata API to discover required columns and their types. Two non-obvious bits:
+Use the SDK's `client.tables.list_columns()` (it reads EntityDefinitions/Attributes) to discover required columns and their types. Two non-obvious bits:
 
-- **`$filter=AttributeOf eq null`** — without this, each lookup column returns a duplicated sub-attribute row (e.g. a `primarycontactid` Lookup plus a `_primarycontactid_value` pair), which makes the list twice as long and confuses downstream code.
+- **`filter="AttributeOf eq null"`** — without this, each lookup column returns a duplicated sub-attribute row (e.g. a `primarycontactid` Lookup plus a `_primarycontactid_value` pair), which makes the list twice as long and confuses downstream code.
 - **`UserLocalizedLabel` is null on unlocalized columns** — dereference safely before reading `.Label`, otherwise custom tables without display names crash the loop.
 
 ```python
-import os, sys, json, urllib.request, urllib.parse
+import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # SDK does not support EntityDefinitions metadata
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
+client = get_client("dv-data")
 TABLE = "account"   # or any other table logical name
 
-params = urllib.parse.urlencode({
-    "$select": "LogicalName,AttributeType,RequiredLevel,DisplayName",
-    "$filter": "AttributeOf eq null",
-})
-_headers = get_plugin_headers("dv-data", token)
-_headers["Accept"] = "application/json"
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/EntityDefinitions(LogicalName='{TABLE}')/Attributes?{params}",
-    headers=_headers,
+# tables.list_columns reads EntityDefinitions/Attributes via the SDK — no urllib.
+attrs = client.tables.list_columns(
+    TABLE,
+    select=["LogicalName", "AttributeType", "RequiredLevel", "DisplayName"],
+    filter="AttributeOf eq null",
 )
-with urllib.request.urlopen(req) as resp:
-    attrs = json.loads(resp.read())["value"]
 
 for a in attrs:
     dn = (a.get("DisplayName") or {}).get("UserLocalizedLabel")
