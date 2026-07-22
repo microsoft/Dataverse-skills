@@ -40,6 +40,10 @@ source ~/.bashrc
 
 If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
+### PAC version mismatch when shelling PAC from Python
+
+On Windows, a Python `subprocess` may resolve a **different `pac` executable** than your interactive shell — e.g. an older `pac.exe` on `PATH` (2.4.1) while the shell uses the current `.cmd` shim (2.9.3). The old binary silently lacks newer commands (`pac model create`), so a script fails with "unknown command" even though `pac` works in your terminal. Fix: shell PAC through `cmd.exe /c pac ...` (or resolve `shutil.which('pac.cmd')`) so the subprocess uses the same shim, and check the version banner matches before relying on newer subcommands.
+
 ### Python SDK
 
 After Python is confirmed available:

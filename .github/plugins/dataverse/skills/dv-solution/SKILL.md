@@ -186,6 +186,8 @@ pac solution unpack \
   --packagetype Unmanaged
 ```
 
+> **Windows file-lock race.** Run export and unpack as **separate** commands (as above); chaining them immediately can hit a transient ZIP file-lock right after export. If `unpack` fails with a lock / "in use" error, retry after a moment, and verify the unpacked folder has the expected components before deleting the zip.
+
 Delete the zip — the unpacked folder is the source:
 ```
 rm ./solutions/<UniqueName>.zip
