@@ -2,6 +2,8 @@
 
 `systemform` (forms) and `savedquery` (views) are **ordinary Dataverse entities**, so the **Python SDK's generic record CRUD creates and modifies them directly** — there is no dedicated helper, and none is needed. The SDK is the default here: it carries managed auth and paging, and you stay in Python to build and mutate the XML. The **only** operation the SDK can't do is **publishing** (`PublishXml` is an unbound Web API action with no SDK method) — route that one call through the **Dataverse CLI** (`dataverse api request`). **Do not use `urllib` for any of this.**
 
+> **Solution membership is a separate step.** Unlike `tables.create(..., solution=)`, `records.create` has **no `solution=` parameter** — a form/view created this way lands in the **default** solution. After creating it, add it to your solution explicitly (see **Add the form or view to your solution** below), or the environment-first -> `pac solution export` journey won't capture it.
+
 > **The hard part is the XML, not the transport.** `formxml` / `fetchxml` / `layoutxml` are identical no matter how you send them. The reliable way to get valid XML is to **retrieve a live template and mutate it** (below) — not to hand-author the root envelope. A hand-authored `<form>` root is the #1 cause of "required id" / schema-rejection errors.
 
 ## Create a form (SDK)
@@ -89,6 +91,7 @@ dataverse api request \
   --method POST \
   --path /api/data/v9.2/PublishXml \
   --body-file ./publish.json \
+  --environment <DATAVERSE_URL> \
   --context "app=dataverse-skills/<ver>;skill=dv-metadata;agent=<agent>"
 ```
 
@@ -152,6 +155,19 @@ print(f"Created view: {view_id}")   # publish next
 
 **querytype values:** `0` = standard view, `1` = advanced find default, `2` = associated view, `4` = quick find
 
+## Add the form or view to your solution
+
+`records.create` can't stamp the solution the way `tables.create(..., solution=)` does, so the new form/view lands in the **default** solution. Add it as a solution component explicitly:
+
+```bash
+# Form -- componentType 60
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <formid> --componentType 60
+# View / savedquery -- componentType 26
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <savedqueryid> --componentType 26
+```
+
+Without this, the component is not part of your solution and `pac solution export` won't capture it.
+
 ## When to Edit Existing Form XML Directly
 
 If the form is already in the repo (pulled via `pac solution unpack`), targeted edits are acceptable — e.g., reordering fields, changing a label, adding a control to an existing section. For these cases, use this control classid reference:
@@ -169,7 +185,7 @@ If the form is already in the repo (pulled via `pac solution unpack`), targeted 
 | Subgrid | `{E7A81278-8635-4d9e-8D4D-59480B391C5B}` |
 | Multiline Text (memo) | `{E0DECE4B-6FC8-4a8f-A065-082708572369}` |
 
-All `id` attributes in form XML must be unique GUIDs. Generate them inside your Python script:
+Structural `id`s — `<tab>`, `<section>`, and `<cell>` — must be unique GUIDs. A `<control id>` is the **field logical name** (e.g. `new_name`), and a view grid's `<row id>` is the **primary-key attribute** (e.g. `new_projectbudgetid`) — not GUIDs. Generate GUIDs for the structural ids inside your Python script:
 
 ```python
 import uuid

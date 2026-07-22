@@ -42,7 +42,7 @@ from auth import get_token, load_env  # WRONG for SDK-supported ops
 import requests                        # WRONG for SDK-supported ops
 ```
 
-`get_token()` and `requests` exist ONLY for operations the SDK does not support (forms, views, `$apply`, N:N `$expand`, unbound actions) — see **dv-query** and **dv-metadata**.
+`get_token()` and `requests` exist ONLY for genuine gaps with no managed path (global option sets, unbound actions) — and even then prefer the managed `dataverse api` escape hatch. Forms/views, aggregation, and N:N reads are all covered by the SDK; see **dv-query** and **dv-metadata**.
 
 ---
 
@@ -57,14 +57,11 @@ import requests                        # WRONG for SDK-supported ops
 
 ## What This SDK Does NOT Support
 
-Use raw Web API (`get_token()`) for:
-- Forms (FormXml) — see **dv-metadata**
-- Views (SavedQueries) — see **dv-metadata**
+Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association (`$ref` POST) — use raw Web API (`POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`)
-- N:N `$expand` — see **dv-query**
-- `$apply` aggregation — see **dv-query**
-- Unbound actions (e.g., `InstallSampleData`)
+- N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
+- `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
+- Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 - DeleteMultiple, general OData batching
 
 ---

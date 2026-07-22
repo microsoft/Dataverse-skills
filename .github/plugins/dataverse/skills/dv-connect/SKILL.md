@@ -236,7 +236,7 @@ All three must resolve the same user/environment. They prove the DV CLI cache, t
 **If any fail:**
 - `dataverse auth who` fails → re-run Step 2.
 - `pac org who` fails → re-run Step 2b.
-- `python scripts/auth.py` prints a device-code URL → browser/WAM cache has no Python-reusable token (both exercises hit this). **Auto-fix:** re-run `dataverse auth create --environment <url> --deviceCode`, then re-run `python scripts/auth.py`.
+- `python scripts/auth.py` prints a device-code URL → browser/WAM cache has no Python-reusable token (both exercises hit this). **Auto-fix:** re-run `dataverse auth create --environment <url> --deviceCode`, then re-run `python scripts/auth.py`. If it *still* prompts, check `pip show msal msal-extensions` — `auth.py` needs both to read the shared cache.
 - Other Python error → check SDK install and `.env`.
 
 Before metadata work, also confirm the account has the `prvCreateEntity` customization privilege — see [tools-setup.md](references/tools-setup.md#privilege-preflight).

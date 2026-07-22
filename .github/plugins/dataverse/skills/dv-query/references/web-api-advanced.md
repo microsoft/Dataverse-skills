@@ -6,7 +6,7 @@
 
 > **Note:** These raw Web API examples fetch a single page only. If results exceed one page (~5000 records), follow `@odata.nextLink` in a loop to get all records.
 
-> **Raw create responses:** a hand-rolled or `dataverse api` **POST create** returns **HTTP 204** with the new record id in the **`OData-EntityId` response header** (e.g. `.../accounts(<guid>)`), not a JSON body — parse the header, don't expect a body. (This is a raw-HTTP detail only; SDK `client.records.create` and MCP `create_record` return the id directly, so prefer them for creates.)
+> **Raw create responses:** a hand-rolled or `dataverse api` **POST create** returns **HTTP 204** with the new record id in the **`OData-EntityId` response header** (e.g. `.../accounts(<guid>)`), not a JSON body — parse the header, don't expect a body. With `dataverse api request`, pass `-i`/`--include` to surface response headers (otherwise it prints only the body, which is empty for a 204). (This is a raw-HTTP detail only; SDK `client.records.create` and MCP `create_record` return the id directly, so prefer them for creates.)
 
 ```python
 import os, sys, json, urllib.request

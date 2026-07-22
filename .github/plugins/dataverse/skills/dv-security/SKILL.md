@@ -79,6 +79,8 @@ dataverse api request --target dataverse --method GET \
   --context "app=dataverse-skills/<ver>;skill=dv-security;agent=<agent>"
 ```
 
+If the first query returns no row, the sign-in identity may live on `domainname` (the AAD UPN) rather than `internalemailaddress` (Primary Email) — retry with `%24filter=domainname eq '<upn>'`, or `azureactivedirectoryobjectid eq '<objectid>'` when you assigned by object id. A missing row is not proof the grant failed.
+
 If the target role is absent, the assignment did not take — re-run, read the output, or fall back to self-elevate.
 
 ---

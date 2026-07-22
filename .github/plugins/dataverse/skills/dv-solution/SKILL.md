@@ -233,7 +233,7 @@ After importing a solution, verify that components are live. Use the Python SDK 
 ```python
 info = client.tables.get("<logical_name>")
 if info:
-    print(f"[PASS] Table '{info['LogicalName']}' exists")
+    print(f"[PASS] Table '{info.logical_name}' exists")
 else:
     print(f"[FAIL] Table '<logical_name>' not found")
 ```
@@ -263,7 +263,20 @@ views = client.records.list(
 
 ### Check a user's role assignment (N:N `$expand`)
 
-N:N `$expand` (like `systemuserroles_association`) isn't on the SDK's OData builder path. Use the managed **Dataverse CLI** escape hatch (`dataverse api request`) — not `urllib` — or FetchXML with a link-entity:
+`records.list` passes `$expand` straight through, so read the N:N navigation property directly with the SDK:
+
+```python
+users = list(client.records.list(
+    "systemuser",
+    filter="internalemailaddress eq '<email>'",   # fallback: domainname eq '<upn>'
+    select=["fullname"],
+    expand=["systemuserroles_association($select=name)"],
+    top=1,
+))
+roles = [r["name"] for r in users[0].get("systemuserroles_association", [])] if users else []
+```
+
+Alternatively, the managed **Dataverse CLI** escape hatch (`dataverse api request` — not `urllib`), or FetchXML with a link-entity:
 
 ```bash
 dataverse api request --target dataverse --method GET \

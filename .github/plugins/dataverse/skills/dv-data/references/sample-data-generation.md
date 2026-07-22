@@ -117,6 +117,7 @@ else:
     ids = [client.records.create(TABLE, r) for r in records]
     print(f"Created {len(ids)} records individually", flush=True)
 
+env_url = os.environ["DATAVERSE_URL"].rstrip("/")  # get_client already called load_env()
 print(f"View: {env_url}/main.aspx?pagetype=entitylist&etn={TABLE}", flush=True)
 ```
 
