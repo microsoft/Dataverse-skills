@@ -104,7 +104,8 @@ wait_for_recyclebin_async_jobs(client)
 **Disable = PATCH `statecode=1, statuscode=2, isreadyforrecyclebin=false`.** This triggers the synchronous `OptOutOrganization` path which cascades cleanly to every entity config.
 
 ```python
-# ... (same fetch as above to get config_id; recyclebinconfig is an entity)
+# ... (same imports/client and the records fetch from the Read block above,
+# AND the wait_for_recyclebin_async_jobs helper defined in the Enable block above)
 wait_for_recyclebin_async_jobs(client)   # drain first
 
 if records:

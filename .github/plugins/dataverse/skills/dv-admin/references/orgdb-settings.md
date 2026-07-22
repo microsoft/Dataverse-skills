@@ -23,7 +23,7 @@ client = get_client("dv-admin")
 
 # orgdborgsettings is a column on the organization entity — plain SDK record read.
 orgs = list(client.records.list("organization", select=["organizationid", "orgdborgsettings"]))
-root = ET.fromstring(orgs[0]["orgdborgsettings"])
+root = ET.fromstring(orgs[0].get("orgdborgsettings") or "<OrgSettings></OrgSettings>")
 for child in sorted(root, key=lambda c: c.tag):
     print(f"  {child.tag} = {child.text}", flush=True)
 ```

@@ -26,6 +26,8 @@ defs = list(client.records.list(
     select=["settingdefinitionid", "uniquename", "defaultvalue", "datatype"],
     filter=f"uniquename eq '{UNIQUENAME}'",
 ))
+if not defs:
+    raise SystemExit(f"Setting '{UNIQUENAME}' is not defined in this environment (ECS-gated -- not available here).")
 defn = defs[0]
 sd_id = defn["settingdefinitionid"]
 default = defn["defaultvalue"]
