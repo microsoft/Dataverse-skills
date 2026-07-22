@@ -35,7 +35,7 @@ default = defn["defaultvalue"]
 overrides = list(client.records.list(
     "organizationsetting",
     select=["organizationsettingid", "value"],
-    filter=f"_settingdefinitionid_value eq '{sd_id}'",
+    filter=f"_settingdefinitionid_value eq {sd_id}",
 ))
 
 current = overrides[0]["value"] if overrides else default

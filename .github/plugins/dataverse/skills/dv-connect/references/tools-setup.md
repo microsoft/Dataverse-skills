@@ -178,7 +178,9 @@ source ~/.bashrc
 
 ## Privilege preflight
 
-A valid auth token proves *identity*, not *customization rights*. Creating tables, columns, forms, or plug-in registrations requires the **`prvCreateEntity`** privilege. Both build exercises only discovered a missing privilege on the first `create`, mid-flow. Check it up front instead:
+A valid auth token proves *identity*, not *customization rights*. Check the **effective privilege for the specific operation** up front, instead of discovering a gap mid-flow on the first `create`.
+
+**Do not preflight by listing role names.** Role-name listing misses privileges granted through **team roles** or **custom roles**, and can pass a user whose named role lacks the effective privilege (or fail one who has it via a team). Use the `RetrieveUserSetOfPrivilegesByNames` function bound to the systemuser -- it returns the privileges the user actually holds **through their roles and team membership**, in one call:
 
 ```bash
 # 1. Who am I? (returns UserId). --context carries plugin/skill/agent attribution.
@@ -186,14 +188,29 @@ dataverse api request --target dataverse --method GET \
   --path "/api/data/v9.2/WhoAmI" --environment <DATAVERSE_URL> \
   --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 
-# 2. List that user's security roles by name.
+# 2. Check EFFECTIVE privileges for the operations you're about to run.
+#    Bound to systemuser; includes team-inherited privileges. Pass only the
+#    privileges the task needs (see the operation map below). Single-quote the
+#    --path so the JSON array's quotes survive the shell.
 dataverse api request --target dataverse --method GET \
-  --path "/api/data/v9.2/systemusers(<UserId>)/systemuserroles_association?%24select=name" \
+  --path '/api/data/v9.2/systemusers(<UserId>)/Microsoft.Dynamics.CRM.RetrieveUserSetOfPrivilegesByNames(PrivilegeNames=@p)?@p=["prvCreateEntity","prvCreateAttribute"]' \
   --environment <DATAVERSE_URL> \
   --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 
-**Least privilege:** the customization privileges (`prvCreateEntity` and its siblings for columns/forms/views) come from **System Customizer** — the minimal built-in role for metadata work. Do NOT grant System Administrator just to create tables.
+A required privilege is granted when it appears in the returned privilege set; if it's absent, the operation will fail on the first write -- stop and surface a least-privilege fix.
 
-- Already has **System Customizer** (or a custom role granting the needed customization privileges)? Done — add nothing.
-- Missing it? Assign **System Customizer** via the **dv-security** skill. Reserve **System Administrator** for sessions that *also* need security or org-admin operations (role assignment, org settings) — not for pure customization.
+**Privilege is per operation -- `prvCreateEntity` is table-only.** Check the privilege(s) that match the work:
+
+| Operation | Privilege(s) to check |
+|---|---|
+| Create table | `prvCreateEntity` |
+| Create column | `prvCreateAttribute` |
+| Create form | `prvCreateSystemForm` |
+| Create view | `prvCreateSavedQuery` |
+| Register plug-in assembly | `prvCreatePluginAssembly` |
+| Register plug-in step | `prvCreateSdkMessageProcessingStep` |
+
+**Least privilege:** these customization privileges come from **System Customizer** -- the minimal built-in role for metadata / plug-in work. Do NOT grant System Administrator just to create tables. Reserve **System Administrator** for sessions that *also* need security or org-admin operations (role assignment, org settings) -- not for pure customization. Missing the needed privilege? Assign **System Customizer** (or a custom role that grants it) via the **dv-security** skill.
+
+> `systemuserroles_association` (role-name listing) is for **confirming that a specific direct role assignment landed** (see **dv-security**) -- not for privilege preflight, since it can't see team- or custom-role-granted privileges.

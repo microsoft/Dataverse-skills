@@ -161,9 +161,9 @@ print(f"Created view: {view_id}")   # publish next
 
 ```bash
 # Form -- componentType 60
-pac solution add-solution-component --solutionUniqueName <YourSolution> --component <formid> --componentType 60
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <formid> --componentType 60 --environment <DATAVERSE_URL>
 # View / savedquery -- componentType 26
-pac solution add-solution-component --solutionUniqueName <YourSolution> --component <savedqueryid> --componentType 26
+pac solution add-solution-component --solutionUniqueName <YourSolution> --component <savedqueryid> --componentType 26 --environment <DATAVERSE_URL>
 ```
 
 Without this, the component is not part of your solution and `pac solution export` won't capture it.

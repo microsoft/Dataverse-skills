@@ -19,7 +19,7 @@ ORGANIZATION_ENTITY_ID = "e1bd1119-6e9d-45a4-bc15-12051e65a0bd"
 records = list(client.records.list(
     "recyclebinconfig",
     select=["recyclebinconfigid", "statecode", "statuscode", "cleanupintervalindays"],
-    filter=f"_extensionofrecordid_value eq '{ORGANIZATION_ENTITY_ID}'",
+    filter=f"_extensionofrecordid_value eq {ORGANIZATION_ENTITY_ID}",
 ))
 
 if records:
