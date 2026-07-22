@@ -1,7 +1,10 @@
-# Web API advanced — `$expand` on N:N and `$apply` aggregation
+# Web API advanced — in-process `$expand` on N:N and `$apply` aggregation
 
+**When to use these `urllib` examples — and when not to.** For a **one-shot** N:N read or aggregation, prefer a managed path: `client.query.fetchxml()` (aggregates + link-entity, pure SDK) or `dataverse api request` (with `--context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"` for attribution). Reach for the raw `urllib` examples below **only** when the call is one step inside a larger **in-process Python loop** — paging thousands of rows via `@odata.nextLink`, or `$apply` results you post-process client-side — where per-call process spawn or subprocess plumbing would be clumsy. This is the sole legitimate reason to hand-roll HTTP.
 
-> **Note:** These raw Web API examples fetch a single page only. If results exceed one page (~5000 records), you must follow `@odata.nextLink` in a loop to get all records. For most N:N and aggregation queries, a single page is sufficient.
+**Telemetry:** these urllib examples use `get_plugin_headers(skill, get_token())` — the **telemetry-carrying** way to call the Web API by hand. It stamps the same `app`/`skill`/`agent` attribution that `get_client(skill)` (SDK) and `--context` (CLI) do. **Never** use bare `get_token()` — it drops attribution.
+
+> **Note:** These raw Web API examples fetch a single page only. If results exceed one page (~5000 records), follow `@odata.nextLink` in a loop to get all records.
 
 ```python
 import os, sys, json, urllib.request
