@@ -92,6 +92,25 @@ steps:
     evaluatorRepoName: 'BIC-Evaluations-Service'
     pluginDir: '.github/plugins/dataverse'
 
+# Copy repo-local custom evaluators (additive, non-gating judge context) into the
+# LER workspace so LoadLocalEvaluatorsAsync picks them up alongside the
+# CortexConfigurations evaluators copied by the Prepare template. Evaluators are
+# matched from evals/CustomEvaluators/*.prompty by the colon-free name in each
+# test file's enabled_evaluators (e.g. DataverseEffectiveEffort.prompty).
+- pwsh: |
+    $ErrorActionPreference = 'Stop'
+    $src = "$(Build.SourcesDirectory)/Dataverse-skills/evals/CustomEvaluators"
+    $dst = "$(Agent.TempDirectory)/eval-workspace/CustomEvaluators"
+    if (Test-Path $src) {
+      New-Item -ItemType Directory -Path $dst -Force | Out-Null
+      Copy-Item "$src/*.prompty" $dst -Force -ErrorAction SilentlyContinue
+      Write-Host 'Repo-local custom evaluators in workspace:'
+      Get-ChildItem $dst -Filter *.prompty | ForEach-Object { Write-Host "  $($_.Name)" }
+    } else {
+      Write-Host "No repo-local CustomEvaluators directory at $src - skipping."
+    }
+  displayName: 'Copy repo-local custom evaluators'
+
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
   parameters:
