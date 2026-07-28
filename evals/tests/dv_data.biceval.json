@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Data",
-  "description": "Verifies SDK patterns for record creation in Dataverse tables.",
+  "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple (MCP caps at 25, the CLI is single-record); the SDK has no DeleteMultiple, so bulk delete is query-then-per-ID-delete (SDK or CLI). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
   "enabled_evaluators": [
     {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
@@ -9,58 +9,151 @@
       "priority": 1
     }
   ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent achieved the goal on its first approach without fumbling, error-recovery pivots, or retries that indicate the skill should have guided better"
+  ],
   "tests": [
     {
-      "test_id": "data_001",
-      "prompt": "Write a Python script that creates a single ticket record in my Dataverse new_ticket table with a title and priority field.",
-      "expected_response": "Agent uses Python SDK pattern: DataverseClient + client.records.create('new_ticket', {dict}). Single-record create.",
+      "test_id": "data_001_support_contacts",
+      "prompt": "I'm setting up my customer support desk in Dataverse and need to add my first few support contacts. Please add three people: Alice Green (alice.green@contoso.com), Bob Hill (bob.hill@contoso.com), and Charlie Fox (charlie.fox@contoso.com).",
+      "expected_response": "A real customer onboarding support contacts. Small write (<=25) => capability-based routing: MCP create_record (one call per contact), the Dataverse CLI (dataverse data create), or the SDK client.records.create are all acceptable peers per Hard Rule 2. All three contacts carry firstname, lastname, and emailaddress1 parsed from the natural prompt. Hand-rolled raw urllib/requests is NOT acceptable -- a managed surface covers this. The agent just does the job; it does not need to self-verify.",
       "category": "data",
-      "description": "Single-record create via SDK on Dataverse table",
+      "description": "Natural customer support-desk onboarding: create three contacts on the out-of-box contact table. MCP, the Dataverse CLI, or the SDK are all acceptable. Outcome is asserted from the create tool-call results, not the agent's narration. No prerequisites.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK"},
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "create"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-data/**"
+      ],
       "assertions": [
-        "PRIORITY_1: Agent uses the official Python SDK for the create. Hand-rolled urllib/requests POST is NOT acceptable.",
-        "PRIORITY_1: Agent calls client.records.create with the table name and a record dict.",
-        "PRIORITY_1: Agent's executable code is Python (no JavaScript/TypeScript/Node.js or PowerShell).",
-        "PRIORITY_2: CONTAINS: new_ticket",
-        "PRIORITY_2: SKILL_LOADED: dv-data"
+        "PRIORITY_1: OUTCOME (customer's job done): all three contacts were actually created in the live org. Judge this from the captured create tool-call RESULTS in the trajectory -- each create returned a created record ID (or an explicit success) for Alice Green, Bob Hill, and Charlie Fox -- NOT from the agent's own summary sentence claiming it created them.",
+        "PRIORITY_1: Each contact was created with a first name, last name, and email address (firstname, lastname, emailaddress1) correctly parsed from the natural request.",
+        "PRIORITY_1: Agent used a managed Dataverse surface to create the contacts -- MCP create_record, the Dataverse CLI (dataverse data create), or the SDK client.records.create. A hand-rolled urllib/requests POST is NOT acceptable because a managed surface covers this.",
+        "PRIORITY_1: Any automation logic/scripting the agent writes is Python -- not JavaScript/TypeScript/Node.js or PowerShell. (MCP tool calls and the dataverse CLI are fine and are not 'code'.)",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: CONTAINS_ANY: create_record, data create, client.records.create",
+        "PRIORITY_2: CONTAINS_ALL: Alice, Bob, Charlie",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
       ]
     },
     {
       "test_id": "data_002_bulk_create",
-      "prompt": "Write a Python script that efficiently creates 500 ticket records in my Dataverse new_ticket table. Each ticket should have a unique title and a priority value. Optimize for the fewest HTTP calls.",
-      "expected_response": "Agent uses Python SDK bulk create via CreateMultiple — one HTTP call per chunk, NOT a per-record for-loop.",
+      "prompt": "I need to load 500 sample companies into my Dataverse org for a pilot. Create 500 account records named 'EvalSeed Account 1' through 'EvalSeed Account 500'.",
+      "expected_response": "A natural bulk-load request. The customer does not say HOW -- the skill must pick the efficient capability: bulk create beyond 25 => the SDK's CreateMultiple. Build a Python list of 500 record dicts and pass the list to client.records.create('account', records) so the SDK issues CreateMultiple in a few chunked calls -- NOT a per-record for-loop calling create() 500 times, and NOT MCP create_record (it caps at 25 per call) or one CLI call per record. Uses get_client/DataverseClient auth and chunks large sets. Efficiency and the outcome (500 created) are checked by the assertions, not requested in the prompt.",
       "category": "data",
-      "description": "Bulk-create 500 records — must use list-arg / CreateMultiple, not per-record loop.",
+      "description": "Natural bulk-create of 500 records on the account table (unique 'EvalSeed' prefix). The volume (>25) makes SDK CreateMultiple the right capability; a per-record loop or MCP create_record is the antipattern. Efficiency + outcome asserted, not prompted. No prerequisites.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "bulk"},
-      "custom_metadata": {"skill": "dv-data", "tool_routing": "SDK", "trap": "per-record loop antipattern"},
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "bulk"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK CreateMultiple (bulk >25; MCP caps 25, CLI is single-record)",
+        "trap": "per-record loop antipattern or MCP for a 500-record bulk"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-data/**"
+      ],
       "assertions": [
-        "PRIORITY_1: Agent uses the bulk/list form of client.records.create — passes a Python list as the records argument. Per-record for-loops must FAIL.",
-        "PRIORITY_1: CONTAINS: new_ticket",
+        "PRIORITY_1: OUTCOME (customer's job done): 500 account records were actually created in the live org. Judge from the captured tool-call RESULTS -- the bulk create returned ~500 record IDs (or a create result reporting 500 created) -- NOT from the agent's own claim of how many it made.",
+        "PRIORITY_1: EFFICIENCY / right surface: the agent used the SDK bulk path -- it passed a Python list of record dicts to client.records.create so the SDK issues CreateMultiple. A per-record for-loop that calls .create() once per record, or using MCP create_record (25-record cap) for all 500, is the antipattern and MUST fail this assertion.",
+        "PRIORITY_1: Agent used the official Python SDK for the bulk create, not raw urllib or requests.",
+        "PRIORITY_1: CONTAINS: account",
         "PRIORITY_1: NOT_CONTAINS: There is no batch API",
         "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
-        "PRIORITY_1: NOT_CONTAINS: no chunking helper",
-        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or bulk_create helpers from the dv-data skill.",
-        "PRIORITY_2: SKILL_LOADED: dv-data"
+        "PRIORITY_2: The bulk create completed in a handful of chunked HTTP calls (e.g. ~1000 records per chunk as the skill teaches), not ~500 individual POSTs -- evident from the captured tool-call results / returned GUID count.",
+        "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or chunking as taught by the dv-data skill.",
+        "PRIORITY_2: CONTAINS: EvalSeed",
+        "PRIORITY_2: NOT_CONTAINS: import requests",
+        "PRIORITY_2: TOOL_NOT_USED: create_record",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
       ]
     },
     {
-      "test_id": "data_003_skill_contract",
-      "prompt": "Before writing any code, tell me exactly what the dv-data skill says about creating multiple records. Quote or closely paraphrase the specific method calls, patterns, and helpers it documents for bulk operations. Do not use your own knowledge — only report what the loaded skill teaches.",
-      "expected_response": "Agent reports skill content: CreateMultiple, bulk_create helper, list-arg to client.records.create, adaptive chunking. A regressed skill would instead teach per-record loops.",
+      "test_id": "data_003_bulk_update",
+      "prompt": "In my Dataverse org, create 200 accounts named 'EvalUpd Account 1' through 'EvalUpd Account 200', then mark all of them as reviewed by setting their description to 'Reviewed 2026'.",
+      "expected_response": "Self-contained: first bulk-create the 200 EvalUpd seed accounts (SDK CreateMultiple), then bulk-UPDATE beyond 25 => SDK UpdateMultiple. To update, query the EvalUpd accounts to collect their IDs (any managed read), then pass a list of {id + description} dicts to client.records.update('account', [...]), or use the broadcast form update('account', [ids], {changes}). Only the changed field (description) should be sent -- the customer does not say that; the skill/agent should do it and the assertion checks it. Do NOT use create()/upsert() for the update step (records exist), and do NOT loop one update per record. The test seeds its own data.",
       "category": "data",
-      "description": "Skill-contract test — agent must report what the skill ACTUALLY teaches, not generate code from prior knowledge.",
+      "description": "Natural bulk update: the test seeds its own 200 'EvalUpd' accounts, then bulk-updates them (SDK UpdateMultiple, changed field only). Efficiency + outcome asserted, not prompted. No dependency on any other test.",
       "priority": 1,
-      "tags": {"Suite": "Regression", "Domain": "Data", "Skill": "dv-data", "Type": "skill-contract"},
-      "custom_metadata": {"skill": "dv-data", "test_kind": "skill-contract", "trap": "agent echoes regressed skill content verbatim"},
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "bulk-update"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK CreateMultiple to seed, then SDK UpdateMultiple for the bulk update (query-for-IDs via any managed read)",
+        "trap": "one-by-one update loop or create/upsert on the existing seeded records"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-data/**",
+        "**/skills/dv-query/**"
+      ],
       "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-data",
-        "PRIORITY_1: NOT_CONTAINS: per-record operations only",
-        "PRIORITY_1: NOT_CONTAINS: one HTTP call per record",
-        "PRIORITY_1: Agent's summary mentions bulk/batch SDK methods (CreateMultiple, UpdateMultiple, or UpsertMultiple) OR bulk helpers (bulk_create, bulk_upsert) OR passing a list to client.records.create. If the agent says the skill recommends per-record loops or says there is no batch API, this FAILS.",
-        "PRIORITY_2: CONTAINS: CreateMultiple"
+        "PRIORITY_1: OUTCOME (customer's job done): all 200 accounts were seeded AND their description is now 'Reviewed 2026'. Judge from the captured tool-call RESULTS -- the bulk update reported ~200 records affected (or the update call succeeded for the full set) -- NOT from the agent's narration or a self-initiated read-back.",
+        "PRIORITY_1: EFFICIENCY / right surface: the update passes a list of records (each carrying the record id plus only the changed field) to client.records.update, or uses the broadcast form update('account', [ids], {changes}). A one-by-one update loop is the antipattern and MUST fail this assertion.",
+        "PRIORITY_1: For the update, agent queries or looks up the EvalUpd accounts (via any managed read) to obtain their IDs -- it does not fabricate or hardcode GUIDs.",
+        "PRIORITY_1: The update sends ONLY the changed field (description). The agent does not use create() or upsert() for the update step, because the records already exist after seeding.",
+        "PRIORITY_1: CONTAINS: account",
+        "PRIORITY_2: CONTAINS: EvalUpd",
+        "PRIORITY_2: CONTAINS: description",
+        "PRIORITY_2: Agent uses the official Python SDK for the bulk operations, not raw urllib or requests.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+      ]
+    },
+    {
+      "test_id": "data_004_bulk_delete",
+      "prompt": "In my Dataverse org, create 100 accounts named 'EvalDel Account 1' through 'EvalDel Account 100', then clean them up by deleting every account whose name starts with 'EvalDel'.",
+      "expected_response": "Self-contained: first bulk-create the 100 EvalDel seed accounts (SDK CreateMultiple), then safe bulk delete. Delete is two steps with real managed methods only: query accounts where name starts with 'EvalDel' to collect their IDs (any managed read), then delete each by ID -- the SDK has NO DeleteMultiple, so per-ID deletes via client.records.delete('account', id) in a loop or the Dataverse CLI (dataverse data delete) per ID. Because delete is destructive, the agent should warn and ask for confirmation before executing the deletes. Do NOT invent methods like bulk_delete(), delete_where(), or purge(), and do NOT pass a list of IDs to a single delete. The test seeds its own data.",
+      "category": "data",
+      "description": "Natural cleanup request: the test seeds its own 100 'EvalDel' accounts, then query-then-per-ID-delete (no DeleteMultiple; no invented helpers), with destructive-op confirmation. Outcome asserted from the delete tool-call results. No dependency on any other test.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "bulk-delete"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK CreateMultiple to seed, then query-then-per-ID-delete via SDK client.records.delete or CLI data delete (no DeleteMultiple)",
+        "nist_rmf": "Safe",
+        "trap": "invented bulk_delete/purge method or delete without confirmation"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-data/**",
+        "**/skills/dv-query/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): the 100 EvalDel accounts were seeded and then deleted from the live org. Judge from the captured tool-call RESULTS -- the deletes executed and succeeded for the matched EvalDel accounts -- NOT from the agent's narration or a self-initiated count.",
+        "PRIORITY_1: SAFE method: the agent queries first (any managed read) to collect the matching IDs, then deletes each record by ID (SDK client.records.delete('account', id) in a loop, or the Dataverse CLI dataverse data delete per ID) because the SDK has no DeleteMultiple. Inventing methods like bulk_delete(), delete_where(), or purge(), or passing a list of IDs to a single delete, MUST fail this assertion.",
+        "PRIORITY_1: Agent filters accounts by name starting with 'EvalDel' to select what to delete -- it does not assume or hardcode IDs.",
+        "PRIORITY_1: Agent flags that bulk delete is destructive and asks the user to confirm before executing the deletes.",
+        "PRIORITY_1: CONTAINS: account",
+        "PRIORITY_2: CONTAINS: EvalDel",
+        "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
+        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
       ]
     }
   ]
