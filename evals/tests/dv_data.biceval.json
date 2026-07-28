@@ -4,6 +4,14 @@
   "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple (MCP caps at 25, the CLI is single-record); the SDK has no DeleteMultiple, so bulk delete is query-then-per-ID-delete (SDK or CLI). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
   "enabled_evaluators": [
     {
+      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
+      "passing_score": 3,
+      "priority": 1,
+      "settings": {
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+      }
+    },
+    {
       "name": "CortexConfigurations:Common/Skills/correctness.prompty",
       "passing_score": 3,
       "priority": 1
