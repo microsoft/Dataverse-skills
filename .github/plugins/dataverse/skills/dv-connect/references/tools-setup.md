@@ -12,7 +12,7 @@ Check all in parallel. Install any that are missing.
 | .NET SDK | `dotnet --version` | `winget install Microsoft.DotNet.SDK.9` |
 | Python 3 | `python --version` | `winget install Python.Python.3.12` |
 | Node.js | `node --version` | `winget install OpenJS.NodeJS.LTS` |
-| Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (always upgrades to latest — mirrors `pip install --upgrade` for the Python SDK) |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (install if missing; upgrade on demand rather than every connect — repeated `@latest` fetches hit the npm registry each time, which corporate device policies may block) |
 | Git | `git --version` | `winget install Git.Git` |
 
 After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
@@ -56,6 +56,25 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 - PAC CLI: `dotnet tool install --global Microsoft.PowerApps.CLI.Tool`
 - GitHub CLI: download from https://cli.github.com
 - Azure CLI: download from https://aka.ms/installazurecliwindows
+
+### Corporate-managed / restricted devices: package registry
+
+On corporate-managed devices, direct access to the public npm registry (and sometimes PyPI) may be blocked by device policy. Symptom: repeated **"This content is blocked by your IT admin"** / npm-URL-block popups during `npm install` or `npx` — which `dv-connect` (`npm install -g @microsoft/dataverse`) and the MCP proxy (`npx @microsoft/dataverse mcp`) invoke, so they fire on every connect/auth.
+
+The plugin never overrides your registry — it honors your `.npmrc`. The fix is device-level: point npm at your organization's approved internal feed.
+
+1. Check what npm is using:
+   ```
+   npm config get registry
+   ```
+2. If it shows the public `registry.npmjs.org` and your org blocks it, set your organization's approved (internal) feed instead — get the exact URL from your IT / package-management policy notice:
+   ```
+   npm config set registry <your-org-approved-feed-url>
+   ```
+   Also remove any explicit `registry=https://registry.npmjs.org/` line from `~/.npmrc` that shadows the managed default.
+3. `npx` follows npm's registry config; if it still resolves stale, clear its cache (`npm-cache/_npx`) and retry.
+
+To minimize how often this is hit, install the Dataverse CLI once and upgrade on demand rather than re-fetching `@latest` on every connect.
 
 ---
 
