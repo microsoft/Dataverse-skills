@@ -29,7 +29,7 @@ Use **dv-data** for record CRUD and sample data, **dv-metadata** for tables / co
 
 ## Allowed settings — hard allowlist
 
-The 37 PPAC toggles below are the only ones this skill may read or update (35 unique backend keys — `SearchAndCopilotIndexMode` and `auditretentionperiodv2` each cover two toggles). Examples that are **out of scope and must be refused** per the safety rule above: `sessiontimeoutinmins`, `isautosaveenabled`, `maxuploadfilesize`, `inaborttimeoutinmins`, `IsArchivalEnabled`, `IsShadowLakeEnabled`, `EnableActivitiesFeatures`. Do not run `pac org list-settings` without `--filter`, and do not dump the whole `orgdborgsettings` XML for a non-allowlisted setting.
+The 37 PPAC toggles below are the only ones this skill may read or update (35 unique backend keys — `SearchAndCopilotIndexMode` and `auditretentionperiodv2` each cover two toggles). Examples that are **out of scope and must be refused** per the safety rule above: `sessiontimeoutinmins`, `isautosaveenabled`, `IsShadowLakeEnabled`, `IsArchivalEnabled`. Do not run `pac org list-settings` without `--filter`, and do not dump the whole `orgdborgsettings` XML for a non-allowlisted setting.
 
 ### Organization entity columns — use PAC CLI (14)
 
@@ -118,8 +118,9 @@ If `pac org list-settings` fails for a setting, that setting is NOT an org colum
 
 ## Prerequisites
 
-- PAC CLI **latest .NET Framework build** — `pac data bulk-delete` and `pac data retention` are only in the .NET Framework build, not the `dotnet tool` cross-platform version. Check with `pac help` (look for "Version: x.x.x (.NET Framework ...)"); if it shows `.NET 10` or `.NET 8`, run `pac install latest && pac use latest` to switch.
+- PAC CLI **latest .NET Framework build** — `pac data bulk-delete`/`pac data retention` are only in the .NET Framework build (not the `dotnet tool` version). Check `pac help`; if it shows `.NET 10`/`.NET 8`, run `pac install latest && pac use latest`.
 - Authenticated (`pac auth create`), active profile (`pac auth list`), and System Administrator privilege on the target environment.
+- **Headless / restricted-egress hosts** (ChatGPT Work Mode, CI): org settings are PAC-only, which needs a keyring the host lacks — use **service principal** auth + verify reachability (`python scripts/auth.py --check`), else unavailable here. See `dv-connect/references/headless-hosts.md`.
 
 ## Multi-Environment Operations — Always Parallel
 

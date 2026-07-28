@@ -61,6 +61,8 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 ## Authentication
 
+> **Headless / sandboxed hosts (ChatGPT browser Work Mode, Codex, CI, SSH, containers):** the Dataverse CLI and PAC CLI interactive sign-ins fail on headless Linux — they persist their MSAL cache through libsecret/gnome-keyring over D-Bus, which the container lacks. Even `--accept-cleartext-caching` still crashes on the .NET cache lock (`System.InvalidOperationException: Process has exited at Microsoft.Identity.Client.Extensions.Msal.CrossPlatLock`), so the profile never saves. Use the Python SDK device-code path (`scripts/auth.py`) instead — it persists a plaintext cache with no keyring. Full guidance: [headless-hosts.md](headless-hosts.md).
+
 > **Multi-environment note:** Pro developers typically work across multiple environments (dev, test, staging, prod) and maintain one named PAC auth profile per environment. Before any environment operation, always run `pac auth list` + `pac org who` to confirm which profile is active, and ask the user which environment they intend to target. Never assume the currently active profile is correct.
 
 ### Identify your tenant ID first

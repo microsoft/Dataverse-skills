@@ -38,6 +38,7 @@ Role grants and self-elevate are destructive (they change security posture and a
 - PAC CLI installed and authenticated (`pac auth create`)
 - System Administrator role in target environment (or Global/PP/D365 Admin for self-elevate)
 - Active auth profile: `pac auth list`
+- **Headless / restricted-egress hosts** (ChatGPT Work Mode, CI, containers): interactive `pac auth create` can't persist a profile without a keyring, and the org domain may be unreachable. Use **service principal** auth (`pac auth create --applicationId ... --clientSecret ... --tenant ...`) and confirm reachability first with `python scripts/auth.py --check`. If the domain is blocked, this skill can't run there — see `dv-connect/references/headless-hosts.md`.
 
 ---
 

@@ -65,8 +65,6 @@ Python is the language for automation **logic** (transformation, control flow, r
 - Use `scripts/auth.py` for tokens/credentials; `azure-identity` (Python) for Azure credential flows
 - Treat the Dataverse CLI (`dataverse`) and `pac` as allowed first-party CLIs
 
-About to run `npm` or create a `package.json`? STOP — that is off-rails. Reaching for `pac` or the Dataverse CLI is not.
-
 ### 2. Pick the surface that fits — capability awareness, not a fixed order
 
 No mandated tool order. Each surface has a capability profile; pick what fits the job and the surface you are already in — soft defaults, not a required sequence. The full matrix is in **Tool Capabilities** below; the principles:
@@ -77,7 +75,7 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 
 **Field casing:** `$select`/`$filter` use lowercase logical names (`new_name`). `$expand` and `@odata.bind` use Navigation Property Names that are case-sensitive and must match `$metadata` (e.g., `new_AccountId`). Getting this wrong causes 400 errors. **SDK record payloads:** provide the correct SchemaName casing on `@odata.bind` keys (e.g., `new_AccountId@odata.bind`); the SDK does not auto-correct wrong casing. **Raw Web API calls** (forms, views, metadata): casing is entirely manual — a lowercase `new_accountid@odata.bind` will 400.
 
-**Publisher prefix:** Never hardcode a prefix (especially not `new`). Always query existing publishers in the environment and ask the user which to use. The prefix is permanent on every component created with it. See the solution skill's publisher discovery flow.
+**Publisher prefix:** Never hardcode a prefix (especially `new`); query existing publishers and ask the user. The prefix is permanent. See the solution skill's publisher discovery flow.
 
 ### 3. Use Documented Auth Patterns
 
@@ -94,13 +92,15 @@ Three entry points, one shared sign-in:
 - Hard-code tokens or credentials in scripts
 - Invent a new auth mechanism
 
-If auth is expired or missing, re-run `dataverse auth create` (or `pac auth create` for `pac`), or check `.env` credentials. See the `dv-connect` skill.
+If auth is expired or missing, re-run `dataverse auth create` (or `pac auth create`), or check `.env`. See the `dv-connect` skill.
 
 ### 4. Be honest about gaps — don't hallucinate
 
 Each skill documents a tested sequence — follow it when it fits. The skills are the source of truth for the supported, non-deprecated API. If a call fails with `AttributeError`, the installed SDK version may not have it — check the skill's version note and use the documented alternative.
 
 **The honesty guard:** if you hit a gap the skills don't cover, say so and suggest a workaround. **Do not hallucinate an unsupported path** — do not invent a method, parameter, or endpoint that isn't documented. If unsure, say so.
+
+**Connectivity is not auth.** A `login.microsoftonline.com` token can succeed while the org's data-plane domain is unreachable (restricted-egress hosts like ChatGPT Work Mode). Never report a count or result you didn't get from a real call that returned — verify with `python scripts/auth.py --check`; if it fails, say "unreachable," never a fabricated number. See `dv-connect/references/headless-hosts.md`.
 
 ---
 
@@ -121,9 +121,9 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Routing:** the table shows what each surface does; the *how to choose* principle (soft defaults, not a fixed order) is Hard Rule 2. MCP tools not in your list? Load `dv-connect`.
 
-**Volume guidance:** MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads (streams pages, avoids MCP SQL limits); Web API for `$apply` aggregation.
+**Volume guidance:** MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; Web API for `$apply` aggregation.
 
-**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface — MCP tools appear in your tool list and the CLI self-documents via `dataverse --help`, but SDK calls surface nowhere, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
+**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
 
 | Operation | SDK call | Skill |
 | --- | --- | --- |
@@ -155,7 +155,7 @@ If the user's request involves MCP — either explicitly ("connect via MCP", "us
 1. This is a SDK fallback case — use the Python SDK to answer the question. Do not block the user.
 2. After answering, offer: "MCP would handle this conversationally — want me to set it up?"
 
-The distinction matters: explicit MCP request → block and set up MCP. Implicit/conversational question → answer with SDK, offer MCP setup.
+The distinction matters: explicit MCP request → block and set up MCP; implicit question → answer with SDK, offer MCP setup.
 
 **If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
 

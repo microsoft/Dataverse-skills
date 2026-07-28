@@ -18,7 +18,9 @@ authenticates as the same OAuth client and AAD treats it as one sign-in.
 Token caching layout (path 2):
   Windows: %LocalAppData%\\Microsoft\\DataverseCli\\tokencache_msalv3.dat (DPAPI)
   macOS:   Keychain service ``dataverse_cli_service`` / account ``dataverse_cli_account``
-  Linux:   libsecret schema ``com.microsoft.dataversecli``
+  Linux:   libsecret schema ``com.microsoft.dataversecli`` (desktop), or a plaintext
+           ``tokencache_msalv3.dat`` under ``$XDG_DATA_HOME/Microsoft/DataverseCli``
+           on headless hosts with no keyring (matches the CLI's WithLinuxUnprotectedFile)
 
 Functions:
   load_env()            — loads .env into os.environ
@@ -109,43 +111,67 @@ def _build_shared_msal_cache():
         return None
 
     try:
+        # Collect candidate MSAL cache persistences to try in order. The first
+        # one that yields a signed-in account wins. On Linux this lets a single
+        # login serve both the DataverseCLI and Python: the CLI writes its
+        # public-client cache to the libsecret keyring on desktop, or to a
+        # plaintext MSAL v3 file on headless hosts that lack a keyring.
+        candidates = []
         if sys.platform == "win32":
             from msal_extensions import FilePersistenceWithDataProtection
             cache_path = (
                 Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
                 / "Microsoft" / "DataverseCli" / "tokencache_msalv3.dat"
             )
-            if not cache_path.exists():
-                return None
-            persistence = FilePersistenceWithDataProtection(str(cache_path))
+            if cache_path.exists():
+                candidates.append(FilePersistenceWithDataProtection(str(cache_path)))
         elif sys.platform == "darwin":
             from msal_extensions import KeychainPersistence
             # Fallback file path is required by msal-extensions but unused on
             # macOS — the Keychain service/account match DataverseCLI's
             # PacAuthApplicationFactory constants exactly.
             fallback = str(Path.home() / ".dataverse_cli_msal_cache")
-            persistence = KeychainPersistence(
-                fallback, "dataverse_cli_service", "dataverse_cli_account"
+            candidates.append(
+                KeychainPersistence(fallback, "dataverse_cli_service", "dataverse_cli_account")
             )
         else:
-            from msal_extensions import LibsecretPersistence
+            # Linux: try the libsecret keyring first (desktop), then the CLI's
+            # plaintext MSAL v3 file (headless, once the CLI falls back to
+            # WithLinuxUnprotectedFile). Same MSAL v3 format both sides read.
             fallback = str(Path.home() / ".dataverse_cli_msal_cache")
-            persistence = LibsecretPersistence(
-                fallback,
-                schema_name="com.microsoft.dataversecli",
-                attributes={"Version": "1", "ProductGroup": "DataverseCli"},
-            )
+            try:
+                from msal_extensions import LibsecretPersistence
+                candidates.append(
+                    LibsecretPersistence(
+                        fallback,
+                        schema_name="com.microsoft.dataversecli",
+                        attributes={"Version": "1", "ProductGroup": "DataverseCli"},
+                    )
+                )
+            except Exception:
+                pass  # libsecret backend unavailable on this host — skip it.
+            from msal_extensions import FilePersistence
+            xdg_data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+            plaintext_path = Path(xdg_data) / "Microsoft" / "DataverseCli" / "tokencache_msalv3.dat"
+            if plaintext_path.exists():
+                candidates.append(FilePersistence(str(plaintext_path)))
 
-        cache = PersistedTokenCache(persistence)
-        app = msal.PublicClientApplication(
-            client_id=_DATAVERSE_CLI_CLIENT_ID,
-            authority=f"https://login.microsoftonline.com/{tenant_id}",
-            token_cache=cache,
-        )
-        accounts = app.get_accounts()
-        if not accounts:
-            return None
-        return app, accounts
+        for persistence in candidates:
+            try:
+                cache = PersistedTokenCache(persistence)
+                app = msal.PublicClientApplication(
+                    client_id=_DATAVERSE_CLI_CLIENT_ID,
+                    authority=f"https://login.microsoftonline.com/{tenant_id}",
+                    token_cache=cache,
+                )
+                accounts = app.get_accounts()
+                if accounts:
+                    return app, accounts
+            except Exception:
+                # This candidate failed (missing backend, corrupt/locked file) —
+                # try the next; never let the shared-cache path break auth.
+                continue
+        return None
     except Exception:
         # Any failure (permissions, unsupported keyring, corrupt cache) →
         # silently fall through to device-code fallback. Keeping this broad
@@ -430,5 +456,45 @@ def get_plugin_headers(skill, token=None):
 
 
 if __name__ == "__main__":
-    token = get_token()
-    print(token)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Acquire a Dataverse token, or verify the environment is reachable."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Make a REAL data-plane call and report reachability instead of printing a token. "
+        "A token can be minted while the org domain is blocked (restricted-egress hosts), so "
+        "this is the only proof of an actual connection. Exit 0 = reachable, 2 = not reachable.",
+    )
+    args = parser.parse_args()
+
+    if not args.check:
+        # Default (unchanged) behavior: print a bearer token.
+        print(get_token())
+        sys.exit(0)
+
+    # Reachability gate. A green token is NOT a connection: auth traffic goes to
+    # login.microsoftonline.com (often reachable) while the org's data plane
+    # (*.dynamics.com) may be blocked by a sandbox egress allowlist. Only a real
+    # call proves it. Bound the wait so a blocked domain fails fast instead of hanging.
+    import socket
+
+    socket.setdefaulttimeout(30)
+    load_env()
+    url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
+    try:
+        client = get_client("dv-connect")
+        tables = client.tables.list(select=["LogicalName"])
+        print(f"REACHABLE: {url} -- {len(tables)} non-private tables")
+        sys.exit(0)
+    except Exception as e:
+        print(f"NOT REACHABLE: {url} -- {type(e).__name__}: {e}", flush=True)
+        print(
+            "If this is a connection/timeout error, the org domain is blocked by the host "
+            "network egress allowlist -- auth is fine; the data plane is unreachable. Do NOT "
+            "report a table count or query result: nothing was retrieved.",
+            flush=True,
+        )
+        sys.exit(2)
