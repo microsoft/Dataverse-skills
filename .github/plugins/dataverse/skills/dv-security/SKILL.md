@@ -5,7 +5,7 @@ description: Security-role assignment, user access, application users, business 
 
 # Skill: Security — Role Assignment and Self-Elevation
 
-**This skill uses PAC CLI exclusively.** Do NOT write Python scripts for role operations.
+**This skill uses first-party CLIs — PAC CLI for role changes, Dataverse CLI to verify.** Do NOT write Python scripts for role operations.
 
 ## Preview Before Running
 
@@ -59,6 +59,32 @@ pac admin assign-user --user <email-or-object-id> --role "System Administrator" 
 
 ---
 
+## Verify the assignment — exit code 0 is not proof
+
+`pac admin assign-user` **exits 0 even when it fails** (unresolved environment, wrong role name, unknown user). Never treat a clean exit as success.
+
+1. **Read the output, not just the exit code.** A failed run still exits 0 but prints an error (`environment ... not found`, `role ... does not exist`). Stop if the output contains an error.
+2. **Confirm against the exact `--environment` you used** — do not re-resolve or shorten it; a different id silently "succeeds" on the wrong org. Query the user's roles with a Dataverse CLI read:
+
+```bash
+# Resolve the user's systemuserid, then list their assigned roles.
+# --context carries plugin/skill/agent attribution on the managed CLI call.
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/systemusers?%24select=systemuserid&%24filter=internalemailaddress eq 'user@contoso.com'" \
+  --environment <same-url-as-assign> \
+  --context "app=dataverse-skills/<ver>;skill=dv-security;agent=<agent>"
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/systemusers(<systemuserid>)/systemuserroles_association?%24select=name" \
+  --environment <same-url-as-assign> \
+  --context "app=dataverse-skills/<ver>;skill=dv-security;agent=<agent>"
+```
+
+If the first query returns no row, the sign-in identity may live on `domainname` (the AAD UPN) rather than `internalemailaddress` (Primary Email) — retry with `%24filter=domainname eq '<upn>'`, or `azureactivedirectoryobjectid eq '<objectid>'` when you assigned by object id. A missing row is not proof the grant failed.
+
+If the target role is absent, the assignment did not take — re-run, read the output, or fall back to self-elevate.
+
+---
+
 ## Batch Workflow: Assign Role Across Multiple Environments
 
 Run in parallel — never sequentially:
@@ -78,10 +104,10 @@ wait
 ```
 
 ```
-Step 5: Report summary ("Assigned System Administrator on 3/3 environments")
+Step 5: Verify each landed (exit 0 is not proof — see above), then report ("Assigned + verified on 3/3 environments")
 ```
 
-**Important**: Always confirm which environments will be affected before assigning roles.
+**Important**: Always confirm which environments will be affected before assigning roles, and verify each assignment landed — a clean exit code does not prove success.
 
 ---
 

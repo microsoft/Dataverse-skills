@@ -1,6 +1,6 @@
 ---
 name: dv-data
-description: Record-level CRUD and bulk operations via the Python SDK — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.
+description: Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.
 ---
 
 # Skill: Data — Create, Update, Delete, and Bulk Import
@@ -11,7 +11,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
 **PyPI package:** `PowerPlatform-Dataverse-Client` (this is the only official one — do not use `dataverse-api` or other unofficial packages)
-**Status:** Preview — breaking changes are possible
+**Status:** GA (`1.0.0`, Production/Stable)
 
 ## Skill boundaries
 
@@ -20,17 +20,17 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 | Query or read records | **dv-query** |
 | Create tables, columns, relationships, forms, views | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
-| ERP writes | Use ERP MCP or `dataverse data create/update/delete --target erp` (CLI). See [Writing ERP data](#writing-erp-data) below. |
+| ERP writes | See [`references/erp-writes.md`](references/erp-writes.md) |
 
 ---
 
-## Before Writing ANY Script — Check MCP First
+## Choosing MCP vs the SDK for writes
 
-**If MCP tools are available** (`create_record`, `update_record`) and the task is ≤10 records, **use MCP directly — no script needed.** Only write a Python script when the task requires: bulk operations (10+ records), data transformation, retry logic, CSV import, or operations the SDK supports that MCP cannot (upsert, file uploads). Sequential MCP tool calls are not "multi-step logic" — use MCP for those.
+**If MCP tools are available** (`create_record`, `update_record`, `delete_record`), they are the quickest path for a **small, interactive** set of writes — they batch up to 25 records per call, no script needed. The SDK is the default when the task needs bulk writes beyond 25 (it holds rows in memory for large batches), data transformation, retry logic, CSV import, or SDK-only operations (upsert — MCP has no upsert tool). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
 
-## SDK-First Rule
+## When you script a write, use the SDK — not hand-rolled HTTP
 
-**If an operation is in the "supports" list below, you MUST use the SDK — not `urllib`, `requests`, or raw HTTP.**
+The MCP-vs-SDK choice is capability-based (above; and see the overview's **Tool Capabilities** / Hard Rule 2). This section is narrower: **once you've decided to write via a script**, use the SDK for anything in its "supports" list rather than hand-rolled `urllib`/`requests` — the SDK carries the auth, paging, and retry those re-implement. For the rare operation the SDK doesn't cover, use the `dataverse api` escape hatch — not hand-rolled `urllib`.
 
 **Correct import** (always preceded by `sys.path.insert` in a full script — see Setup below):
 ```
@@ -43,7 +43,7 @@ from auth import get_token, load_env  # WRONG for SDK-supported ops
 import requests                        # WRONG for SDK-supported ops
 ```
 
-`get_token()` and `requests` exist ONLY for operations the SDK does not support (forms, views, `$apply`, N:N `$expand`, unbound actions) — see **dv-query** and **dv-metadata**.
+`get_token()` and `requests` exist ONLY for genuine gaps with no managed path (global option sets, unbound actions) — and even then prefer the managed `dataverse api` escape hatch. Forms/views, aggregation, and N:N reads are all covered by the SDK; see **dv-query** and **dv-metadata**.
 
 ---
 
@@ -58,14 +58,11 @@ import requests                        # WRONG for SDK-supported ops
 
 ## What This SDK Does NOT Support
 
-Use raw Web API (`get_token()`) for:
-- Forms (FormXml) — see **dv-metadata**
-- Views (SavedQueries) — see **dv-metadata**
+Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association (`$ref` POST) — use raw Web API (`POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`)
-- N:N `$expand` — see **dv-query**
-- `$apply` aggregation — see **dv-query**
-- Unbound actions (e.g., `InstallSampleData`)
+- N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
+- `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
+- Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 - DeleteMultiple, general OData batching
 
 ---
@@ -85,7 +82,7 @@ client = get_client("dv-data")
 
 `get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`.
 
-For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended since b6). For notebooks and interactive sessions, the explicit client above is simpler.
+For scripts that run to completion: wrap in `with DataverseClient(...) as client:` for automatic connection cleanup (recommended). For notebooks and interactive sessions, the explicit client above is simpler.
 
 ---
 
@@ -114,7 +111,7 @@ print(f"Created: {guid}")
 ```
 
 **`@odata.bind` notes:**
-- Key is the Navigation Property Name: `new_AccountId@odata.bind` (the SDK preserves casing automatically as of b6, but matching the schema name is still the correct form)
+- Key is the Navigation Property Name: `new_AccountId@odata.bind` (the SDK preserves casing automatically, but matching the schema name is still the correct form)
 - Value is `"/<EntitySetName>(<guid>)"` — e.g., `"/accounts(<guid>)"`
 - If you just created the lookup column, wait 5–10 seconds before inserting. Metadata propagation delays cause "Invalid property" errors.
 - Choice columns use integer values, not strings: `"new_priority": 100000002` (not `"High"`)
@@ -164,7 +161,7 @@ guids = client.records.create("new_ticket", records)
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: MCP `create_record` for 1-10 records. SDK for 10+ records.
+Volume guidance: MCP `create_record` batches up to 25 records per call. SDK `CreateMultiple` for larger bulk.
 
 **Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse has no fixed record count limit — the constraints are payload size and request timeout (SDK default: 120s for POST). For larger datasets, you **must** chunk in your script. The `bulk_upsert` and `bulk_create` helpers below use adaptive chunking: start at 1,000, double on success (up to 4,000), halve on payload/timeout failure, and cap at the last successful size. Tables with few columns can handle larger chunks than tables with many columns.
 
@@ -183,7 +180,7 @@ client.records.update("new_ticket",
 
 ## DataFrame Write-Back
 
-To create or update records from a pandas DataFrame, use the `client.dataframe` namespace. This is documented in **dv-query** (alongside `client.dataframe.get()`) but is a write operation — include it in your data write workflow:
+To create or update records from a pandas DataFrame, use the `client.dataframe` namespace (`create`/`update`). This is documented in **dv-query** but is a write operation — include it in your data write workflow:
 
 ```python
 # Update records — DataFrame must include the primary key column
@@ -193,7 +190,7 @@ client.dataframe.update("opportunity", df_updates, id_column="opportunityid")
 guids = client.dataframe.create("opportunity", df_new_records)
 ```
 
-See **dv-query** for the full `client.dataframe` reference including `client.dataframe.get()`.
+See **dv-query** for the full `client.dataframe` write reference; for reads use `client.query.builder(...).execute().to_dataframe()`.
 
 ---
 
@@ -259,9 +256,8 @@ If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs
 ```python
 # Build email -> GUID map first
 email_to_guid = {}
-for page in client.records.get("new_customer", select=["new_customerid", "new_email"]):
-    for r in page:
-        email_to_guid[r["new_email"]] = r["new_customerid"]
+for r in client.records.list("new_customer", select=["new_customerid", "new_email"]):
+    email_to_guid[r["new_email"]] = r["new_customerid"]
 
 # Use it during import
 records = []
@@ -283,7 +279,7 @@ guids = client.records.create("new_interaction", records)
 Before bulk-creating in a system table (account, contact, opportunity):
 1. Create a single test record with your intended minimal payload
 2. If `HttpError` 400 is raised, the error message names the missing required field
-3. Some required fields are plugin-enforced and not visible in `describe_table`
+3. Some required fields are plugin-enforced and not visible in `describe`
 4. Delete the test record, then proceed with bulk create
 
 ---
@@ -328,7 +324,7 @@ except HttpError as e:
 
 ## Writing ERP data
 
-On ERP-linked envs, ERP writes do not go through the Python SDK. See [`references/erp-writes.md`](references/erp-writes.md).
+On ERP-linked envs, writes to ERP entities do not go through the Python SDK. See [`references/erp-writes.md`](references/erp-writes.md).
 
 ---
 

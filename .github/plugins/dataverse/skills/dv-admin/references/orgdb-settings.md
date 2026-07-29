@@ -14,25 +14,16 @@ Settings like search mode, MCP, copilot features, fabric, and retention live ins
 **Read all OrgDB settings:**
 
 ```python
-import os, sys, json, urllib.request
+import os, sys
 from xml.etree import ElementTree as ET
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # SDK does not support orgdborgsettings XML blob
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-_headers = get_plugin_headers("dv-admin", token)
-_headers["Accept"] = "application/json"
+client = get_client("dv-admin")
 
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
-    headers=_headers,
-)
-with urllib.request.urlopen(req) as resp:
-    org = json.loads(resp.read())["value"][0]
-
-root = ET.fromstring(org["orgdborgsettings"])
+# orgdborgsettings is a column on the organization entity — plain SDK record read.
+orgs = list(client.records.list("organization", select=["organizationid", "orgdborgsettings"]))
+root = ET.fromstring(orgs[0].get("orgdborgsettings") or "<OrgSettings></OrgSettings>")
 for child in sorted(root, key=lambda c: c.tag):
     print(f"  {child.tag} = {child.text}", flush=True)
 ```
@@ -40,36 +31,22 @@ for child in sorted(root, key=lambda c: c.tag):
 **Update or add an OrgDB setting:**
 
 ```python
-import os, sys, json, urllib.request, urllib.error
+import os, sys
 from xml.etree import ElementTree as ET
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # SDK does not support orgdborgsettings XML blob
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
+client = get_client("dv-admin")
 
 SETTING_NAME = "SearchAndCopilotIndexMode"  # PascalCase, case-sensitive
 SETTING_VALUE = "0"                          # always a string in XML
 
-headers = get_plugin_headers("dv-admin", token)
-headers.update({
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    "OData-MaxVersion": "4.0",
-    "OData-Version": "4.0",
-})
+# organization is an ordinary entity; orgdborgsettings is one of its columns.
+orgs = list(client.records.list("organization", select=["organizationid", "orgdborgsettings"]))
+org = orgs[0]
+org_id = org["organizationid"]
 
-# Fetch current XML
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/organizations?$select=organizationid,orgdborgsettings",
-    headers=headers,
-)
-with urllib.request.urlopen(req) as resp:
-    org = json.loads(resp.read())["value"][0]
-    org_id = org["organizationid"]
-
-root = ET.fromstring(org.get("orgdborgsettings", "<OrgSettings></OrgSettings>"))
+root = ET.fromstring(org.get("orgdborgsettings") or "<OrgSettings></OrgSettings>")
 
 # Update existing or add new
 existing = root.find(SETTING_NAME)
@@ -80,18 +57,8 @@ else:
     print(f"{SETTING_NAME} not set -- adding", flush=True)
     ET.SubElement(root, SETTING_NAME).text = SETTING_VALUE
 
-# PATCH back
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/organizations({org_id})",
-    data=json.dumps({"orgdborgsettings": ET.tostring(root, encoding="unicode")}).encode("utf-8"),
-    headers=headers,
-    method="PATCH",
-)
-try:
-    with urllib.request.urlopen(req) as resp:
-        print(f"SUCCESS: {SETTING_NAME} = {SETTING_VALUE} (HTTP {resp.status})", flush=True)
-except urllib.error.HTTPError as e:
-    print(f"ERROR {e.code}: {e.read().decode()}", flush=True)
+client.records.update("organization", org_id, {"orgdborgsettings": ET.tostring(root, encoding="unicode")})
+print(f"SUCCESS: {SETTING_NAME} = {SETTING_VALUE}", flush=True)
 ```
 
 **Remove an OrgDB setting:**
@@ -101,7 +68,7 @@ except urllib.error.HTTPError as e:
 existing = root.find(SETTING_NAME)
 if existing is not None:
     root.remove(existing)
-    # PATCH back the XML without the element
+    client.records.update("organization", org_id, {"orgdborgsettings": ET.tostring(root, encoding="unicode")})
 ```
 
 **Allowed OrgDB settings (17 keys — PascalCase, case-sensitive):**

@@ -15,9 +15,10 @@ client = DataverseClient(
 )
 
 # Cell 2: Load data into pandas (direct DataFrame, no manual iteration)
-df = client.dataframe.get("account",
-    select=["name", "industrycode", "revenue", "numberofemployees"],
-)
+df = client.query.builder("account") \
+    .select("name", "industrycode", "revenue", "numberofemployees") \
+    .execute() \
+    .to_dataframe()
 df.head()
 ```
 

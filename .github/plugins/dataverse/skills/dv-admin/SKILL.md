@@ -1,6 +1,6 @@
 ---
 name: dv-admin
-description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, the 37 allowlisted PPAC toggles, and ERP (Finance and Operations) batch job admin. Use when the user wants to clean up data at scale, configure audit, change environment settings, manage retention policies, or list/cancel ERP batch jobs.
+description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, manage retention policies, or list/cancel ERP batch jobs.
 ---
 
 # Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin
@@ -11,7 +11,6 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 > 2. **Settings allowlist is hard.** Only the 37 PPAC toggles in [Allowed settings](#allowed-settings--hard-allowlist) may be read or updated. Any other setting **must be refused**: *"That setting is out of scope for dv-admin. Use the Power Platform admin center."*
 > 3. **Recycle bin disable is PATCH, never DELETE.** `PATCH statecode=1, statuscode=2, isreadyforrecyclebin=false`. DELETE enqueues async opt-out and orphans per-entity configs — see [`references/recycle-bin.md`](references/recycle-bin.md).
 > 4. **System tables warning.** Unfiltered bulk delete on `systemuser`, `businessunit`, `organization`, or `role` breaks the environment. Warn additionally before running.
-> 5. **ERP batch cancel is destructive and asynchronous.** Never cancel jobs in terminal statuses (`Finished`, `Error`, `Cancelled`). Before running `dataverse erp batch cancel <BatchJobRecId>`, echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` and require exactly `yes, cancel <BatchJobRecId>` — bare `yes` rejected. See [`references/erp-batch.md`](references/erp-batch.md).
 
 **Four mechanisms — pick based on where the setting lives:**
 
@@ -22,7 +21,7 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 | **Python SDK — recyclebinconfigs** | Recycle bin on/off + retention days | CREATE/PATCH `recyclebinconfigs` entity record |
 | **Python SDK — settingdefinition + organizationsettings** | App-level / plan-level security role toggles | Look up `settingdefinition` by `uniquename` → CREATE or PATCH `organizationsettings` row with `value` |
 
-ERP batch admin (`dataverse erp batch list|cancel`): see [`references/erp-batch.md`](references/erp-batch.md).
+ERP batch admin: see [`references/erp-batch.md`](references/erp-batch.md).
 
 Do NOT write Python scripts for operations PAC CLI can handle. Do NOT mix mechanisms (e.g., don't hand-PATCH an org column that PAC CLI already covers).
 

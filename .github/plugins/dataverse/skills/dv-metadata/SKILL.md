@@ -1,6 +1,6 @@
 ---
 name: dv-metadata
-description: Dataverse schema authoring via the Python SDK and Web API — tables, columns, relationships, forms, and views. Use when the user wants to define or evolve the data model — add a column, create a table, set up a lookup, customize a form, or build a view.
+description: Dataverse schema authoring and inspection — tables, columns, relationships, forms, and views. Use when the user wants to define, evolve, or inspect the data model — add a column, create a table, set up a lookup, customize a form, build a view, or list existing columns and relationships.
 ---
 
 # Skill: Metadata — Making Changes
@@ -17,10 +17,9 @@ Then query existing publishers and show them — the user may want to reuse one:
 ```python
 # Publisher discovery + solution creation — use SDK (never raw Web API).
 # See dv-solution for the full publisher discovery flow.
-pages = client.records.get("publisher",
+publishers = client.records.list("publisher",
     filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation'",
     select=["publisherid", "uniquename", "friendlyname", "customizationprefix"], top=10)
-publishers = [p for page in pages for p in page]
 # MANDATORY: Show existing publishers to user and ask which to use or create new
 ```
 
@@ -50,7 +49,7 @@ Never create tables or columns outside a solution.
 | Create, update, or delete data records | **dv-data** |
 | Query or read records | **dv-query** |
 | Export or deploy solutions | **dv-solution** |
-| ERP schema | dv-query `--target erp` |
+| ERP schema | see erp-target.md |
 
 ---
 
@@ -77,7 +76,7 @@ The only time you write files directly is when editing something that already ex
 - **Alternate Keys** — required for upsert; create immediately after each table
 - **Metadata Propagation Delays and Lock Contention** — phased creation to avoid lock errors
 
-**ALWAYS use the SDK unless you need full control over OwnershipType, HasActivities, or other advanced properties.** Do NOT use `requests` or `urllib` for table creation when the SDK can handle it.
+**Prefer the SDK for table creation** — use raw Web API only when you need full control over OwnershipType, HasActivities, or other advanced properties the SDK doesn't expose.
 
 **SDK approach (use this by default):**
 
@@ -289,7 +288,7 @@ After creating a table via API, add it to your solution so it gets pulled on exp
 ```
 pac solution add-solution-component \
   --solutionUniqueName <SOLUTION_NAME> \
-  --component <logical_name> \
+  --component <SchemaName> \
   --componentType 1 \
   --environment <url>
 ```
@@ -310,15 +309,15 @@ body = {
 
 ## Forms and Views
 
-The MCP server and Python SDK do not support forms or views — both require raw Web API calls (`urllib`).
+`systemform` (forms) and `savedquery` (views) are **ordinary entities** — create/read/modify them with the **SDK's record CRUD** (no `urllib`). Only **publishing** (`PublishXml`, an unbound action) needs `dataverse api request`.
 
 **Quick reference:**
-- **Create form:** `POST /api/data/v9.2/systemforms` with `formxml` (form type: `2`=Main, `7`=Quick Create, `6`=Quick View, `11`=Card).
-- **Modify form:** `GET` filtered by `objecttypecode` + `type`, edit `formxml`, `PATCH` back, then publish.
-- **Publish:** `POST /api/data/v9.2/PublishXml` with `<importexportxml><entities><entity>...` — required for forms to take effect.
-- **Create view:** `POST /api/data/v9.2/savedqueries` with `fetchxml` + `layoutxml` (querytype: `0`=standard, `1`=advanced find default, `2`=associated, `4`=quick find).
+- **Create form:** `client.records.create("systemform", {...formxml..., "type": 2})` (`2`=Main, `7`=Quick Create, `6`=Quick View, `11`=Card).
+- **Modify form:** `records.list("systemform", filter=...)` for a template → mutate `formxml` → `records.update("systemform", id, {...})` → publish.
+- **Publish:** `dataverse api request` POST `PublishXml` — required for changes to take effect.
+- **Create view:** `client.records.create("savedquery", {...fetchxml..., ...layoutxml...})` (`0`=standard, `1`=advanced find, `2`=associated, `4`=quick find).
 
-For full code samples, the form-XML templates, the control `classid` table for editing existing forms, and the publish workflow, see [`references/forms-and-views.md`](references/forms-and-views.md).
+Full code, the template recipe, the `classid` table, and publish: [`references/forms-and-views.md`](references/forms-and-views.md).
 
 Key invariants:
 - All `id` attributes in form XML must be unique GUIDs (`str(uuid.uuid4()).upper()`).
@@ -397,13 +396,44 @@ After creating tables / columns / alternate keys, Dataverse runs internal metada
 
 For the `retry_metadata` helper that catches transient lock errors and the full phased-creation sequence, see [`references/metadata-propagation.md`](references/metadata-propagation.md).
 
+## Inspect Existing Schema
+
+Before changing a model, inspect what already exists. These read-only calls return raw
+metadata dictionaries (PascalCase property names) and are safe to run anytime.
+
+> Assumes `client` from the auth setup shown earlier in this skill (`from auth import get_client`).
+
+```python
+# Columns on a table (optionally filtered / projected)
+columns = client.tables.list_columns("account", select=["LogicalName", "AttributeType", "SchemaName"])
+for col in columns:
+    print(f"{col['LogicalName']} ({col.get('AttributeType')})")
+
+# All relationships for one table (1:N, N:1, and N:N combined)
+rels = client.tables.list_table_relationships("account")
+for rel in rels:
+    print(f"{rel['SchemaName']} -> {rel.get('@odata.type')}")
+
+# All relationships in the environment (optionally filtered)
+all_rels = client.tables.list_relationships(select=["SchemaName", "ReferencedEntity", "ReferencingEntity"])
+```
+
+For SQL-queryable column discovery (virtual/computed columns excluded), `dv-query` also has
+`client.query.sql_columns(table)`.
+
 ## Session Closing: Pull to Repo
 
 **After every metadata session, perform the pull-to-repo sequence** — see dv-overview "After Any Change: Pull to Repo" for the full export/unpack/commit commands.
 
 If you used the `MSCRM.SolutionName` header during creation, verify components were added before exporting:
-```bash
-pac solution list-components --solutionUniqueName <SOLUTION_NAME> --environment <url>
+```python
+sol = client.records.list("solution",
+    filter="uniquename eq '<SOLUTION_NAME>'", select=["solutionid"], top=1).first()
+if sol is not None:
+    components = client.records.list("solutioncomponent",
+        filter=f"_solutionid_value eq {sol['solutionid']}",
+        select=["componenttype", "objectid"])
+    print(f"{len(components)} components in the solution")
 ```
 
 ---
@@ -465,7 +495,6 @@ This matters for import scripts that need to discover entity set names (e.g., `n
 
 When using MCP `create_table` or `update_table`:
 
-- **Timeouts don't mean failure.** Always `describe_table` before retrying. If the table exists, skip creation.
-- **Self-referential lookups** (e.g., Parent → same table) must be added via `update_table` after the table is created.
-- **Metadata cache delays.** After `create_table`, call `describe_table` before `update_table` to force cache refresh.
-- **Column name normalization.** Spaces in column names become underscores: `"Specialty Area"` → `cr9ac_specialty_area`. Always verify with `describe_table`.
+- **Column types.** MCP handles most types (text, numeric, boolean, datetime, choice/multiselect, lookup/customer, file/image); global option sets, N:N, alternate keys, forms, views need SDK/Web API.
+- **Timeouts / cache delays.** Creation may report a timeout or stale cache; always `describe('tables/{name}')` before retrying or a follow-up `update_table` (if the table exists, skip creation).
+- **Self-referential lookups** (Parent → same table) are added via `update_table` after creation.

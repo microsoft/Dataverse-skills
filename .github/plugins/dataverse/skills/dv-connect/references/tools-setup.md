@@ -40,11 +40,15 @@ source ~/.bashrc
 
 If `pac` works directly in your shell, skip the PowerShell wrapper — it's only needed when Git Bash can't execute `.cmd` files.
 
+### PAC version mismatch when shelling PAC from Python
+
+On Windows, a Python `subprocess` may resolve a **different `pac` executable** than your interactive shell — e.g. an older `pac.exe` on `PATH` (2.4.1) while the shell uses the current `.cmd` shim (2.9.3). The old binary silently lacks newer commands (`pac model create`), so a script fails with "unknown command" even though `pac` works in your terminal. Fix: shell PAC through `cmd.exe /c pac ...` (or resolve `shutil.which('pac.cmd')`) so the subprocess uses the same shim, and check the version banner matches before relying on newer subcommands.
+
 ### Python SDK
 
 After Python is confirmed available:
 ```
-pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas
+pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas msal msal-extensions
 ```
 
 ### If winget is unavailable
@@ -169,3 +173,44 @@ Once found, add to `~/.bashrc` (for Git Bash / Claude Code):
 echo 'export PATH="$PATH:/c/Users/$USER/AppData/Local/Microsoft/PowerAppsCLI"' >> ~/.bashrc
 source ~/.bashrc
 ```
+
+---
+
+## Privilege preflight
+
+A valid auth token proves *identity*, not *customization rights*. Check the **effective privilege for the specific operation** up front, instead of discovering a gap mid-flow on the first `create`.
+
+**Do not preflight by listing role names.** Role-name listing misses privileges granted through **team roles** or **custom roles**, and can pass a user whose named role lacks the effective privilege (or fail one who has it via a team). Use the `RetrieveUserSetOfPrivilegesByNames` function bound to the systemuser -- it returns the privileges the user actually holds **through their roles and team membership**, in one call:
+
+```bash
+# 1. Who am I? (returns UserId). --context carries plugin/skill/agent attribution.
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/WhoAmI" --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
+
+# 2. Check EFFECTIVE privileges for the operations you're about to run.
+#    Bound to systemuser; includes team-inherited privileges. Pass only the
+#    privileges the task needs (see the operation map below). Single-quote the
+#    --path so the JSON array's quotes survive the shell.
+dataverse api request --target dataverse --method GET \
+  --path '/api/data/v9.2/systemusers(<UserId>)/Microsoft.Dynamics.CRM.RetrieveUserSetOfPrivilegesByNames(PrivilegeNames=@p)?@p=["prvCreateEntity","prvCreateAttribute"]' \
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
+```
+
+A required privilege is granted when it appears in the returned privilege set; if it's absent, the operation will fail on the first write -- stop and surface a least-privilege fix.
+
+**Privilege is per operation -- `prvCreateEntity` is table-only.** Check the privilege(s) that match the work:
+
+| Operation | Privilege(s) to check |
+|---|---|
+| Create table | `prvCreateEntity` |
+| Create column | `prvCreateAttribute` |
+| Create form | `prvCreateSystemForm` |
+| Create view | `prvCreateSavedQuery` |
+| Register plug-in assembly | `prvCreatePluginAssembly` |
+| Register plug-in step | `prvCreateSdkMessageProcessingStep` |
+
+**Least privilege:** these customization privileges come from **System Customizer** -- the minimal built-in role for metadata / plug-in work. Do NOT grant System Administrator just to create tables. Reserve **System Administrator** for sessions that *also* need security or org-admin operations (role assignment, org settings) -- not for pure customization. Missing the needed privilege? Assign **System Customizer** (or a custom role that grants it) via the **dv-security** skill.
+
+> `systemuserroles_association` (role-name listing) is for **confirming that a specific direct role assignment landed** (see **dv-security**) -- not for privilege preflight, since it can't see team- or custom-role-granted privileges.

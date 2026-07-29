@@ -38,14 +38,14 @@ Every standalone Python block that imports from `auth` must use one of these pat
 ```python
 import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_client                 # PREFERRED — SDK with plugin attribution
+from auth import get_client                       # PREFERRED — SDK with plugin attribution
 # OR
-from auth import get_credential, load_env   # SDK without attribution (context manager, notebooks)
+from auth import get_plugin_headers, get_token    # Raw Web API WITH skill attribution
 # OR
-from auth import get_token, load_env        # Raw Web API only
+from auth import get_token, load_env              # Raw Web API, no attribution (last resort)
 ```
 
-`get_client(skill)` is the preferred entry point — it handles auth, environment URL, and plugin attribution (User-Agent tagging) in one call. `get_credential()` is for advanced cases that need the raw credential (e.g., context manager pattern). `get_token()` is only for raw Web API calls (forms, views, `$apply`, N:N `$expand`) that the SDK does not support. Never use `get_token()` in a block containing `DataverseClient(`.
+`get_client(skill)` is the preferred entry point — it handles auth, environment URL, and plugin attribution (User-Agent tagging) in one call. `get_token()` is only for raw Web API calls that no managed surface covers (e.g., an in-process Python loop issuing many attributed requests in one session) — and for those, prefer `get_plugin_headers(skill, get_token())`, which stamps the same skill attribution the SDK path carries (a bare `get_token()` does not). Forms, views, and settings are ordinary entities served by the SDK (`client.records.*`), not urllib. Never use `get_token()` in a block containing `DataverseClient(`.
 
 The one exception: Jupyter notebook blocks use `InteractiveBrowserCredential` directly (no `scripts/` directory in a notebook environment). Mark this exception explicitly in prose above the block.
 
@@ -55,9 +55,9 @@ Every `python` fenced block must contain at least one executable line. Comment-o
 
 ### Frontmatter description
 
-Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
+Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. **Describe the capability domain, not the execution tool** — tool choice belongs to the overview's Tool Capabilities matrix + Hard Rule 2, so a description says what the skill covers (e.g. `record CRUD and bulk operations`), not how it runs (e.g. `via the Python SDK`). Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
 
-Example: `Record-level CRUD and bulk operations via the Python SDK — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
+Example: `Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
 
 ### Token budget — Anthropic Skills spec
 
@@ -88,14 +88,37 @@ For command-heavy skills (PAC CLI, etc.), include a Wrong/Correct mapping table.
 
 Every skill except `dv-overview` and `dv-connect` must have a `## Skill boundaries` section listing what it does not cover and which skill to use instead. This is the primary routing signal for the agent when it hits an out-of-scope request.
 
-### MCP → SDK → Web API priority
+### Which surface to demonstrate — capability-based
 
-Code examples follow this priority order:
-- MCP tools for simple reads and writes (≤10 records, no paging)
-- Python SDK (`DataverseClient`) for bulk operations, scripted workflows, and analytics
-- Raw Web API (`urllib.request`) only for operations the SDK does not support
+Show the surface that fits the operation's shape (mirrors the overview's **Tool Capabilities** matrix + Hard Rule 2 — peers, not a fixed order):
+- **MCP tools** — simple reads/writes (<=25 records per call, no paging)
+- **Dataverse CLI** (`dataverse data ...`) — headless data-plane CRUD / associate / upload with no Python script, plus the `dataverse api` managed escape hatch
+- **Python SDK** (`DataverseClient`) — bulk operations, scripted workflows, and analytics
+- **Raw Web API** (`urllib.request`) — last resort. Only when no managed surface (MCP / Dataverse CLI / SDK) covers the operation — e.g. an in-process Python loop issuing many attributed requests in one session. Forms, views, and settings records are ordinary entities: use the SDK (`client.records.*`), not urllib.
 
-Do not add Web API examples for operations the SDK covers.
+Do not add raw Web API examples for operations a managed surface already covers.
+
+**Before writing any `urllib` block, apply this test.** If the operation is record CRUD, a query, an aggregation, an N:N read, or a bound/unbound action, a managed surface already covers it — SDK `client.records.*` / `client.tables.*` for entity work (forms, views, OrgDB settings, recycle-bin config, etc. are all ordinary records), and `dataverse api request` for unbound actions like `PublishXml`. urllib is justified only when you need one attributed HTTP session across many rows inside a single Python process. `dv-query/references/web-api-advanced.md` is the canonical (and effectively only) home for that pattern; new urllib examples anywhere else will be flagged in review.
+
+### Verified failures — mistakes that recur
+
+These bit real edits more than once. Check them before committing.
+
+1. **Never claim "the SDK/MCP can't do entity X" without checking `records.py` first.** The claim is almost always false — `client.records.create/retrieve/update/delete/list` are generic over *any* logical entity name with no blocklist. `systemform`, `savedquery`, `organization`, `settingdefinition`, `organizationsetting`, `recyclebinconfig`, `asyncoperation` are all ordinary records. Only genuine unbound actions (e.g. `PublishXml`) need `dataverse api request`. Grep the SDK source before writing an escape-hatch block to "work around" a limitation that doesn't exist.
+
+2. **`--context` is NOT pre-wrapped in parens.** The CLI adds the outer `(...)` itself. Pass the bare `key=value;...` string:
+   ```
+   dataverse api request ... --context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"
+   ```
+   Writing `--context "(app=...)"` double-wraps to `((app=...))` and breaks the telemetry classifier. This is silent — nothing errors, attribution just goes unclassified. Grep any new `--context` for a leading `"(` before committing.
+
+3. **Every `dataverse api` call carries `--context` — reads included.** It's easy to add attribution to writes and forget it on `WhoAmI` / role-query / metadata reads. Unattributed reads still show up in telemetry as anonymous traffic. If the block calls `dataverse api`, it has a `--context`.
+
+4. **SKILL.md bodies are hard-capped at 5,000 tokens (EVAL-BUDGET-02).** `dv-connect`, `dv-metadata`, and `dv-overview` sit at/near the cap — new prose there will fail `static_checks`. Put new detail in `references/<topic>.md` and leave a one-line pointer in the body.
+
+5. **Preflight/role guidance defaults to least privilege.** System Customizer (`prvCreateEntity`) is the floor for schema work — do NOT steer users to System Administrator. Only escalate for genuinely admin-scoped operations (security roles, org settings).
+
+Run `python .github/evals/static_checks.py` after every change; it must stay green.
 
 ---
 
@@ -151,7 +174,7 @@ It compares your branch to `main` and flags common mistakes — e.g., adding a n
 **MAJOR (x)** — Breaking changes that require user action:
 - Renaming or removing a skill
 - Removing or renaming a required section in a skill (e.g., `## Skill boundaries`)
-- Changing the auth pattern (e.g., switching from `get_credential` to a new import)
+- Changing the auth pattern (e.g., switching the SDK auth import in `scripts/auth.py`)
 - Changing MCP server configuration structure
 - Removing supported tools (SDK, PAC CLI, Web API) from routing
 

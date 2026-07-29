@@ -12,42 +12,31 @@ Allowlisted uniquenames (both `datatype=2` bool, stored as string `"true"`/`"fal
 **Read current value:**
 
 ```python
-import os, sys, json, urllib.request, urllib.parse
+import os, sys
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # SDK does not support settingdefinition/organizationsettings entities
+from auth import get_client
 
-load_env()
-env_url = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-headers = get_plugin_headers("dv-admin", token)
-headers.update({
-    "Accept": "application/json",
-    "OData-MaxVersion": "4.0",
-    "OData-Version": "4.0",
-    "Content-Type": "application/json",
-})
+client = get_client("dv-admin")
 
 UNIQUENAME = "PowerAppsAppLevelSecurityRolesEnabled"   # or PlanShareSecurityRolesEnabled
 
-q = urllib.parse.quote(f"uniquename eq '{UNIQUENAME}'")
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/settingdefinitions?$filter={q}"
-    f"&$select=settingdefinitionid,uniquename,defaultvalue,datatype",
-    headers=headers,
-)
-with urllib.request.urlopen(req) as resp:
-    defn = json.loads(resp.read())["value"][0]
-
+# settingdefinition + organizationsetting are ordinary entities — plain SDK record reads.
+defs = list(client.records.list(
+    "settingdefinition",
+    select=["settingdefinitionid", "uniquename", "defaultvalue", "datatype"],
+    filter=f"uniquename eq '{UNIQUENAME}'",
+))
+if not defs:
+    raise SystemExit(f"Setting '{UNIQUENAME}' is not defined in this environment (ECS-gated -- not available here).")
+defn = defs[0]
 sd_id = defn["settingdefinitionid"]
 default = defn["defaultvalue"]
 
-q2 = urllib.parse.quote(f"_settingdefinitionid_value eq '{sd_id}'")
-req = urllib.request.Request(
-    f"{env_url}/api/data/v9.2/organizationsettings?$filter={q2}&$select=organizationsettingid,value",
-    headers=headers,
-)
-with urllib.request.urlopen(req) as resp:
-    overrides = json.loads(resp.read())["value"]
+overrides = list(client.records.list(
+    "organizationsetting",
+    select=["organizationsettingid", "value"],
+    filter=f"_settingdefinitionid_value eq {sd_id}",
+))
 
 current = overrides[0]["value"] if overrides else default
 print(f"{UNIQUENAME} = {current} (default = {default}, override present: {bool(overrides)})", flush=True)
@@ -56,33 +45,18 @@ print(f"{UNIQUENAME} = {current} (default = {default}, override present: {bool(o
 **Write (idempotent CREATE-or-PATCH):**
 
 ```python
-# Continues from Read script above — reuses UNIQUENAME, sd_id, overrides, headers, env_url.
-# SDK does not support settingdefinition/organizationsettings entities.
+# Continues from Read script above — reuses UNIQUENAME, sd_id, overrides, client.
 NEW_VALUE = "true"   # bool-as-string; "true"/"false" (lowercase)
 
 if overrides:
-    setting_id = overrides[0]["organizationsettingid"]
-    req = urllib.request.Request(
-        f"{env_url}/api/data/v9.2/organizationsettings({setting_id})",
-        data=json.dumps({"value": NEW_VALUE}).encode("utf-8"),
-        headers=headers,
-        method="PATCH",
-    )
+    client.records.update("organizationsetting", overrides[0]["organizationsettingid"], {"value": NEW_VALUE})
 else:
-    # No override exists — CREATE a new one
-    payload = {
+    # No override exists — CREATE a new one (@odata.bind uses the entity-set path).
+    client.records.create("organizationsetting", {
         "settingdefinitionid@odata.bind": f"settingdefinitions({sd_id})",
         "value": NEW_VALUE,
-    }
-    req = urllib.request.Request(
-        f"{env_url}/api/data/v9.2/organizationsettings",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
-with urllib.request.urlopen(req) as resp:
-    print(f"SUCCESS: {UNIQUENAME} = {NEW_VALUE} (HTTP {resp.status})", flush=True)
+    })
+print(f"SUCCESS: {UNIQUENAME} = {NEW_VALUE}", flush=True)
 ```
 
 **Notes:**

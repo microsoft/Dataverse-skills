@@ -20,7 +20,7 @@ Create, export, unpack, pack, import, and validate Dataverse solutions via PAC C
 
 ## Create a New Solution
 
-**Use the Python SDK for publisher and solution record creation — not raw HTTP.** Publishers and solutions are standard Dataverse tables. `client.records.create()` and `client.records.get()` handle auth, pagination, and error handling automatically, avoiding the URL encoding, header boilerplate, and GUID-parsing bugs that raw `urllib` calls introduce.
+**Use the Python SDK for publisher and solution record creation — not raw HTTP.** Publishers and solutions are standard Dataverse tables. `client.records.create()` and `client.records.list()` handle auth, pagination, and error handling automatically, avoiding the URL encoding, header boilerplate, and GUID-parsing bugs that raw `urllib` calls introduce.
 
 ### Step 1: Find or Create the Publisher
 
@@ -41,13 +41,12 @@ from auth import get_client
 client = get_client("dv-solution")
 
 # 1. Query for existing non-Microsoft publishers
-pages = client.records.get(
+publishers = client.records.list(
     "publisher",
     filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation' and uniquename ne 'Microsoftdynamic'",
     select=["publisherid", "uniquename", "friendlyname", "customizationprefix"],
     top=10,
 )
-publishers = [p for page in pages for p in page]
 
 if publishers:
     # Show existing publishers and ask user which to use
@@ -145,9 +144,15 @@ headers = {
 }
 ```
 
-**Important:** After using this approach, verify components were added by listing them:
-```bash
-pac solution list-components --solutionUniqueName <UniqueName> --environment <url>
+**Important:** After using this approach, verify components were added by querying the `solutioncomponent` table with the SDK (`pac solution list-components` is not available in current PAC):
+```python
+sol = client.records.list("solution",
+    filter="uniquename eq '<UniqueName>'", select=["solutionid"], top=1).first()
+if sol is not None:
+    components = client.records.list("solutioncomponent",
+        filter=f"_solutionid_value eq {sol['solutionid']}",
+        select=["componenttype", "objectid"])
+    print(f"{len(components)} components in the solution")
 ```
 
 If the header was misspelled or the solution doesn't exist, components will be created in the default solution instead — silently. Always verify.
@@ -180,6 +185,8 @@ pac solution unpack \
   --folder ./solutions/<UniqueName> \
   --packagetype Unmanaged
 ```
+
+> **Windows file-lock race.** Run export and unpack as **separate** commands (as above); chaining them immediately can hit a transient ZIP file-lock right after export. If `unpack` fails with a lock / "in use" error, retry after a moment, and verify the unpacked folder has the expected components before deleting the zip.
 
 Delete the zip — the unpacked folder is the source:
 ```
@@ -228,7 +235,7 @@ After importing a solution, verify that components are live. Use the Python SDK 
 ```python
 info = client.tables.get("<logical_name>")
 if info:
-    print(f"[PASS] Table '{info['LogicalName']}' exists")
+    print(f"[PASS] Table '{info.logical_name}' exists")
 else:
     print(f"[FAIL] Table '<logical_name>' not found")
 ```
@@ -236,68 +243,67 @@ else:
 ### Check a form is published
 
 ```python
-pages = client.records.get(
+forms = client.records.list(
     "systemform",
     filter="objecttypecode eq '<entity>' and type eq <form_type_code>",
     select=["name", "formid"],
     top=5,
 )
-forms = [f for page in pages for f in page]
 # Form type codes: 2 = main, 7 = quick create
 ```
 
 ### Check a view exists
 
 ```python
-pages = client.records.get(
+views = client.records.list(
     "savedquery",
     filter="returnedtypecode eq '<entity>'",
     select=["name", "savedqueryid", "statuscode"],
     top=10,
 )
-views = [v for page in pages for v in page]
 ```
 
-### Check a user's role assignment (Web API only)
+### Check a user's role assignment (N:N `$expand`)
 
-N:N `$expand` (like `systemuserroles_association`) is not supported by the SDK. This is one of the few cases where raw Web API is required:
+`records.list` passes `$expand` straight through, so read the N:N navigation property directly with the SDK:
 
 ```python
-# Web API required — SDK does not support N:N $expand
-import os, sys, urllib.request, json
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK can't do this
-
-load_env()
-env = os.environ["DATAVERSE_URL"].rstrip("/")
-token = get_token()
-url = f"{env}/api/data/v9.2/systemusers?$filter=internalemailaddress eq '<email>'&$select=fullname&$expand=systemuserroles_association($select=name)&$top=1"
-headers = get_plugin_headers("dv-solution", token)
-headers.update({"OData-MaxVersion": "4.0", "OData-Version": "4.0", "Accept": "application/json"})
-req = urllib.request.Request(url, headers=headers)
-with urllib.request.urlopen(req) as resp:
-    users = json.loads(resp.read()).get("value", [])
-if users:
-    roles = [r["name"] for r in users[0].get("systemuserroles_association", [])]
-    print(f"Roles: {', '.join(roles)}")
+users = list(client.records.list(
+    "systemuser",
+    filter="internalemailaddress eq '<email>'",   # fallback: domainname eq '<upn>'
+    select=["fullname"],
+    expand=["systemuserroles_association($select=name)"],
+    top=1,
+))
+roles = [r["name"] for r in users[0].get("systemuserroles_association", [])] if users else []
 ```
+
+Alternatively, the managed **Dataverse CLI** escape hatch (`dataverse api request` — not `urllib`), or FetchXML with a link-entity:
+
+```bash
+dataverse api request --target dataverse --method GET \
+  --path "/api/data/v9.2/systemusers?%24filter=internalemailaddress eq '<email>'&%24select=fullname&%24expand=systemuserroles_association(%24select=name)&%24top=1" \
+  --environment <DATAVERSE_URL> \
+  --context "app=dataverse-skills/<ver>;skill=dv-solution;agent=<agent>"
+```
+
+The response `value[0].systemuserroles_association` is the list of assigned roles (each with `name`).
 
 ### Check import errors
 
 ```python
-pages = client.records.get(
+jobs = client.records.list(
     "importjob",
     select=["importjobid", "solutionname", "startedon", "completedon", "progress"],
     orderby=["startedon desc"],
     top=5,
 )
-jobs = [j for page in pages for j in page]
 ```
 
 For detailed error history, also query `msdyn_solutionhistory`:
 
 ```python
-pages = client.records.get(
+history = client.records.list(
     "msdyn_solutionhistory",
     filter="msdyn_status eq 1",  # 1 = failed
     select=["msdyn_name", "msdyn_starttime", "msdyn_exceptionmessage"],
