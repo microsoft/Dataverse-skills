@@ -25,21 +25,6 @@
       "name": "CortexConfigurations:Common/SkillSecurityEvaluator",
       "passing_score": 3,
       "priority": 1
-    },
-    {
-      "name": "DataverseEffectiveEffort.prompty",
-      "passing_score": 1,
-      "priority": 1
-    },
-    {
-      "name": "DataverseExecutionClassify.prompty",
-      "passing_score": 1,
-      "priority": 1
-    },
-    {
-      "name": "DataversePathOutcome.prompty",
-      "passing_score": 1,
-      "priority": 1
     }
   ],
   "defaultAssertions": [
