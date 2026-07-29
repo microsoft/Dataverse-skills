@@ -45,16 +45,6 @@
       "name": "CortexConfigurations:Common/BIC_Custom/CompletenessEvaluator.prompty",
       "passing_score": 3,
       "priority": 1
-    },
-    {
-      "name": "CortexConfigurations:Common/AIFoundry/task_completion.prompty",
-      "passing_score": 1,
-      "priority": 1
-    },
-    {
-      "name": "CortexConfigurations:Common/AIFoundry/tool_selection.prompty",
-      "passing_score": 1,
-      "priority": 1
     }
   ],
   "defaultAssertions": [
