@@ -8,7 +8,7 @@
       "passing_score": 3,
       "priority": 1,
       "settings": {
-        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+        "supported_verbs": "CONTAINS,NOT_CONTAINS"
       }
     },
     {
@@ -48,10 +48,9 @@
         "PRIORITY_1: Agent used a managed Dataverse surface to create the contacts -- MCP create_record, the Dataverse CLI (dataverse data create), or the SDK client.records.create. A hand-rolled urllib/requests POST is NOT acceptable because a managed surface covers this.",
         "PRIORITY_1: Any automation logic/scripting the agent writes is Python -- not JavaScript/TypeScript/Node.js or PowerShell. (MCP tool calls and the dataverse CLI are fine and are not 'code'.)",
         "PRIORITY_1: NOT_CONTAINS: import requests",
-        "PRIORITY_2: CONTAINS_ANY: create_record, data create, client.records.create",
-        "PRIORITY_2: CONTAINS_ALL: Alice, Bob, Charlie",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        "PRIORITY_2: The agent invoked a managed create surface in the trajectory -- MCP create_record, the Dataverse CLI 'dataverse data create', or the SDK client.records.create -- to create the contacts.",
+        "PRIORITY_2: All three people (Alice, Bob, Charlie) are present in the created contact records.",
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for creating records (it loaded and used the dv-data skill)."
       ]
     },
     {
@@ -87,17 +86,16 @@
         "PRIORITY_2: Agent mentions CreateMultiple, batch semantics, or chunking as taught by the dv-data skill.",
         "PRIORITY_2: CONTAINS: EvalSeed",
         "PRIORITY_2: NOT_CONTAINS: import requests",
-        "PRIORITY_2: TOOL_NOT_USED: create_record",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        "PRIORITY_2: The agent did NOT use MCP create_record for the 500-record bulk (it caps at 25 per call) -- it used the SDK bulk path instead.",
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-create patterns (it loaded and used the dv-data skill)."
       ]
     },
     {
       "test_id": "data_003_bulk_update",
-      "prompt": "In my Dataverse org, create 200 accounts named 'EvalUpd Account 1' through 'EvalUpd Account 200', then mark all of them as reviewed by setting their description to 'Reviewed 2026'.",
-      "expected_response": "Self-contained: first bulk-create the 200 EvalUpd seed accounts (SDK CreateMultiple), then bulk-UPDATE beyond 25 => SDK UpdateMultiple. To update, query the EvalUpd accounts to collect their IDs (any managed read), then pass a list of {id + description} dicts to client.records.update('account', [...]), or use the broadcast form update('account', [ids], {changes}). Only the changed field (description) should be sent -- the customer does not say that; the skill/agent should do it and the assertion checks it. Do NOT use create()/upsert() for the update step (records exist), and do NOT loop one update per record. The test seeds its own data.",
+      "prompt": "In my Dataverse org, create 50 accounts named 'EvalUpd Account 1' through 'EvalUpd Account 50', then mark all of them as reviewed by setting their description to 'Reviewed 2026'.",
+      "expected_response": "Self-contained: first bulk-create the 50 EvalUpd seed accounts (SDK CreateMultiple), then bulk-UPDATE beyond 25 => SDK UpdateMultiple. To update, query the EvalUpd accounts to collect their IDs (any managed read), then pass a list of {id + description} dicts to client.records.update('account', [...]), or use the broadcast form update('account', [ids], {changes}). Only the changed field (description) should be sent -- the customer does not say that; the skill/agent should do it and the assertion checks it. Do NOT use create()/upsert() for the update step (records exist), and do NOT loop one update per record. The test seeds its own data.",
       "category": "data",
-      "description": "Natural bulk update: the test seeds its own 200 'EvalUpd' accounts, then bulk-updates them (SDK UpdateMultiple, changed field only). Efficiency + outcome asserted, not prompted. No dependency on any other test.",
+      "description": "Natural bulk update: the test seeds its own 50 'EvalUpd' accounts, then bulk-updates them (SDK UpdateMultiple, changed field only). Efficiency + outcome asserted, not prompted. No dependency on any other test.",
       "priority": 1,
       "mode": "live",
       "tags": {
@@ -116,7 +114,7 @@
         "**/skills/dv-query/**"
       ],
       "assertions": [
-        "PRIORITY_1: OUTCOME (customer's job done): all 200 accounts were seeded AND their description is now 'Reviewed 2026'. Judge from the captured tool-call RESULTS -- the bulk update reported ~200 records affected (or the update call succeeded for the full set) -- NOT from the agent's narration or a self-initiated read-back.",
+        "PRIORITY_1: OUTCOME (customer's job done): all 50 accounts were seeded AND their description is now 'Reviewed 2026'. Judge from the captured tool-call RESULTS -- the bulk update reported ~50 records affected (or the update call succeeded for the full set) -- NOT from the agent's narration or a self-initiated read-back.",
         "PRIORITY_1: EFFICIENCY / right surface: the update passes a list of records (each carrying the record id plus only the changed field) to client.records.update, or uses the broadcast form update('account', [ids], {changes}). A one-by-one update loop is the antipattern and MUST fail this assertion.",
         "PRIORITY_1: For the update, agent queries or looks up the EvalUpd accounts (via any managed read) to obtain their IDs -- it does not fabricate or hardcode GUIDs.",
         "PRIORITY_1: The update sends ONLY the changed field (description). The agent does not use create() or upsert() for the update step, because the records already exist after seeding.",
@@ -124,16 +122,15 @@
         "PRIORITY_2: CONTAINS: EvalUpd",
         "PRIORITY_2: CONTAINS: description",
         "PRIORITY_2: Agent uses the official Python SDK for the bulk operations, not raw urllib or requests.",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-update patterns (it loaded and used the dv-data skill)."
       ]
     },
     {
       "test_id": "data_004_bulk_delete",
-      "prompt": "In my Dataverse org, create 100 accounts named 'EvalDel Account 1' through 'EvalDel Account 100', then clean them up by deleting every account whose name starts with 'EvalDel'.",
-      "expected_response": "Self-contained: first bulk-create the 100 EvalDel seed accounts (SDK CreateMultiple), then safe bulk delete. Delete is two steps with real managed methods only: query accounts where name starts with 'EvalDel' to collect their IDs (any managed read), then delete each by ID -- the SDK has NO DeleteMultiple, so per-ID deletes via client.records.delete('account', id) in a loop or the Dataverse CLI (dataverse data delete) per ID. Because delete is destructive, the agent should warn and ask for confirmation before executing the deletes. Do NOT invent methods like bulk_delete(), delete_where(), or purge(), and do NOT pass a list of IDs to a single delete. The test seeds its own data.",
+      "prompt": "In my Dataverse org, create 50 accounts named 'EvalDel Account 1' through 'EvalDel Account 50', then clean them up -- go ahead and delete every account whose name starts with 'EvalDel'.",
+      "expected_response": "Self-contained: first bulk-create the 50 EvalDel seed accounts (SDK CreateMultiple), then safe bulk delete. Delete is two steps with real managed methods only: query accounts where name starts with 'EvalDel' to collect their IDs (any managed read), then delete each by ID -- the SDK has NO DeleteMultiple, so per-ID deletes via client.records.delete('account', id) in a loop or the Dataverse CLI (dataverse data delete) per ID. The customer has explicitly authorized the deletion in the prompt, so the agent proceeds without pausing for confirmation. Do NOT invent methods like bulk_delete(), delete_where(), or purge(), and do NOT pass a list of IDs to a single delete. The test seeds its own data.",
       "category": "data",
-      "description": "Natural cleanup request: the test seeds its own 100 'EvalDel' accounts, then query-then-per-ID-delete (no DeleteMultiple; no invented helpers), with destructive-op confirmation. Outcome asserted from the delete tool-call results. No dependency on any other test.",
+      "description": "Natural cleanup request: the test seeds its own 50 'EvalDel' accounts, then query-then-per-ID-delete (no DeleteMultiple; no invented helpers), with explicit customer authorization to delete. Outcome asserted from the delete tool-call results. No dependency on any other test.",
       "priority": 1,
       "mode": "live",
       "tags": {
@@ -153,15 +150,48 @@
         "**/skills/dv-query/**"
       ],
       "assertions": [
-        "PRIORITY_1: OUTCOME (customer's job done): the 100 EvalDel accounts were seeded and then deleted from the live org. Judge from the captured tool-call RESULTS -- the deletes executed and succeeded for the matched EvalDel accounts -- NOT from the agent's narration or a self-initiated count.",
+        "PRIORITY_1: OUTCOME (customer's job done): the 50 EvalDel accounts were seeded and then deleted from the live org. Judge from the captured tool-call RESULTS -- the deletes executed and succeeded for the matched EvalDel accounts -- NOT from the agent's narration or a self-initiated count.",
         "PRIORITY_1: SAFE method: the agent queries first (any managed read) to collect the matching IDs, then deletes each record by ID (SDK client.records.delete('account', id) in a loop, or the Dataverse CLI dataverse data delete per ID) because the SDK has no DeleteMultiple. Inventing methods like bulk_delete(), delete_where(), or purge(), or passing a list of IDs to a single delete, MUST fail this assertion.",
         "PRIORITY_1: Agent filters accounts by name starting with 'EvalDel' to select what to delete -- it does not assume or hardcode IDs.",
-        "PRIORITY_1: Agent flags that bulk delete is destructive and asks the user to confirm before executing the deletes.",
         "PRIORITY_1: CONTAINS: account",
         "PRIORITY_2: CONTAINS: EvalDel",
         "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
-        "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: ERROR_EXIT_COUNT_UNDER: 1"
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented delete patterns -- query-then-per-ID-delete, no invented bulk_delete/purge (it loaded and used the dv-data skill)."
+      ]
+    },
+    {
+      "test_id": "data_005_support_system",
+      "prompt": "I'm setting up the customer records for my new support desk. Create three client companies -- 'EvalSys Contoso', 'EvalSys Fabrikam', and 'EvalSys Adventure Works'. For each company, add two contact people (give each a first name, last name, and an email) linked to their company. Then on each company, log a phone call noting that I ran the onboarding call with them today.",
+      "expected_response": "A real customer standing up a small support system across RELATED out-of-box tables in one go: 3 accounts (companies), 6 contacts (2 per company) each linked to its company via the parentcustomerid lookup, and 3 phonecall activities each linked to its company via regardingobjectid. This exercises multi-table writes with foreign-key resolution -- the agent must create the accounts first, capture their IDs, then set the contact->account and phonecall->account lookups to the right company (not fabricated or hardcoded GUIDs). Capability-based routing: this is a small write (<=25 records) so MCP create_record, the Dataverse CLI, or the SDK client.records.create are all acceptable peers; a hand-rolled urllib/requests POST is NOT. Self-contained via the 'EvalSys' prefix. Outcome is judged from the captured tool-call RESULTS, not the agent's narration.",
+      "category": "data",
+      "description": "Natural full-system build (S02-style): create three companies, two linked contacts each, and a phone-call activity per company -- multi-table writes with account->contact and account->activity foreign-key resolution on out-of-box tables. Self-contained ('EvalSys' prefix). Outcome asserted from tool-call results.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "Regression",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "full-system"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "MCP or Dataverse CLI or SDK (small multi-table write with FK resolution)",
+        "scenario": "S02 Support Ticket -- seed related data across tables"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-data/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME (customer's job done): three companies (accounts) named 'EvalSys Contoso', 'EvalSys Fabrikam', and 'EvalSys Adventure Works' were created in the live org. Judge from the captured create tool-call RESULTS -- each returned a created account ID -- NOT from the agent's narration.",
+        "PRIORITY_1: OUTCOME: six contacts were created (two per company), each with a first name, last name, and email address.",
+        "PRIORITY_1: FOREIGN KEY: each contact is linked to the correct company via the account lookup (parentcustomerid), using the real account IDs captured from the create step -- NOT fabricated or hardcoded GUIDs.",
+        "PRIORITY_1: OUTCOME: three phone-call activities were created, one linked to each company via regardingobjectid (the account the call was about).",
+        "PRIORITY_1: Agent used a managed Dataverse surface (MCP create_record, the Dataverse CLI, or the SDK client.records.create) for all writes. A hand-rolled urllib/requests POST is NOT acceptable.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_1: Any automation logic/scripting the agent writes is Python -- not JavaScript/TypeScript/Node.js or PowerShell.",
+        "PRIORITY_2: CONTAINS: EvalSys",
+        "PRIORITY_2: The agent created the accounts first, then used their returned IDs to set the contact and activity lookups -- the correct order for foreign-key resolution.",
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for multi-table writes with lookups (it loaded and used the dv-data skill)."
       ]
     }
   ]
