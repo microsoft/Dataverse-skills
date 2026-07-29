@@ -8,7 +8,7 @@
       "passing_score": 3,
       "priority": 1,
       "settings": {
-        "supported_verbs": "CONTAINS,NOT_CONTAINS"
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
       }
     },
     {
@@ -50,6 +50,7 @@
         "PRIORITY_1: NOT_CONTAINS: import requests",
         "PRIORITY_2: The agent invoked a managed create surface in the trajectory -- MCP create_record, the Dataverse CLI 'dataverse data create', or the SDK client.records.create -- to create the contacts.",
         "PRIORITY_2: All three people (Alice, Bob, Charlie) are present in the created contact records.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for creating records (it loaded and used the dv-data skill)."
       ]
     },
@@ -87,6 +88,7 @@
         "PRIORITY_2: CONTAINS: EvalSeed",
         "PRIORITY_2: NOT_CONTAINS: import requests",
         "PRIORITY_2: The agent did NOT use MCP create_record for the 500-record bulk (it caps at 25 per call) -- it used the SDK bulk path instead.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-create patterns (it loaded and used the dv-data skill)."
       ]
     },
@@ -122,6 +124,7 @@
         "PRIORITY_2: CONTAINS: EvalUpd",
         "PRIORITY_2: CONTAINS: description",
         "PRIORITY_2: Agent uses the official Python SDK for the bulk operations, not raw urllib or requests.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-update patterns (it loaded and used the dv-data skill)."
       ]
     },
@@ -156,6 +159,7 @@
         "PRIORITY_1: CONTAINS: account",
         "PRIORITY_2: CONTAINS: EvalDel",
         "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented delete patterns -- query-then-per-ID-delete, no invented bulk_delete/purge (it loaded and used the dv-data skill)."
       ]
     },
@@ -191,6 +195,7 @@
         "PRIORITY_1: Any automation logic/scripting the agent writes is Python -- not JavaScript/TypeScript/Node.js or PowerShell.",
         "PRIORITY_2: CONTAINS: EvalSys",
         "PRIORITY_2: The agent created the accounts first, then used their returned IDs to set the contact and activity lookups -- the correct order for foreign-key resolution.",
+        "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for multi-table writes with lookups (it loaded and used the dv-data skill)."
       ]
     }
