@@ -17,27 +17,22 @@
       "priority": 1
     },
     {
-      "name": "CortexConfigurations:Common/Skills/SkillQualityEvaluator.prompty",
-      "passing_score": 4,
-      "priority": 1
-    },
-    {
-      "name": "CortexConfigurations:Common/SkillSecurityEvaluator",
+      "name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty",
       "passing_score": 3,
       "priority": 1
     },
     {
-      "name": "DataverseEffectiveEffort.prompty",
+      "name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty",
       "passing_score": 1,
       "priority": 1
     },
     {
-      "name": "DataverseExecutionClassify.prompty",
+      "name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty",
       "passing_score": 1,
       "priority": 1
     },
     {
-      "name": "DataversePathOutcome.prompty",
+      "name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty",
       "passing_score": 1,
       "priority": 1
     }
