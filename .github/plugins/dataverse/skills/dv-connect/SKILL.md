@@ -11,7 +11,7 @@ One-step connection to Dataverse. Handles tool installation, authentication, env
 
 **Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal. **Exception:** Step 0 below can short-circuit the entire flow if the workspace is already set up.
 
-> **Headless / sandboxed host?** (ChatGPT Work Mode, Codex cloud sandbox, CI, SSH, containers) — the **CLI/PAC and native MCP** paths do not work there (the .NET runtime is blocked and/or there is no keyring) while the **Python SDK works**. Read [headless-hosts.md](references/headless-hosts.md) FIRST — it opens with an entry gate to confirm you are actually constrained; verify with `python scripts/auth.py --check` (auth success is not a connection), then use the SDK path (it also handles the rare egress-blocked case).
+> **Host entry test (FIRST — before Step 0).** On a **constrained host**? (ChatGPT Work Mode / Codex sandbox / CI / SSH / container, or Linux with no desktop keyring/browser.) **If YES →** follow the constrained path in [headless-hosts.md](references/headless-hosts.md): install **only** Python + pip deps, `.env`, `scripts/auth.py`, verify with `python scripts/auth.py --check`, **skip** CLI / PAC / MCP. **If NO →** run the normal flow below.
 
 ---
 

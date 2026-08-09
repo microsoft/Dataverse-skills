@@ -11,10 +11,9 @@ result you did not actually retrieve.
 
 **Read on only if you are on a constrained host.** You are constrained if **any** of these is true:
 
-- You are told the host is **ChatGPT Work Mode**, **Codex cloud sandbox**, a **CI runner**, **SSH**, or a **container**.
-- **Runtime probe** — a .NET tool fails to *start*: `dataverse --version` (or `pac`) exits with `Failed to create CoreCLR` / exit `137`. => execution-restricted sandbox (Axis 1 below).
-- **Keyring probe** — `sys.platform == 'linux'` with no `$DISPLAY` and no running `gnome-keyring` / `dbus`. => no credential store (Axis 2 below).
-- **Profile probe** — `dataverse auth create` hangs while saving, or `dataverse auth list` is empty right after a "successful" sign-in.
+- **Context (no install needed)** — you are told, or it is evident, that the host is **ChatGPT Work Mode**, **Codex cloud sandbox**, a **CI runner**, **SSH**, or a **container**.
+- **Keyring (no install needed)** — `sys.platform == 'linux'` with no `$DISPLAY` and no running `gnome-keyring` / `dbus`. => no credential store (Axis 2 below).
+- **Only if a .NET tool is already installed** — `dataverse --version` (or `pac`) fails to *start* (`Failed to create CoreCLR` / exit `137`, => Axis 1 below), or `dataverse auth list` is empty right after a "successful" sign-in. **Do not install a CLI just to probe** — the two signals above already decide it.
 
 **If NONE apply, STOP — you are on a capable host.** Close this file and run the normal `dv-connect`
 flow unchanged (DV CLI + PAC + native MCP + Python SDK all work). Nothing here applies; do not degrade
@@ -38,7 +37,27 @@ the SDK. Do **not** attempt the CLI or MCP first and then report a chain of fail
 experience is exactly what this file exists to prevent.
 
 ---
+## Which `dv-connect` steps still apply here (KEEP the essentials, SKIP what can't run)
 
+These overrides do **not** replace the whole flow — the SDK path still needs its prerequisites. Do the
+groundwork, skip only what cannot run:
+
+| `dv-connect` step | Constrained host |
+|---|---|
+| **Step 1 — Python 3 + `pip install azure-identity requests PowerPlatform-Dataverse-Client pandas msal msal-extensions`** | **KEEP (required).** The SDK / `scripts/auth.py` path fails without these. |
+| Step 1 — Node.js / PAC CLI / Dataverse CLI / .NET SDK / Azure CLI installs | **SKIP.** They cannot run here (see "What does NOT work"). Installing them wastes time and ~1.9 GB. |
+| Step 2 / 2b — `dataverse auth create` / `pac auth create` | **SKIP.** They fail; auth is the SDK device-code path below. |
+| **Step 3 — create `.env`** (`DATAVERSE_URL`, `TENANT_ID`) | **KEEP (required).** `auth.py` reads these. Add `DATAVERSE_TOKEN_CACHE_DIR=.dataverse` only if using the last-resort cache. |
+| **Step 4 — copy `scripts/auth.py`** into `scripts/` | **KEEP (required).** The working path imports `from auth import get_client`. |
+| Step 5 — three-way verification | **MODIFY** to a single `python scripts/auth.py --check` (see the Step 5 section below). |
+| Step 6 — MCP config | **SKIP.** Native MCP needs a remote connector, not the sandbox. |
+| Step 7 — MCP verification | **SKIP.** |
+
+**Net:** you still do the **Python + pip deps + `.env` + `auth.py`** groundwork — you only skip the
+CLI / PAC / MCP installs and steps that cannot run. Do **not** shortcut Step 1's `pip install`; it is
+what makes the SDK path work.
+
+---
 ## STEP 0 — reachability preflight + no fabrication (before ANY claim)
 
 A token is not a connection. Make one real data-plane call:
