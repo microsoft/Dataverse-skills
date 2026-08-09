@@ -141,6 +141,20 @@ re-authenticate on *every* turn. Options, best first:
    - **Only** on an isolated, ephemeral, gitignored sandbox where the workspace persists across turns (test: write a file one turn, read it the next) and is wiped on session end.
    - **Security:** this writes the user's **refresh token** into `.dataverse/` (plaintext on headless Linux; DPAPI-encrypted on Windows). A leaked *user* refresh token is worse than a scoped SP secret. `auth.py` self-writes a `.gitignore` (`*`) in the dir and creates it owner-only, but keep `.dataverse/` gitignored at the repo root too. Prefer options 1-2. **Opt-in only** — capable hosts are unaffected unless the var is set.
 
+### Credential chain + self-diagnosis
+
+`scripts/auth.py` resolves credentials as a **silent-first fall-through chain**, so a stale or
+authority-mismatched shared cache no longer strands you: **service principal** (terminal for CI) ->
+**shared DataverseCLI cache** (probed at build time against both the tenant and the `organizations`
+authority) -> **`az login`** (a silent tier — if you are `az`-logged-in to the tenant, no prompt) ->
+a single **host-gated interactive** tier (workspace-cache device-code when `DATAVERSE_TOKEN_CACHE_DIR`
+is set; a system-browser sign-in on a desktop; device-code on a headless host). The interactive tier
+runs **only** when every silent tier is unavailable, so a working path wins without a needless prompt.
+
+Stuck on auth? Run **`python scripts/auth.py --diagnose`** — it prints which tiers are available and
+which one the next call will use, **without** prompting. On a CA-hardened tenant where device-code is
+blocked, `az login` (silent tier) or a desktop browser sign-in is the way through.
+
 ---
 
 ## What does NOT work here — and why (do not chase these)
