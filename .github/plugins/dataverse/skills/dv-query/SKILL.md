@@ -18,6 +18,8 @@ When you drive the `dataverse` CLI directly (headless reads/CRUD), two empirical
 - **Custom-table SQL pluralization.** `dataverse data query` in SQL mode auto-pluralizes the table name, and irregular plurals resolve wrong: `FROM im_category` looks up entity set `im_categorys` and returns a **404** that reads like "table missing." It is not — switch to OData mode with the explicit entity set: `dataverse data query --table im_categories --select im_name`. Discover the real `EntitySetName` from `EntityDefinitions` when unsure; never conclude the table doesn't exist from this 404.
 - **Windows shell quoting.** Wrap the whole `--path` value in double quotes so `cmd.exe`/PowerShell don't treat `&` as a command separator. Keep `&` **literal** — it separates OData query options; encoding it to `%26` merges them and breaks the query. Encode only `$`->`%24` (in PowerShell a bare `$select` is read as a variable). If an unquoted `&` splits the command, the wrapper can exit nonzero *even when the API returned valid JSON* — quoting prevents it. (This is why the `dataverse api request` examples in other skills quote the path, use `%24`, and leave `&` literal.)
 
+**ERP target is a separate path.** ERP (Finance and Operations), when linked to a Dataverse env, does not go through the Python SDK. See [`references/erp-reads.md`](references/erp-reads.md).
+
 ## How to Answer Data Questions
 
 When the user asks a question about their data, pick the approach by **what they're asking**, not by which API you know:
@@ -101,7 +103,8 @@ For deeper schema inspection — full column metadata and table relationships �
 
 | Need | Use instead |
 |---|---|
-| Create, update, delete records | **dv-data** |
+| Create, update, delete records (Dataverse) | **dv-data** |
+| Query, create, update, delete records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) and [`erp-writes`](../dv-data/references/erp-writes.md) |
 | Create tables, columns, relationships | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
 
@@ -120,7 +123,7 @@ from auth import get_client
 client = get_client("dv-query")
 ```
 
-`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup.
+`get_client(skill)` handles auth, environment URL, and plugin attribution (User-Agent tagging). See `scripts/auth.py`. For scripts that run to completion, wrap the returned client in a `with` statement for automatic connection cleanup. For ERP, use ERP MCP or the Dataverse CLI `--target erp` path — see [`references/erp-reads.md`](references/erp-reads.md).
 
 ---
 
@@ -251,6 +254,10 @@ Chainable builder for complex queries that would be awkward as a single OData UR
 ## Jupyter Notebook Setup
 
 For interactive querying in notebooks (auth + DataverseClient + DataFrame display), see [`references/jupyter-setup.md`](references/jupyter-setup.md).
+
+## Querying ERP data
+
+On ERP-linked envs, ERP reads do not go through `DataverseClient`. Use ERP MCP or `dataverse data query/get/count --target erp`. See [`references/erp-reads.md`](references/erp-reads.md).
 
 ## Common Query Errors
 

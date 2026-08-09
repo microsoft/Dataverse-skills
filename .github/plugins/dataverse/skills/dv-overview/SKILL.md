@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, or CRM; load this first for orientation. Specialist skills self-route via their own frontmatter triggers.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP; load this first for orientation. Specialist skills self-route via their own frontmatter triggers.
 ---
 
 # Skill: Overview — What to Use and When

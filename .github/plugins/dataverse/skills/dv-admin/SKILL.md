@@ -1,6 +1,6 @@
 ---
 name: dv-admin
-description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, or manage retention policies.
+description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, manage retention policies, or list/cancel ERP batch jobs.
 ---
 
 # Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin
@@ -20,6 +20,8 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 | **Python SDK — OrgDB XML** | Keys inside the `orgdborgsettings` XML blob (MCP, search, Fabric, Work IQ, TDS endpoint, attachment security, ownership, address records, block unmanaged, delete users, Excel AI) | Read XML → parse → modify → PATCH whole blob back on `organizations({id})` |
 | **Python SDK — recyclebinconfigs** | Recycle bin on/off + retention days | CREATE/PATCH `recyclebinconfigs` entity record |
 | **Python SDK — settingdefinition + organizationsettings** | App-level / plan-level security role toggles | Look up `settingdefinition` by `uniquename` → CREATE or PATCH `organizationsettings` row with `value` |
+
+ERP batch admin: see [`references/erp-batch.md`](references/erp-batch.md).
 
 Do NOT write Python scripts for operations PAC CLI can handle. Do NOT mix mechanisms (e.g., don't hand-PATCH an org column that PAC CLI already covers).
 

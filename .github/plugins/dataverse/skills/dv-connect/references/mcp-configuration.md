@@ -292,6 +292,8 @@ This is the `SERVER_NAME`.
    }
    ```
 
+   > **ERP-linked environments:** if `.env` also has `ERP_URL`, add a **second** server entry alongside this one — `"erp-{orgid}"` with `"url": "{ERP_URL}/mcp"` (note: `/mcp`, not `/api/mcp`; no `_preview` variant). The full ERP MCP block is discoverable from `dv-connect` Step 2.
+
 4. Write the updated configuration back to `CONFIG_PATH` with proper JSON formatting (2-space indentation).
 
 **Important notes:**
