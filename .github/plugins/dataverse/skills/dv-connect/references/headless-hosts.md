@@ -58,7 +58,7 @@ CLI / PAC / MCP installs and steps that cannot run. Do **not** shortcut Step 1's
 what makes the SDK path work.
 
 ---
-## STEP 0 — reachability preflight + no fabrication (before ANY claim)
+## Reachability preflight + no fabrication (before ANY claim)
 
 A token is not a connection. Make one real data-plane call:
 
@@ -178,5 +178,5 @@ only mints a token and does not prove reachability — always use `--check` here
 
 - `dataverse auth who` / `pac org who` failing here is **expected** (Axes 1/2) — not a setup failure.
 - `REACHABLE` => connection verified, continue.
-- `NOT REACHABLE` with a connection/timeout error => the org domain is egress-blocked; use the STEP 0
+- `NOT REACHABLE` with a connection/timeout error => the org domain is egress-blocked; use the preflight
   remediation. Never mark the setup complete or invent a count.

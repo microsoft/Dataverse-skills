@@ -13,7 +13,7 @@ Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, a
 
 ### Dataverse CLI gotchas (custom tables + Windows)
 
-When you drive the `dataverse` CLI directly (headless reads/CRUD), two empirical traps:
+When you drive the `dataverse` CLI directly (headless reads/CRUD; note the CLI needs .NET + a keyring, so it is blocked on ChatGPT web / Codex cloud — use the SDK there), two empirical traps:
 
 - **Custom-table SQL pluralization.** `dataverse data query` in SQL mode auto-pluralizes the table name, and irregular plurals resolve wrong: `FROM im_category` looks up entity set `im_categorys` and returns a **404** that reads like "table missing." It is not — switch to OData mode with the explicit entity set: `dataverse data query --table im_categories --select im_name`. Discover the real `EntitySetName` from `EntityDefinitions` when unsure; never conclude the table doesn't exist from this 404.
 - **Windows shell quoting.** Wrap the whole `--path` value in double quotes so `cmd.exe`/PowerShell don't treat `&` as a command separator. Keep `&` **literal** — it separates OData query options; encoding it to `%26` merges them and breaks the query. Encode only `$`->`%24` (in PowerShell a bare `$select` is read as a variable). If an unquoted `&` splits the command, the wrapper can exit nonzero *even when the API returned valid JSON* — quoting prevents it. (This is why the `dataverse api request` examples in other skills quote the path, use `%24`, and leave `&` literal.)
