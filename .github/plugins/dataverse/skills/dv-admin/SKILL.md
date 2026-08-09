@@ -122,7 +122,7 @@ If `pac org list-settings` fails for a setting, that setting is NOT an org colum
 
 - PAC CLI **latest .NET Framework build** — `pac data bulk-delete`/`pac data retention` are only in the .NET Framework build (not the `dotnet tool` version). Check `pac help`; if it shows `.NET 10`/`.NET 8`, run `pac install latest && pac use latest`.
 - Authenticated (`pac auth create`), active profile (`pac auth list`), and System Administrator privilege on the target environment.
-- **Headless / restricted-egress hosts** (ChatGPT Work Mode, CI): org settings are PAC-only, which needs a keyring the host lacks — use **service principal** auth + verify reachability (`python scripts/auth.py --check`), else unavailable here. See `dv-connect/references/headless-hosts.md`.
+- **Headless hosts** (ChatGPT Work Mode, CI): org settings are PAC-only and need a keyring the host lacks — use **service principal** auth, else unavailable here. See `dv-connect/references/headless-hosts.md`.
 
 ## Multi-Environment Operations — Always Parallel
 
