@@ -1,9 +1,9 @@
 # Headless / Sandboxed Hosts (ChatGPT Work Mode, Codex cloud sandbox, CI, SSH, containers)
 
 This reference overrides the normal `dv-connect` flow **only on constrained hosts**. On such a host
-the **Python SDK works and reads live data**; the **CLIs and native MCP do not**. This file is the
-honest, upfront capability map plus the one working path — so you never chase a dead end or report a
-result you did not actually retrieve.
+the **Python SDK works and reads live data**; the **CLIs do not**, and **native MCP works only if a
+remote connector is enabled** (detect it — see below). This file is the honest, upfront capability map
+plus the one working path — so you never chase a dead end or report a result you did not actually retrieve.
 
 ---
 
@@ -28,13 +28,25 @@ a capable host with these overrides.
 | **Python SDK** (data / query / metadata) | Yes | Pure Python + HTTPS. The primary surface here. |
 | **Raw Web API** (`urllib`) for SDK gaps (`PublishXml`, custom APIs) | Yes | Covers unbound actions the SDK does not. |
 | **Dataverse CLI / PAC CLI** | No | Two independent blockers — Axis 1 (runtime will not start) and/or Axis 2 (no keyring for the profile). |
-| **Native MCP tools** | No | Need a *remote* connector (ChatGPT Developer mode Pro+/Business, or a published "With MCP" plugin) — a sandbox-registered / stdio MCP server is not consumable here. |
+| **Native MCP tools** | No by default; Yes if a remote connector is enabled | A sandbox-registered / stdio MCP server is never consumable here, but a *remote* connector (ChatGPT Developer mode Pro+/Business, or a published "With MCP" plugin once it ships) surfaces `dataverse_*` tools directly in your tool list. **Detect, don't assume** — see "If native MCP tools ARE present" below. |
 | **Local MCP proxy (any language)** | No | ChatGPT consumes MCP *remotely*, not from a process in the sandbox. |
 | **Persistent auth cache** | Not by default | Ephemeral `$HOME` re-prompts each turn; see the auth ladder for the once-per-conversation option. |
 
 **Behavioral rule — lead with honesty.** State these limits in ONE upfront line, then go straight to
 the SDK. Do **not** attempt the CLI or MCP first and then report a chain of failures — that confusing
 experience is exactly what this file exists to prevent.
+
+**If native MCP tools ARE present (forward-looking — detect, don't assume).** The matrix above is the
+*default* constrained-host state, with **no** remote connector. The moment one is enabled — a
+Developer-mode custom connector today, or the published "With MCP" plugin once it ships to all ChatGPT
+plans — `dataverse_*` MCP tools appear directly in your tool list. So before defaulting to SDK-only,
+glance at your tools: if you see `search` / `describe` / `read_query` / `create_record` (or similar
+`dataverse_*` tools), the connector is live — **prefer those for what they cover** (reads, `describe`,
+small CRUD <=25) and fall back to the **SDK** only for what MCP does not do (bulk >25 / `CreateMultiple`,
+`$apply` aggregation, N:N joins, forms/views/global-option-sets, analytics). If you see none, you are on
+the default path — SDK-only, exactly as this file describes. This detection (the same rule as the
+`dv-overview` "MCP Availability Check") is why the guidance does not go stale when the plugin ships: the
+agent picks up native MCP automatically the day it appears, no doc change needed.
 
 ---
 ## Which `dv-connect` steps still apply here (KEEP the essentials, SKIP what can't run)
@@ -159,8 +171,14 @@ also hits Axis 1). Native MCP in ChatGPT requires one of:
 - **Developer mode** custom connector — Pro (read/fetch) / Business / Enterprise-Edu (full). **Not ChatGPT Plus / Free.**
 - **Published "With MCP" plugin** in the directory — reaches **all** plans after OpenAI review (the strategic path).
 
-Do **not** write a `~/.codex/config.toml` MCP entry expecting ChatGPT to load it in-session — it will
-not. Do **not** run Step 7 MCP `--validate` as a success gate — it fails for host reasons, not setup.
+When either is enabled, the `dataverse_*` tools show up in your tool list and you use them directly —
+see "If native MCP tools ARE present" above. Until then, do **not** write a `~/.codex/config.toml` MCP
+entry expecting ChatGPT to load it in-session (it will not), and do **not** run Step 7 MCP `--validate`
+as a success gate — it fails for host reasons, not setup.
+
+<!-- MAINTAINER: when the published "With MCP" plugin ships to all ChatGPT plans, no rewrite is needed here.
+     The agent already auto-detects native MCP via "If native MCP tools ARE present" above; just confirm the
+     detection cue tool names (search / describe / read_query / create_record) still match the shipped server. -->
 
 ### Local MCP proxy (any language, however lightweight)
 
