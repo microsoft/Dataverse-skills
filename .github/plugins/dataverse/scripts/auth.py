@@ -42,6 +42,10 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
     TENANT_ID          — required
     CLIENT_ID          — optional, enables service principal auth
     CLIENT_SECRET      — optional, enables service principal auth
+    DATAVERSE_TOKEN_CACHE_DIR — optional; on ephemeral hosts (ChatGPT web / Codex
+                         sandbox) where $HOME is wiped between turns, set this to a
+                         workspace-relative dir (e.g. .dataverse) so the device-code
+                         token cache persists and refreshes silently within a session
 """
 
 import os
@@ -210,6 +214,87 @@ class _MsalSharedCacheCredential:
         pass
 
 
+def _workspace_token_cache_path():
+    """Return an explicit MSAL v3 cache file path when DATAVERSE_TOKEN_CACHE_DIR is set.
+
+    Opt-in. On ephemeral hosts (ChatGPT web / Codex sandbox) the process $HOME is
+    wiped between turns while the workspace directory persists within a conversation.
+    Setting DATAVERSE_TOKEN_CACHE_DIR (e.g. ".dataverse") relocates the device-code
+    token cache into the persisted workspace, so the first sign-in is silently reused
+    on later turns. Returns None when the var is unset, which leaves capable hosts
+    (Windows DPAPI / macOS Keychain / Linux desktop keyring) on their default secure
+    cache with NO behavior change.
+
+    Security hardening: the cache holds a refresh token (plaintext on headless Linux;
+    DPAPI-encrypted on Windows -- see _get_credential). The directory is created
+    owner-only (0700 on POSIX) with a self-contained `.gitignore` (`*`) so the token
+    is excluded from version control even if the repo-root .gitignore misses it.
+    """
+    cache_dir = os.environ.get("DATAVERSE_TOKEN_CACHE_DIR")
+    if not cache_dir:
+        return None
+    try:
+        path = Path(cache_dir)
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        path.mkdir(parents=True, exist_ok=True)
+        # Defense in depth: exclude the token cache from git even if the repo-root
+        # .gitignore does not cover this dir.
+        gitignore = path / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text("*\n", encoding="utf-8")
+        try:
+            os.chmod(path, 0o700)  # owner-only on POSIX; benign on Windows
+        except Exception:
+            pass
+        return path / "tokencache_msalv3.dat"
+    except Exception:
+        return None
+
+
+class _MsalDeviceCodeCredential:
+    """TokenCredential over an msal app that persists at an explicit cache path.
+
+    Silent-refresh from the cache when possible; device-code sign-in on a cache miss.
+    Used only when DATAVERSE_TOKEN_CACHE_DIR is set (opt-in, ephemeral hosts) so the
+    refresh token lives in the persisted workspace cache and is reused across turns.
+    Implements the azure-core TokenCredential protocol (get_token).
+    """
+
+    def __init__(self, app):
+        self._app = app
+
+    def get_token(self, *scopes, **kwargs):
+        from azure.core.credentials import AccessToken
+        scope_list = list(scopes)
+        result = None
+        accounts = self._app.get_accounts()
+        if accounts:
+            result = self._app.acquire_token_silent(scope_list, account=accounts[0])
+        if not result or "access_token" not in result:
+            flow = self._app.initiate_device_flow(scopes=scope_list)
+            if "user_code" not in flow:
+                raise RuntimeError(
+                    "Failed to start device-code flow: "
+                    f"{flow.get('error_description', flow)}"
+                )
+            print(
+                f"\nTo sign in, visit {flow['verification_uri']} and enter code: "
+                f"{flow['user_code']}",
+                flush=True,
+            )
+            print("(Waiting for you to complete the login in your browser...)\n", flush=True)
+            result = self._app.acquire_token_by_device_flow(flow)  # blocks until complete
+        if not result or "access_token" not in result:
+            detail = result.get("error_description", result) if result else "no response"
+            raise RuntimeError(f"Device-code authentication failed: {detail}")
+        expires_on = int(time.time()) + int(result.get("expires_in", 3600))
+        return AccessToken(result["access_token"], expires_on)
+
+    def close(self):  # pragma: no cover
+        pass
+
+
 def _get_credential():
     """
     Return a TokenCredential, creating one on first call.
@@ -268,6 +353,36 @@ def _get_credential():
         app, accounts = shared
         _credential = _MsalSharedCacheCredential(app, accounts)
         return _credential
+
+    # Path 3a: Workspace-local device-code cache (opt-in via DATAVERSE_TOKEN_CACHE_DIR).
+    # On ephemeral hosts (ChatGPT web / Codex sandbox) $HOME is wiped between turns but
+    # the workspace persists within a conversation. When the var is set, put the MSAL
+    # cache (incl. refresh token) in the workspace so the first device-code sign-in is
+    # silently reused on later turns -- device code once per conversation, not per turn.
+    # Unset (the default on capable hosts) -> fall through to the standard path below.
+    workspace_cache = _workspace_token_cache_path()
+    if workspace_cache is not None:
+        try:
+            import msal
+            from msal_extensions import PersistedTokenCache
+            if sys.platform == "win32":
+                # Encrypt the workspace cache at rest with DPAPI on Windows.
+                from msal_extensions import FilePersistenceWithDataProtection
+                persistence = FilePersistenceWithDataProtection(str(workspace_cache))
+            else:
+                # Headless Linux / macOS: no keyring, plaintext file (owner-only dir).
+                from msal_extensions import FilePersistence
+                persistence = FilePersistence(str(workspace_cache))
+            cache = PersistedTokenCache(persistence)
+            app = msal.PublicClientApplication(
+                client_id=_DATAVERSE_CLI_CLIENT_ID,
+                authority=f"https://login.microsoftonline.com/{tenant_id}",
+                token_cache=cache,
+            )
+            _credential = _MsalDeviceCodeCredential(app)
+            return _credential
+        except ImportError:
+            pass  # msal/msal-extensions missing -- fall through to azure-identity device code
 
     # Path 3: Legacy device-code fallback with this script's own cache.
     # Kept so an existing workspace that authenticated before the shared-

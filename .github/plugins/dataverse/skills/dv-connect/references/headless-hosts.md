@@ -1,45 +1,53 @@
-# Headless / Sandboxed Hosts (ChatGPT browser Work Mode, Codex sandbox, CI, SSH, containers)
+# Headless / Sandboxed Hosts (ChatGPT Work Mode, Codex cloud sandbox, CI, SSH, containers)
 
-This reference **overrides** parts of the main `dv-connect` flow when you are running in a
-headless or sandboxed environment. Read it before Step 2 whenever the host has **no interactive
-desktop browser and no OS credential store (keyring / Keychain / DPAPI)** — the most common case
-is **ChatGPT Plus browser "Work Mode"**, which executes inside a Codex-based headless Linux
-container.
-
-In those hosts the **credential store**, **interactive browser**, and (rarely) **network egress**
-may each be missing — and they break *different* things. The confirmed, reproducible blocker is the
-**Dataverse CLI / PAC profile-persistence layer** on headless Linux; the **Python SDK is unaffected
-and reads live data**. This file explains why, how to verify reachability, and how to stop looping
-on the CLI so you never report a result you did not actually retrieve.
+This reference overrides the normal `dv-connect` flow **only on constrained hosts**. On such a host
+the **Python SDK works and reads live data**; the **CLIs and native MCP do not**. This file is the
+honest, upfront capability map plus the one working path — so you never chase a dead end or report a
+result you did not actually retrieve.
 
 ---
 
-## Three capability axes — do not collapse them into one "headless" flag
+## ENTRY GATE — does this file apply to you? (decide FIRST)
 
-| Axis | What it breaks | Reality |
+**Read on only if you are on a constrained host.** You are constrained if **any** of these is true:
+
+- You are told the host is **ChatGPT Work Mode**, **Codex cloud sandbox**, a **CI runner**, **SSH**, or a **container**.
+- **Runtime probe** — a .NET tool fails to *start*: `dataverse --version` (or `pac`) exits with `Failed to create CoreCLR` / exit `137`. => execution-restricted sandbox (Axis 1 below).
+- **Keyring probe** — `sys.platform == 'linux'` with no `$DISPLAY` and no running `gnome-keyring` / `dbus`. => no credential store (Axis 2 below).
+- **Profile probe** — `dataverse auth create` hangs while saving, or `dataverse auth list` is empty right after a "successful" sign-in.
+
+**If NONE apply, STOP — you are on a capable host.** Close this file and run the normal `dv-connect`
+flow unchanged (DV CLI + PAC + native MCP + Python SDK all work). Nothing here applies; do not degrade
+a capable host with these overrides.
+
+---
+
+## Capability matrix on a constrained host (state this UPFRONT, then act)
+
+| Capability | Works? | Why |
 |---|---|---|
-| **1. OS credential store** (keyring / Keychain / DPAPI / libsecret) | **Dataverse CLI + PAC profile persistence** (`CrossPlatLock` hang), and the MCP stdio proxy that reuses the CLI cache | **The confirmed blocker.** The Python SDK does not use this path and works. |
-| **2. Interactive desktop browser** | Interactive (non-device-code) sign-in; MCP proxy popup | Use `--deviceCode` / the SDK device-code fallback instead |
-| **3. Network egress to the org data-plane** (`*.dynamics.com`) | Everything — SDK, CLI, MCP all fail to reach Dataverse | **Rare.** Live sessions read real data from ChatGPT Work Mode. Do not assume it's blocked — the preflight below confirms. |
+| **Python SDK** (data / query / metadata) | Yes | Pure Python + HTTPS. The primary surface here. |
+| **Raw Web API** (`urllib`) for SDK gaps (`PublishXml`, custom APIs) | Yes | Covers unbound actions the SDK does not. |
+| **Dataverse CLI / PAC CLI** | No | Two independent blockers — Axis 1 (runtime will not start) and/or Axis 2 (no keyring for the profile). |
+| **Native MCP tools** | No | Need a *remote* connector (ChatGPT Developer mode Pro+/Business, or a published "With MCP" plugin) — a sandbox-registered / stdio MCP server is not consumable here. |
+| **Local MCP proxy (any language)** | No | ChatGPT consumes MCP *remotely*, not from a process in the sandbox. |
+| **Persistent auth cache** | Not by default | Ephemeral `$HOME` re-prompts each turn; see the auth ladder for the once-per-conversation option. |
 
-**Auth success is not a connection — but do not over-rotate on the network either.** Live sessions
-confirm the SDK reads real data from ChatGPT Work Mode (org identity, metadata GUIDs, record counts).
-The thing that actually fails is the **CLI's profile persistence** (axis 1), not egress. The one-line
-preflight below settles it factually instead of guessing.
+**Behavioral rule — lead with honesty.** State these limits in ONE upfront line, then go straight to
+the SDK. Do **not** attempt the CLI or MCP first and then report a chain of failures — that confusing
+experience is exactly what this file exists to prevent.
 
 ---
 
-## STEP 0 (do this FIRST): reachability preflight + no fabrication
+## STEP 0 — reachability preflight + no fabrication (before ANY claim)
 
-Before you claim ANY connection works — SDK, CLI, or MCP — make one **real data-plane call** and
-look at whether it returned. A token is not proof. Use the built-in gate:
+A token is not a connection. Make one real data-plane call:
 
 ```bash
 python scripts/auth.py --check
 ```
 
-`--check` makes a real metadata call and prints `REACHABLE: ... N non-private tables` (exit 0) or
-`NOT REACHABLE: ... <error>` (exit 2). Equivalent inline:
+Prints `REACHABLE: ... N non-private tables` (exit 0) or `NOT REACHABLE: ... <error>` (exit 2). Inline equivalent:
 
 ```python
 import os, sys
@@ -57,165 +65,23 @@ except Exception as e:
     print("A connection/timeout error (rare) means the org domain is blocked by egress.")
 ```
 
-**Anti-fabrication rule (mandatory).** Report only counts, rows, and results you got back from a
-call that actually returned — anchor them to something verifiable (the org ID, a metadata GUID, the
-actual number). If the preflight errors, say what failed (auth not completed, or — rarely — the
-domain is unreachable); never invent a plausible number to fill the gap.
+**Anti-fabrication (mandatory).** Report only counts / rows you actually got back, anchored to
+something verifiable (org ID, a metadata GUID, the real number). If it errors, say what failed; never
+invent a plausible number to fill the gap.
 
-**If the preflight fails with a *connection/timeout* error (not a device-code prompt), STOP** — that
-is the rare egress case, and none of the Overrides below will help. Give the user the remediation:
-
-1. **Allowlist the environment domain** in the sandbox network settings (add the org host /
-   `*.dynamics.com` to the ChatGPT Work Mode / container egress allowlist), then re-run the preflight.
-2. **Use ChatGPT's native Dataverse connector** (added via the ChatGPT Connectors UI) — it runs
-   server-side, outside the egress-restricted sandbox.
-3. **Run the plugin where egress is open** — local VS Code / Codex CLI / Copilot on your machine.
-
-Only if the preflight **passes** do the Overrides below apply.
+**If it fails with a connection/timeout error (not a device-code prompt), STOP** — the org domain is
+egress-blocked and nothing below helps. Remediation: (1) allowlist `*.dynamics.com` in the sandbox
+egress settings; (2) use a server-side ChatGPT connector; (3) run where egress is open (local VS Code
+/ Codex CLI / Copilot). Only if the preflight **passes** does the working path below apply.
 
 ---
 
-## Which hosts lack what
+## The working path (constrained host, egress open)
 
-| Host | Egress to org | Keyring | Browser |
-|---|---|---|---|
-| **ChatGPT Plus browser Work Mode** | usually open (verify) | no | no |
-| **Codex / cloud sandbox** | varies | no | no |
-| **CI runners** (GitHub Actions, ADO) | usually open | no | no |
-| **SSH / Dev Container / plain Docker** | usually open | often no | no |
-
-**Detection heuristic** (any one is enough to treat the host as restricted):
-- `sys.platform` is `linux` with no `DISPLAY` / no running `gnome-keyring` / `dbus` (no keyring, no browser).
-- A `dataverse auth create` attempt hangs while persisting the profile (the credential-store blocker).
-- The reachability preflight returns `NOT REACHABLE` with a connection/timeout error (the rare egress case).
-- You are explicitly told the host is ChatGPT Work Mode / Codex / a container.
-
----
-
-## Why the SDK works but the CLI doesn't (the mechanism)
-
-Both normally share ONE Microsoft sign-in. On headless Linux they diverge at **how each persists the
-token**, and only one survives:
-
-| | Dataverse CLI / PAC / MCP proxy | Python SDK (`scripts/auth.py`) |
-|---|---|---|
-| Persists | A named auth **profile** + shared MSAL cache | Its own MSAL **AuthenticationRecord** file |
-| Backing store on Linux | libsecret / gnome-keyring via **`CrossPlatLock`** | plaintext file, `allow_unencrypted_storage=True` |
-| Headless result | **hangs / crashes** persisting the profile -> `dataverse auth list` returns `[]` -> "No active authentication profile" | writes the record successfully, refreshes silently |
-
-Same account, same environment, same permissions, same network. The **only** difference is the
-persistence layer: the CLI depends on an OS keyring a headless container doesn't provide; the SDK's
-`DeviceCodeCredential` falls back to a plaintext record and keeps working. That is why the SDK returns
-live data while `dataverse auth create` leaves no usable profile.
-
-**Systematic fixes for the CLI / PAC / MCP-proxy path on headless hosts** (pick one):
-1. **Service principal** — `CLIENT_ID` + `CLIENT_SECRET` in `.env` for the SDK, and `pac auth create
-   --applicationId ... --clientSecret ... --tenant ...` (or `dataverse auth create` with an app
-   registration) for the CLIs. SP tokens are minted from client credentials, so there is no
-   interactive profile to persist — this sidesteps the `CrossPlatLock` hang entirely.
-2. **Provide a keyring** — run a `gnome-keyring` / `dbus` session in the container (not possible in
-   ChatGPT Work Mode; feasible in a custom Dev Container).
-3. **Use the SDK for the operation** — anything `get_client` covers (data, queries, metadata) already
-   works headless; reserve CLI/PAC for what has no SDK path (solution ALM, org settings) and route
-   those through SP or a keyring-capable host.
-
-**Can the two be truly aligned (one login serves both)?** Yes:
-- **Today:** only via **service principal** — no keyring-dependent interactive cache on either side.
-- **Device-code:** needs a small Dataverse CLI change. Its plaintext fallback
-  (`WithLinuxUnprotectedFile`) is currently reached only on `MsalCachePersistenceException`, so a
-  headless `CrossPlatLock` error slips past it and `dataverse auth create` writes no profile; and
-  `--accept-cleartext-caching` isn't wired to the interactive token cache. Once the CLI writes the
-  plaintext `tokencache_msalv3.dat`, `scripts/auth.py` already reads it (it now also tries the
-  plaintext file at `$XDG_DATA_HOME/Microsoft/DataverseCli` on Linux) — so a single device-code
-  login would then serve the CLI, the MCP proxy, and Python.
-
----
-
-## Override 1 — Auth priority: Python SDK device-code is PRIMARY (after the preflight passes)
-
-Once STEP 0 confirms the org is reachable, **do not lead with `dataverse auth create`.** Use the
-Python path that `scripts/auth.py` already implements. Its device-code fallback persists a
-**plaintext** MSAL cache via the Python `msal-extensions` file lock (`allow_unencrypted_storage=True`)
-— which works with no keyring. One sign-in, cached for the session. (If STEP 0 failed with a
-*connection/timeout* error, this does **not** help — that's the rare egress case, not auth.)
-
-```python
-# Primary auth on headless hosts. Prints a device code on first run, then caches silently.
-import os, sys
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_client
-
-client = get_client("dv-connect")
-tables = client.tables.list(select=["LogicalName"])
-print(f"Connected. {len(tables)} non-private tables visible.")
-```
-
-If this prints a device code, relay the URL + code to the user, wait for them to sign in, then
-re-run. **A green run here IS a verified connection** — treat it as success even if the CLI and
-MCP paths are unavailable. Do **not** re-run `dataverse auth create --deviceCode` to "fix" a
-device-code prompt on a headless host — that command cannot persist its cache here and will loop.
-
-Non-interactive headless hosts (CI) should use **service principal** auth instead: set `CLIENT_ID`
-and `CLIENT_SECRET` in `.env` and `scripts/auth.py` uses them automatically (no browser at all).
-
----
-
-## Override 2 — Dataverse CLI auth is a KNOWN failure on headless Linux
-
-The `@microsoft/dataverse` CLI persists its MSAL cache through .NET `msal-extensions`, which
-depends on **libsecret / gnome-keyring over D-Bus**. That daemon does not exist in these
-containers, so profile persistence crashes — even with `--accept-cleartext-caching` — with:
-
-```
-System.InvalidOperationException: Process has exited
-  at Microsoft.Identity.Client.Extensions.Msal.CrossPlatLock
-```
-
-The device code may print, sign-in may succeed, but the **profile is never saved** (a follow-up
-`dataverse auth list` shows nothing). This is a CLI/platform limitation, not a plugin bug.
-
-**What to do:** treat DV CLI auth as **best-effort** on headless hosts. Try it at most once; if it
-hangs or `auth list` is empty afterward, stop and fall back to the Python SDK path (Override 1).
-Do not loop. The `dataverse` data-plane commands (`data query/get/create/...`) still need a
-persisted profile, so on these hosts prefer the **Python SDK** for reads/writes instead.
-
-`pac auth create` is interactive and browser-based, so it has the same problem — skip it on
-headless hosts unless you have a service principal.
-
----
-
-## Override 3 — MCP is best-effort / unverified in ChatGPT browser Work Mode
-
-You may still write the MCP config (Step 6) so it is ready for a desktop editor later, but in
-**ChatGPT browser Work Mode you cannot verify or use it in-session**:
-
-- There is no local Codex/editor process to restart, and the ChatGPT backend does **not** load a
-  session-written `~/.codex/config.toml`. MCP servers for ChatGPT are added through the ChatGPT
-  **Connectors / MCP** settings UI, not by writing a config file.
-- The `npx @microsoft/dataverse mcp` stdio proxy relies on the same broken DV CLI token cache
-  (Override 2), so it cannot authenticate here either.
-
-**What to say and do:**
-- Write the config if asked, but label it clearly: *"MCP config written for a future desktop
-  session — it cannot be loaded or verified inside ChatGPT Work Mode."*
-- Do **not** run Step 7's MCP verification or `--validate` as a success gate here; both will fail
-  for host reasons, not setup reasons.
-- Point the user to the working path (below), and note that native MCP in ChatGPT requires adding
-  the connector via the ChatGPT Connectors UI.
-
----
-
-## The working path on a headless host (egress open)
-
-**Precondition: the STEP 0 reachability preflight passed.** If it did not, there is no in-session
-path — use the STEP 0 remediation (allowlist the domain, use the ChatGPT connector, or run locally).
-Do not proceed to auth or claim any partial success.
-
-1. **Auth:** `scripts/auth.py` (Override 1) — device code once, cached for the session.
-2. **Reads / writes / metadata:** Python SDK (`get_client(skill)`), same as every other host.
-3. **MCP / DV CLI data-plane:** unavailable in-session; skip without failing the setup.
-
-Example — the independent table count that works here:
+1. **Auth** — `scripts/auth.py` device-code (below). One sign-in.
+2. **Reads / writes / metadata** — Python SDK (`get_client(skill)`), identical to every other host.
+3. **Unbound actions** the SDK lacks (`PublishXml`, custom APIs) — raw Web API via `urllib`.
+4. **CLI / native MCP** — unavailable in-session; skip WITHOUT failing the setup.
 
 ```python
 import os, sys
@@ -227,28 +93,71 @@ tables = client.tables.list(select=["LogicalName"])   # documented default exclu
 print(f"{len(tables)} non-private tables")
 ```
 
----
-
-## Override 4 — Step 5 verification on headless hosts
-
-Replace Step 5's three-way check (`dataverse auth who` + `pac org who` + `python scripts/auth.py`)
-with a **single sufficient check**: a green `python scripts/auth.py --check` (the STEP 0 reachability
-gate). A bare `python scripts/auth.py` only mints a token and does **not** prove the org is reachable
-— always use `--check` here.
-
-- `dataverse auth who` failing here is **expected** (Override 2) — not a setup failure.
-- `pac org who` failing here is **expected** (interactive/browser) — not a setup failure.
-- If `python scripts/auth.py --check` prints `REACHABLE`, declare the connection verified and continue.
-- If it prints `NOT REACHABLE` with a connection/timeout error, the org domain is blocked (axis 1) —
-  report that honestly and use the STEP 0 remediation. Never mark the setup complete or invent a count.
-
-State plainly which surfaces are available: *"Python SDK: connected and verified. Dataverse CLI /
-PAC / MCP: unavailable in this headless host."* Never mark CLI or MCP "configured" when they
-aren't — report exactly what works.
+If a device code prints, relay the URL + code to the user, wait for sign-in, then re-run. **A green
+run IS a verified connection** — treat it as success even if CLI and MCP are unavailable.
 
 ---
 
-## Agent identity value
+## Auth ladder (best -> last resort) — for the repeated-prompt pain
 
-ChatGPT Work Mode runs on Codex, so set `DATAVERSE_PLUGIN_AGENT=codex` in `.env` (it is a valid
-entry in `_ALLOWED_AGENTS`). If the host is genuinely unknown, use `unknown`.
+By default the device-code cache lives under `$HOME`, which some sandboxes wipe between turns, so you
+re-authenticate on *every* turn. Options, best first:
+
+1. **Native remote connector** (ChatGPT Developer mode / published plugin) — `offline_access` refresh, **no local token at rest**. The endgame; needs the connector + OAuth work, and is not available on ChatGPT Plus today.
+2. **Service principal** — set `CLIENT_ID` + `CLIENT_SECRET` in `.env`; `scripts/auth.py` uses them automatically. No browser, and **no *user* token at rest** (a scoped, revocable app identity). The sanctioned unattended pattern.
+3. **Accept per-turn prompts** — annoying, but zero token at rest.
+4. **[LAST RESORT] Workspace-local cache** — set `DATAVERSE_TOKEN_CACHE_DIR=.dataverse` in `.env`. `scripts/auth.py` then stores the cache in the persisted workspace, so device code is **once per conversation, not per turn**.
+   - **Only** on an isolated, ephemeral, gitignored sandbox where the workspace persists across turns (test: write a file one turn, read it the next) and is wiped on session end.
+   - **Security:** this writes the user's **refresh token** into `.dataverse/` (plaintext on headless Linux; DPAPI-encrypted on Windows). A leaked *user* refresh token is worse than a scoped SP secret. `auth.py` self-writes a `.gitignore` (`*`) in the dir and creates it owner-only, but keep `.dataverse/` gitignored at the repo root too. Prefer options 1-2. **Opt-in only** — capable hosts are unaffected unless the var is set.
+
+---
+
+## What does NOT work here — and why (do not chase these)
+
+### Dataverse CLI + PAC CLI — two independent blockers
+
+- **Axis 1 — execution-environment restriction (ChatGPT Work Mode / Codex cloud sandbox).** The
+  self-contained .NET runtime cannot start: `Failed to create CoreCLR, HRESULT: 0x8007000E`, exit `137`.
+  Verified **NOT memory** — GC-heap limits, single-processor mode, and .NET 6/10 all fail identically
+  and resource limits were unconstrained. The real cause is a sandbox policy: **`/proc/self/exe` masked
+  + tracing/ptrace blocked**. The CLIs **install** (~1.9 GB, workspace-local) but **cannot execute**.
+  PAC additionally needs the .NET SDK the sandbox lacks. This is a hard policy wall — not tunable, and
+  it will not change with any CLI / plugin update.
+- **Axis 2 — no OS keyring (other headless Linux, where .NET *can* run).** Profile persistence uses
+  libsecret / gnome-keyring via `CrossPlatLock`, which hangs without a keyring: `dataverse auth create`
+  "succeeds" but `dataverse auth list` is empty (`System.InvalidOperationException ... CrossPlatLock`).
+
+=> Do not try the CLI beyond the entry-gate probe. Use the **SDK** for data / query / metadata and
+**raw Web API** for unbound actions. Reserve CLI / PAC (solution ALM, org settings) for a capable host
+or a service principal.
+
+### Native MCP tools
+
+ChatGPT consumes MCP as a **remote connector**, not from the sandbox — so a locally-registered / stdio
+MCP server (`npx @microsoft/dataverse mcp`, or any proxy) is not consumable here (and the .NET proxy
+also hits Axis 1). Native MCP in ChatGPT requires one of:
+
+- **Developer mode** custom connector — Pro (read/fetch) / Business / Enterprise-Edu (full). **Not ChatGPT Plus / Free.**
+- **Published "With MCP" plugin** in the directory — reaches **all** plans after OpenAI review (the strategic path).
+
+Do **not** write a `~/.codex/config.toml` MCP entry expecting ChatGPT to load it in-session — it will
+not. Do **not** run Step 7 MCP `--validate` as a success gate — it fails for host reasons, not setup.
+
+### Local MCP proxy (any language, however lightweight)
+
+Does not help — there is **no MCP client in the sandbox to consume it** (ChatGPT loads MCP remotely).
+This is an architecture limit, not a memory one; a featherweight Python/Node proxy would run and still
+have zero consumers.
+
+---
+
+## Step 5 verification on a constrained host
+
+Replace the three-way check (`dataverse auth who` + `pac org who` + `python scripts/auth.py`) with a
+**single sufficient gate**: a green `python scripts/auth.py --check`. A bare `python scripts/auth.py`
+only mints a token and does not prove reachability — always use `--check` here.
+
+- `dataverse auth who` / `pac org who` failing here is **expected** (Axes 1/2) — not a setup failure.
+- `REACHABLE` => connection verified, continue.
+- `NOT REACHABLE` with a connection/timeout error => the org domain is egress-blocked; use the STEP 0
+  remediation. Never mark the setup complete or invent a count.
