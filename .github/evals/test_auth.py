@@ -2,7 +2,7 @@
 Unit tests for the auth.py credential chain (issue #108).
 
 Hermetic: fakes azure-identity / azure-core so the tests run with no external
-dependencies. Run standalone (`python scripts/test_auth.py`) or via pytest.
+dependencies. Run standalone (`python .github/evals/test_auth.py`) or via pytest.
 
 Guards the #108 invariants:
   - the shared-cache credential FALLS THROUGH (CredentialUnavailableError),
@@ -24,7 +24,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-_SCRIPTS = Path(__file__).resolve().parent
+_SCRIPTS = Path(__file__).resolve().parent.parent / "plugins" / "dataverse" / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
 import auth  # noqa: E402  (import after sys.path insert)
 

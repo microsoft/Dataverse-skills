@@ -26,5 +26,8 @@ jobs:
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
 
+      - name: Run auth unit tests
+        run: python .github/evals/test_auth.py
+
       - name: Run version bump check
         run: python .github/evals/version_bump_check.py --base origin/main
