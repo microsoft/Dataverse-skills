@@ -218,7 +218,13 @@ class _MsalSharedCacheCredential:
         # Single-account is the common case. If the shared cache happens to
         # contain multiple accounts, the first one wins -- deterministic and
         # matches what `dataverse auth select` would surface as active.
-        result = self._app.acquire_token_silent(list(scopes), account=self._accounts[0])
+        # Forward a CAE / Conditional-Access claims challenge when azure-core
+        # passes one -- CA-hardened tenants are this plugin's target scenario.
+        # A None claims_challenge is a harmless no-op.
+        result = self._app.acquire_token_silent(
+            list(scopes), account=self._accounts[0],
+            claims_challenge=kwargs.get("claims"),
+        )
         if not result or "access_token" not in result:
             # Fall through, do NOT hard-fail: a cached account can exist while
             # silent acquisition fails (authority mismatch, expired refresh
@@ -288,10 +294,13 @@ class _MsalDeviceCodeCredential:
     def get_token(self, *scopes, **kwargs):
         from azure.core.credentials import AccessToken
         scope_list = list(scopes)
+        claims = kwargs.get("claims")  # CAE / Conditional-Access challenge, if any
         result = None
         accounts = self._app.get_accounts()
         if accounts:
-            result = self._app.acquire_token_silent(scope_list, account=accounts[0])
+            result = self._app.acquire_token_silent(
+                scope_list, account=accounts[0], claims_challenge=claims,
+            )
         if not result or "access_token" not in result:
             flow = self._app.initiate_device_flow(scopes=scope_list)
             if "user_code" not in flow:
@@ -310,7 +319,9 @@ class _MsalDeviceCodeCredential:
                 f"this code expires in ~{_expiry_min} min...)\n",
                 flush=True,
             )
-            result = self._app.acquire_token_by_device_flow(flow)  # blocks until complete
+            result = self._app.acquire_token_by_device_flow(
+                flow, claims_challenge=claims,
+            )  # blocks until complete
         if not result or "access_token" not in result:
             detail = result.get("error_description", result) if result else "no response"
             raise RuntimeError(f"Device-code authentication failed: {detail}")
@@ -321,28 +332,31 @@ class _MsalDeviceCodeCredential:
         pass
 
 
+def _is_ci():
+    """True on CI / build agents (no interactive user), even on win32/darwin --
+    GitHub Actions, ADO agents, containerized Windows. Treats only genuinely-
+    truthy values as set (avoids the CI="false" trap).
+    """
+    def _flag(name):
+        return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
+
+    return _flag("CI") or _flag("GITHUB_ACTIONS") or _flag("TF_BUILD") or _flag("BUILD_BUILDID")
+
+
 def _host_has_browser():
     """True if an interactive system browser is likely available.
 
-    CI / build agents are headless even when sys.platform is win32/darwin
-    (GitHub Actions windows-latest / macos-latest, ADO agents, containerized
-    Windows) -- launching a browser there crashes with no user session, so they
-    route to the device-code tier (which at least prints a code) instead. After
-    the CI gate: a Windows console or RDP session has a browser, but a Windows
-    service / headless container has an empty or "Services" SESSIONNAME; macOS
-    (non-CI) always has a session browser; Linux needs a display server, so
-    require DISPLAY or WAYLAND_DISPLAY -- headless Linux (SSH / container /
-    ChatGPT web) has neither and uses device-code.
+    CI / build agents are headless even when sys.platform is win32/darwin --
+    launching a browser there crashes with no user session, so they route to the
+    device-code tier instead. After the CI gate: a Windows console or RDP session
+    has a browser, but a Windows service / headless container has an empty or
+    "Services" SESSIONNAME; macOS (non-CI) always has a session browser; Linux
+    needs a display server (DISPLAY / WAYLAND_DISPLAY) -- headless Linux (SSH /
+    container / ChatGPT web) has neither and uses device-code.
     """
-    def _flag(name):
-        # Treat only genuinely-truthy values as set (avoid the CI="false" trap).
-        return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
-
-    if _flag("CI") or _flag("GITHUB_ACTIONS") or _flag("TF_BUILD") or _flag("BUILD_BUILDID"):
+    if _is_ci():
         return False
     if sys.platform == "win32":
-        # Console + RDP sessions have a browser; a Windows service / headless
-        # container has an empty or "Services" SESSIONNAME.
         session = os.environ.get("SESSIONNAME", "").strip().lower()
         return session not in ("", "services")
     if sys.platform == "darwin":
@@ -359,6 +373,7 @@ class _SilentChain:
 
     def __init__(self, tiers):
         self._tiers = tiers  # list[(name, credential)]
+        self.last_reasons = []  # why each tier was skipped -- surfaced before a prompt
 
     def get_token(self, *scopes, **kwargs):
         from azure.identity import CredentialUnavailableError
@@ -370,6 +385,7 @@ class _SilentChain:
                 reasons.append(f"{tier_name}: unavailable")
             except Exception as e:  # noqa: BLE001 -- a silent tier must never strand the chain
                 reasons.append(f"{tier_name}: {type(e).__name__}")
+        self.last_reasons = reasons
         raise CredentialUnavailableError(
             "no silent credential available (" + "; ".join(reasons) + ")"
         )
@@ -395,8 +411,16 @@ class _FallbackCredential:
         if self._silent is not None:
             try:
                 return self._silent.get_token(*scopes, **kwargs)
-            except CredentialUnavailableError:
-                pass  # every silent tier exhausted -> interactive
+            except CredentialUnavailableError as e:
+                # Surface WHY every silent tier was skipped so a sudden interactive
+                # prompt is explicable ("it just prompted me and I don't know why").
+                reasons = getattr(self._silent, "last_reasons", None)
+                detail = "; ".join(reasons) if reasons else str(e)
+                print(
+                    f"No silent credential available ({detail}); "
+                    f"falling back to interactive sign-in.",
+                    flush=True,
+                )
         if self._interactive is None:
             self._interactive = self._interactive_builder()
         return self._interactive.get_token(*scopes, **kwargs)
@@ -441,6 +465,19 @@ def _build_interactive_tier(tenant_id):
     login so a later process refreshes silently. Called ONLY after every silent
     tier is exhausted, so the eager first-login prompt here is never premature.
     """
+    # CI / unattended host: no interactive tier can succeed (no browser; a device
+    # code just blocks ~15 min then expires into a log nobody reads). Service
+    # principal is a terminal tier BEFORE we reach here, so being here under CI
+    # means no SP is configured -- fail fast with an actionable message instead of
+    # a guaranteed hang.
+    if _is_ci():
+        raise RuntimeError(
+            "Unattended/CI host detected with no working silent credential "
+            "(service principal, shared cache, or az login). Interactive sign-in "
+            "cannot succeed here -- set CLIENT_ID + CLIENT_SECRET for a service "
+            "principal, or run `python scripts/auth.py --diagnose` to see which "
+            "tier failed."
+        )
     workspace_cache = _workspace_token_cache_path()
     if workspace_cache is not None:
         cred = _build_workspace_device_code_credential(workspace_cache, tenant_id)
@@ -637,19 +674,12 @@ _CONTEXT_RE = re.compile(
 def _plugin_version():
     """Return the plugin version for telemetry attribution.
 
-    Reads the packaged plugin.json (the source of truth) so attribution always
-    reflects the INSTALLED version, not a stale DATAVERSE_PLUGIN_VERSION that a
-    previous install may have left in .env. Falls back to that env var, then
-    "unknown", if the manifest cannot be read.
+    Sourced from DATAVERSE_PLUGIN_VERSION, which dv-connect writes into .env from
+    the live plugin manifest on every connect (Step 0 / Step 3). The deployed
+    layout copies this file to <project>/scripts/auth.py -- away from the plugin
+    manifest -- so a manifest path relative to __file__ is unreliable here; the
+    env var, refreshed at connect, is the source of truth.
     """
-    manifest = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
-    try:
-        import json
-        version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
-        if version:
-            return version
-    except Exception:
-        pass
     return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
 
 

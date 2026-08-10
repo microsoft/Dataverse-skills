@@ -131,7 +131,7 @@ class _FakeMsalApp:
     def __init__(self, silent_result):
         self._silent = silent_result
 
-    def acquire_token_silent(self, scopes, account=None):
+    def acquire_token_silent(self, scopes, account=None, claims_challenge=None):
         return self._silent
 
 
@@ -286,31 +286,34 @@ class HostBrowserDetection(_AuthTestBase):
 class InteractiveTierSelection(_AuthTestBase):
     def test_workspace_cache_opt_in_wins(self):
         sentinel = object()
-        with mock.patch.object(auth, "_workspace_token_cache_path", lambda: Path("cache.dat")):
-            with mock.patch.object(
-                auth, "_build_workspace_device_code_credential", lambda path, tenant: sentinel
-            ):
-                cred, kind = auth._build_interactive_tier("tenant")
+        with mock.patch.object(auth, "_is_ci", lambda: False):
+            with mock.patch.object(auth, "_workspace_token_cache_path", lambda: Path("cache.dat")):
+                with mock.patch.object(
+                    auth, "_build_workspace_device_code_credential", lambda path, tenant: sentinel
+                ):
+                    cred, kind = auth._build_interactive_tier("tenant")
         self.assertIs(cred, sentinel)
         self.assertEqual(kind, "workspace-device-code")
 
     def test_desktop_uses_interactive_browser(self):
         with tempfile.TemporaryDirectory() as tmp:
             record_path = Path(tmp) / "record.json"
-            with mock.patch.object(auth, "_workspace_token_cache_path", lambda: None):
-                with mock.patch.object(auth, "_host_has_browser", lambda: True):
-                    with mock.patch.object(auth, "_AUTH_RECORD_PATH", record_path):
-                        cred, kind = auth._build_interactive_tier("tenant")
+            with mock.patch.object(auth, "_is_ci", lambda: False):
+                with mock.patch.object(auth, "_workspace_token_cache_path", lambda: None):
+                    with mock.patch.object(auth, "_host_has_browser", lambda: True):
+                        with mock.patch.object(auth, "_AUTH_RECORD_PATH", record_path):
+                            cred, kind = auth._build_interactive_tier("tenant")
         self.assertIsInstance(cred, _FakeInteractiveBrowser)
         self.assertEqual(kind, "interactive-browser")
 
     def test_headless_uses_device_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             record_path = Path(tmp) / "record.json"
-            with mock.patch.object(auth, "_workspace_token_cache_path", lambda: None):
-                with mock.patch.object(auth, "_host_has_browser", lambda: False):
-                    with mock.patch.object(auth, "_AUTH_RECORD_PATH", record_path):
-                        cred, kind = auth._build_interactive_tier("tenant")
+            with mock.patch.object(auth, "_is_ci", lambda: False):
+                with mock.patch.object(auth, "_workspace_token_cache_path", lambda: None):
+                    with mock.patch.object(auth, "_host_has_browser", lambda: False):
+                        with mock.patch.object(auth, "_AUTH_RECORD_PATH", record_path):
+                            cred, kind = auth._build_interactive_tier("tenant")
         self.assertIsInstance(cred, _FakeDeviceCode)
         self.assertEqual(kind, "device-code")
 
@@ -361,7 +364,7 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
         def get_accounts(self):
             return ["account"]
 
-        def acquire_token_silent(self, scopes, account=None):
+        def acquire_token_silent(self, scopes, account=None, claims_challenge=None):
             if self._has_token:
                 return {"access_token": "x", "expires_in": 60}
             return None
@@ -404,14 +407,84 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
 
 
 class PluginVersionAttribution(_AuthTestBase):
-    def test_reads_manifest_not_stale_env(self):
-        # Regression guard: telemetry attribution must reflect the INSTALLED
-        # plugin version (from the packaged plugin.json), not a stale
-        # DATAVERSE_PLUGIN_VERSION that a previous install left in .env.
-        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.8.0"}, clear=True):
-            version = auth._plugin_version()
-        self.assertNotEqual(version, "1.8.0")
-        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+    def test_reads_from_env_in_deployed_layout(self):
+        # In the DEPLOYED layout dv-connect copies auth.py to <project>/scripts/,
+        # away from the plugin manifest, so _plugin_version reads the env var that
+        # dv-connect refreshes on connect -- not a manifest path relative to
+        # __file__. Assert the env var is the source of truth.
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.11.0"}, clear=True):
+            self.assertEqual(auth._plugin_version(), "1.11.0")
+
+    def test_defaults_to_unknown_when_env_absent(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(auth._plugin_version(), "unknown")
+
+
+class SilentChainReasons(_AuthTestBase):
+    def test_reasons_recorded_on_exhaustion(self):
+        chain = auth._SilentChain([("a", _RaiseUnavailable()), ("b", _RaiseGeneric())])
+        with self.assertRaises(_CredUnavailable):
+            chain.get_token("scope")
+        self.assertEqual(len(chain.last_reasons), 2)
+        self.assertIn("a: unavailable", chain.last_reasons)
+
+
+class CiFailFast(_AuthTestBase):
+    def test_ci_without_service_principal_raises_before_interactive(self):
+        # CI + no SP -> _build_interactive_tier must fail fast, not enter a
+        # 15-minute device-code hang.
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True):
+            with self.assertRaises(RuntimeError):
+                auth._build_interactive_tier("tenant")
+
+
+class _ClaimsProbeApp:
+    """msal app stand-in that records the claims_challenge it receives."""
+
+    def __init__(self, has_account, silent_result):
+        self._has_account = has_account
+        self._silent = silent_result
+        self.seen_claims = "UNSET"
+
+    def get_accounts(self):
+        return ["acct"] if self._has_account else []
+
+    def acquire_token_silent(self, scopes, account=None, claims_challenge=None):
+        self.seen_claims = claims_challenge
+        return self._silent
+
+    def initiate_device_flow(self, scopes=None):
+        return {"user_code": "ABC", "verification_uri": "https://x", "expires_in": 900}
+
+    def acquire_token_by_device_flow(self, flow, claims_challenge=None):
+        self.seen_claims = claims_challenge
+        return {"access_token": "device-tok", "expires_in": 60}
+
+
+class DeviceCodeCredentialBehavior(_AuthTestBase):
+    def test_silent_hit_skips_device_flow(self):
+        app = _ClaimsProbeApp(has_account=True, silent_result={"access_token": "s", "expires_in": 60})
+        cred = auth._MsalDeviceCodeCredential(app)
+        self.assertEqual(cred.get_token("scope").token, "s")
+
+    def test_device_flow_used_when_no_silent(self):
+        app = _ClaimsProbeApp(has_account=False, silent_result=None)
+        cred = auth._MsalDeviceCodeCredential(app)
+        self.assertEqual(cred.get_token("scope").token, "device-tok")
+
+    def test_forwards_claims_challenge_to_silent(self):
+        app = _ClaimsProbeApp(has_account=True, silent_result={"access_token": "s", "expires_in": 60})
+        cred = auth._MsalDeviceCodeCredential(app)
+        cred.get_token("scope", claims="CH")
+        self.assertEqual(app.seen_claims, "CH")
+
+
+class SharedCacheClaimsForwarding(_AuthTestBase):
+    def test_forwards_claims_challenge(self):
+        app = _ClaimsProbeApp(has_account=True, silent_result={"access_token": "s", "expires_in": 60})
+        cred = auth._MsalSharedCacheCredential(app, ["acct"])
+        cred.get_token("scope", claims="CH")
+        self.assertEqual(app.seen_claims, "CH")
 
 
 if __name__ == "__main__":

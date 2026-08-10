@@ -17,7 +17,7 @@ One-step connection to Dataverse. Handles tool installation, authentication, env
 
 ## Step 0: Detect existing setup (run this first)
 
-Before touching anything, check whether this workspace is already connected to a Dataverse environment. This matters a lot on `claude --continue` or any re-run — repeating it on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
+Before touching anything, check whether this workspace is already connected to a Dataverse environment. Repeating setup on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
 
 Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
 
@@ -26,7 +26,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** Confirm the detected setup (URL, profile name, MCP server name) and jump to Step 7. Do not rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** Refresh `DATAVERSE_PLUGIN_VERSION` in `.env` if it's stale, confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
