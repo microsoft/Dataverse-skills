@@ -57,7 +57,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 `msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache \u2014 one sign-in for CLI, MCP, Python.
 
-After Node.js is confirmed, install the Dataverse CLI (upgrade on demand, not on every connect -- repeated `@latest` fetches hit the npm registry each time, which corporate device policies may block; see [tools-setup.md](references/tools-setup.md)):
+After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version on each connect to stay current; if corporate npm policy blocks the `@latest` fetch, keep the installed version and continue (see [tools-setup.md](references/tools-setup.md)):
 ```
 npm install -g @microsoft/dataverse@latest
 ```

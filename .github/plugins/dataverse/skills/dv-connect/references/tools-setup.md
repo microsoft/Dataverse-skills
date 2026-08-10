@@ -12,7 +12,7 @@ Check all in parallel. Install any that are missing.
 | .NET SDK | `dotnet --version` | `winget install Microsoft.DotNet.SDK.9` |
 | Python 3 | `python --version` | `winget install Python.Python.3.12` |
 | Node.js | `node --version` | `winget install OpenJS.NodeJS.LTS` |
-| Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (install if missing; upgrade on demand rather than every connect — repeated `@latest` fetches hit the npm registry each time, which corporate device policies may block) |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` (shows `@microsoft/dataverse@<version>` if installed; `(empty)` if not) | `npm install -g @microsoft/dataverse@latest` (install if missing; best-effort upgrade to latest on each connect. If corporate npm policy blocks the registry, the fetch fails harmlessly -- keep the installed version and continue) |
 | Git | `git --version` | `winget install Git.Git` |
 
 After any `winget` install, the new tool may not be in PATH until the shell is restarted. If a tool is not found immediately after install, ask the user to close and reopen the terminal (if running in Claude Code, remind them to resume the session correctly: "Remember to **use `claude --continue` to resume the session** without losing context"), then proceed.
@@ -74,7 +74,7 @@ The plugin never overrides your registry — it honors your `.npmrc`. The fix is
    Also remove any explicit `registry=https://registry.npmjs.org/` line from `~/.npmrc` that shadows the managed default.
 3. `npx` follows npm's registry config; if it still resolves stale, clear its cache (`npm-cache/_npx`) and retry.
 
-To minimize how often this is hit, install the Dataverse CLI once and upgrade on demand rather than re-fetching `@latest` on every connect.
+The plugin attempts `@latest` on each connect to stay current; if your registry is blocked this fetch fails harmlessly and the installed version keeps working. Point npm at your org's approved feed (steps above) so the upgrade succeeds rather than silently falling back to an older CLI.
 
 ---
 
