@@ -233,10 +233,44 @@ class FallbackCredentialBehavior(_AuthTestBase):
 
 
 class HostBrowserDetection(_AuthTestBase):
-    def test_windows_and_mac_have_browser(self):
-        for platform in ("win32", "darwin"):
-            with mock.patch.object(auth.sys, "platform", platform):
+    def test_windows_console_has_browser(self):
+        with mock.patch.object(auth.sys, "platform", "win32"):
+            with mock.patch.dict(os.environ, {"SESSIONNAME": "Console"}, clear=True):
                 self.assertTrue(auth._host_has_browser())
+
+    def test_windows_rdp_has_browser(self):
+        with mock.patch.object(auth.sys, "platform", "win32"):
+            with mock.patch.dict(os.environ, {"SESSIONNAME": "RDP-Tcp#0"}, clear=True):
+                self.assertTrue(auth._host_has_browser())
+
+    def test_mac_desktop_has_browser(self):
+        with mock.patch.object(auth.sys, "platform", "darwin"):
+            with mock.patch.dict(os.environ, {}, clear=True):
+                self.assertTrue(auth._host_has_browser())
+
+    def test_ci_env_is_headless_even_on_windows(self):
+        # Regression guard (#110 review): a headless CI runner on win/mac has no
+        # browser -- must route to device-code, not crash on InteractiveBrowser.
+        for platform in ("win32", "darwin"):
+            for ci_var in ("CI", "GITHUB_ACTIONS", "TF_BUILD", "BUILD_BUILDID"):
+                with mock.patch.object(auth.sys, "platform", platform):
+                    with mock.patch.dict(
+                        os.environ, {ci_var: "true", "SESSIONNAME": "Console"}, clear=True
+                    ):
+                        self.assertFalse(auth._host_has_browser())
+
+    def test_ci_false_value_is_not_treated_as_ci(self):
+        # CI="false" must not be read as headless (avoid the truthy-string trap).
+        with mock.patch.object(auth.sys, "platform", "win32"):
+            with mock.patch.dict(
+                os.environ, {"CI": "false", "SESSIONNAME": "Console"}, clear=True
+            ):
+                self.assertTrue(auth._host_has_browser())
+
+    def test_windows_service_session_is_headless(self):
+        with mock.patch.object(auth.sys, "platform", "win32"):
+            with mock.patch.dict(os.environ, {"SESSIONNAME": "Services"}, clear=True):
+                self.assertFalse(auth._host_has_browser())
 
     def test_headless_linux_has_no_browser(self):
         with mock.patch.object(auth.sys, "platform", "linux"):
@@ -312,6 +346,61 @@ class GetCredentialShape(_AuthTestBase):
         tier_names = [name for name, _c in cred._silent._tiers]
         self.assertEqual(tier_names[0], "shared-cache")
         self.assertIn("azure-cli", tier_names)
+
+
+class BuildSharedCacheAuthorityProbe(_AuthTestBase):
+    """Regression guard for issue #108 defect 2: `dataverse auth create` may write
+    the shared cache under the `organizations` authority, so a tenant-only probe
+    misses it and strands the user. _build_shared_msal_cache must probe BOTH.
+    """
+
+    class _ProbeApp:
+        def __init__(self, has_token):
+            self._has_token = has_token
+
+        def get_accounts(self):
+            return ["account"]
+
+        def acquire_token_silent(self, scopes, account=None):
+            if self._has_token:
+                return {"access_token": "x", "expires_in": 60}
+            return None
+
+    def _run(self, token_authority_substr):
+        seen = []
+
+        def _fake_pca(client_id, authority, token_cache):
+            seen.append(authority)
+            return self._ProbeApp(token_authority_substr in authority)
+
+        fake_msal = types.ModuleType("msal")
+        fake_msal.PublicClientApplication = _fake_pca
+        fake_msal_ext = types.ModuleType("msal_extensions")
+        fake_msal_ext.PersistedTokenCache = lambda persistence: object()
+
+        env = {"TENANT_ID": "t", "DATAVERSE_URL": "https://x.crm.dynamics.com"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            with mock.patch.object(auth, "_shared_cache_persistences", lambda: [object()]):
+                with mock.patch.dict(
+                    sys.modules, {"msal": fake_msal, "msal_extensions": fake_msal_ext}
+                ):
+                    result = auth._build_shared_msal_cache()
+        return result, seen
+
+    def test_probes_both_authorities_and_finds_organizations_token(self):
+        # Cache only yields a token under `organizations`; the dual probe must
+        # still find it after the tenant authority misses.
+        result, seen = self._run(token_authority_substr="organizations")
+        self.assertIsNotNone(result)
+        self.assertIn("https://login.microsoftonline.com/t", seen)
+        self.assertIn("https://login.microsoftonline.com/organizations", seen)
+
+    def test_tenant_authority_is_tried_first(self):
+        # When the tenant authority yields a token, it wins without probing
+        # `organizations` (tenant-preferred ordering).
+        result, seen = self._run(token_authority_substr="/t")
+        self.assertIsNotNone(result)
+        self.assertEqual(seen[0], "https://login.microsoftonline.com/t")
 
 
 if __name__ == "__main__":

@@ -304,7 +304,12 @@ class _MsalDeviceCodeCredential:
                 f"{flow['user_code']}",
                 flush=True,
             )
-            print("(Waiting for you to complete the login in your browser...)\n", flush=True)
+            _expiry_min = max(1, int(flow.get("expires_in", 900)) // 60)
+            print(
+                f"(Waiting for you to complete the login in your browser -- "
+                f"this code expires in ~{_expiry_min} min...)\n",
+                flush=True,
+            )
             result = self._app.acquire_token_by_device_flow(flow)  # blocks until complete
         if not result or "access_token" not in result:
             detail = result.get("error_description", result) if result else "no response"
@@ -317,13 +322,30 @@ class _MsalDeviceCodeCredential:
 
 
 def _host_has_browser():
-    """True if an interactive system browser is likely available (desktop host).
+    """True if an interactive system browser is likely available.
 
-    Windows / macOS always qualify. On Linux a browser needs a display server,
-    so require DISPLAY or WAYLAND_DISPLAY -- headless Linux (CI / SSH / container
-    / ChatGPT web) has neither and uses the device-code tier instead.
+    CI / build agents are headless even when sys.platform is win32/darwin
+    (GitHub Actions windows-latest / macos-latest, ADO agents, containerized
+    Windows) -- launching a browser there crashes with no user session, so they
+    route to the device-code tier (which at least prints a code) instead. After
+    the CI gate: a Windows console or RDP session has a browser, but a Windows
+    service / headless container has an empty or "Services" SESSIONNAME; macOS
+    (non-CI) always has a session browser; Linux needs a display server, so
+    require DISPLAY or WAYLAND_DISPLAY -- headless Linux (SSH / container /
+    ChatGPT web) has neither and uses device-code.
     """
-    if sys.platform in ("win32", "darwin"):
+    def _flag(name):
+        # Treat only genuinely-truthy values as set (avoid the CI="false" trap).
+        return os.environ.get(name, "").strip().lower() not in ("", "0", "false", "no")
+
+    if _flag("CI") or _flag("GITHUB_ACTIONS") or _flag("TF_BUILD") or _flag("BUILD_BUILDID"):
+        return False
+    if sys.platform == "win32":
+        # Console + RDP sessions have a browser; a Windows service / headless
+        # container has an empty or "Services" SESSIONNAME.
+        session = os.environ.get("SESSIONNAME", "").strip().lower()
+        return session not in ("", "services")
+    if sys.platform == "darwin":
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 
@@ -475,8 +497,14 @@ def _build_interactive_tier(tenant_id):
             new_record = cred.authenticate(scopes=[scope] if scope else None)
             _AUTH_RECORD_PATH.parent.mkdir(parents=True, exist_ok=True)
             _AUTH_RECORD_PATH.write_text(new_record.serialize(), encoding="utf-8")
-        except Exception:
-            pass  # non-fatal: get_token still works, may reprompt next process
+        except KeyboardInterrupt:
+            raise  # user cancelled sign-in -- honor it, don't fall through to a 2nd prompt
+        except Exception as e:  # noqa: BLE001 -- non-fatal: get_token still works, may reprompt
+            print(
+                f"NOTE: first interactive sign-in did not persist a record "
+                f"({type(e).__name__}); a later token request may reprompt.",
+                flush=True,
+            )
 
     return cred, kind
 
