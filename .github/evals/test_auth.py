@@ -248,6 +248,16 @@ class HostBrowserDetection(_AuthTestBase):
             with mock.patch.dict(os.environ, {}, clear=True):
                 self.assertTrue(auth._host_has_browser())
 
+    def test_mac_ssh_is_headless(self):
+        with mock.patch.object(auth.sys, "platform", "darwin"):
+            with mock.patch.dict(os.environ, {"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}, clear=True):
+                self.assertFalse(auth._host_has_browser())
+
+    def test_mac_ssh_tty_is_headless(self):
+        with mock.patch.object(auth.sys, "platform", "darwin"):
+            with mock.patch.dict(os.environ, {"SSH_TTY": "/dev/ttys000"}, clear=True):
+                self.assertFalse(auth._host_has_browser())
+
     def test_ci_env_is_headless_even_on_windows(self):
         # Regression guard (#110 review): a headless CI runner on win/mac has no
         # browser -- must route to device-code, not crash on InteractiveBrowser.
@@ -485,6 +495,31 @@ class SharedCacheClaimsForwarding(_AuthTestBase):
         cred = auth._MsalSharedCacheCredential(app, ["acct"])
         cred.get_token("scope", claims="CH")
         self.assertEqual(app.seen_claims, "CH")
+
+
+class WorkspaceTokenCachePath(_AuthTestBase):
+    def test_relative_cache_dir_is_cwd_independent(self):
+        # R2: a relative DATAVERSE_TOKEN_CACHE_DIR resolves to the same path
+        # regardless of the current working directory (anchored to the workspace
+        # root -- auth.py's parent.parent -- not cwd).
+        with tempfile.TemporaryDirectory() as anchor, \
+                tempfile.TemporaryDirectory() as d1, \
+                tempfile.TemporaryDirectory() as d2:
+            fake_auth = str(Path(anchor) / "scripts" / "auth.py")
+            results = []
+            with mock.patch.object(auth, "__file__", fake_auth):
+                for d in (d1, d2):
+                    cwd = os.getcwd()
+                    try:
+                        os.chdir(d)
+                        with mock.patch.dict(
+                            os.environ, {"DATAVERSE_TOKEN_CACHE_DIR": ".dvcache"}, clear=True
+                        ):
+                            results.append(auth._workspace_token_cache_path())
+                    finally:
+                        os.chdir(cwd)
+        self.assertIsNotNone(results[0])
+        self.assertEqual(results[0], results[1])
 
 
 if __name__ == "__main__":

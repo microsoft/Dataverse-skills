@@ -263,7 +263,11 @@ def _workspace_token_cache_path():
     try:
         path = Path(cache_dir)
         if not path.is_absolute():
-            path = Path.cwd() / path
+            # Anchor a relative dir to the workspace root (this file's parent dir's
+            # parent -- the deployed <project>/scripts/auth.py layout), NOT the
+            # current working directory, so the cache location is stable no matter
+            # where the process is launched from (matches how load_env finds .env).
+            path = Path(__file__).resolve().parent.parent / path
         path.mkdir(parents=True, exist_ok=True)
         # Defense in depth: exclude the token cache from git even if the repo-root
         # .gitignore does not cover this dir.
@@ -360,6 +364,9 @@ def _host_has_browser():
         session = os.environ.get("SESSIONNAME", "").strip().lower()
         return session not in ("", "services")
     if sys.platform == "darwin":
+        # An SSH / remote macOS session has no local browser -- use device-code.
+        if os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"):
+            return False
         return True
     return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
 

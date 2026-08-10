@@ -310,6 +310,28 @@ def check_pac_cli(name, text):
 
 
 # ---------------------------------------------------------------------------
+# CAT-12  Connect flow: reconnect shortcut must not mutate packages
+# ---------------------------------------------------------------------------
+
+def check_connect_step0(name, text):
+    """EVAL-CONNECT-01: dv-connect's Step 0 reconnect shortcut ("If all pass")
+    must not run a package install/upgrade -- that reintroduces npm-registry
+    traffic and corporate-policy popups on an otherwise idempotent reconnect
+    (regression R3). Related CLI update-check: issue #115.
+    """
+    failures = []
+    if name != "dv-connect":
+        return failures
+    m = re.search(r"\*\*If all pass:\*\*(.*?)(?:\n\n|\Z)", text, re.DOTALL)
+    if m and re.search(r"npm install|@microsoft/dataverse@latest", m.group(1)):
+        failures.append(
+            "EVAL-CONNECT-01 [dv-connect] Step 0 'If all pass' shortcut contains a "
+            "package install/upgrade -- reconnect must be idempotent (regression R3)"
+        )
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # CAT-4  Skill Structure & Discoverability
 # ---------------------------------------------------------------------------
 
@@ -877,6 +899,7 @@ def main():
         all_failures.extend(check_python_blocks(name, text))
         all_failures.extend(check_auth_patterns(name, text))
         all_failures.extend(check_pac_cli(name, text))
+        all_failures.extend(check_connect_step0(name, text))
         all_failures.extend(check_structure(name, text))
         all_failures.extend(check_completeness(name, text, all_skill_names))
         all_failures.extend(check_allowlist(name, text))
