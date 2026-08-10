@@ -38,7 +38,7 @@ Role grants and self-elevate are destructive (they change security posture and a
 - PAC CLI installed and authenticated (`pac auth create`)
 - System Administrator role in target environment (or Global/PP/D365 Admin for self-elevate)
 - Active auth profile: `pac auth list`
-- **Headless / restricted-egress hosts** (ChatGPT Work Mode, CI, containers): `pac auth create` can't persist a profile without a keyring. Role assignment, application users, and business units are records the **Python SDK** can do headless when egress is open -- prefer it; use **service principal** for PAC-only ops. Confirm reachability with `python scripts/auth.py --check`; only a blocked org domain makes the skill fully unavailable. See `dv-connect/references/headless-hosts.md`.
+- **Headless / restricted-egress hosts**: SDK handles role / user / business-unit ops; service principal for PAC-only ops; verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
 ---
 

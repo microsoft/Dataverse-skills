@@ -69,8 +69,24 @@ groundwork, skip only what cannot run:
 CLI / PAC / MCP installs and steps that cannot run. Do **not** shortcut Step 1's `pip install`; it is
 what makes the SDK path work.
 
----
-## Reachability preflight + no fabrication (before ANY claim)
+---## Which skills work on a constrained host (authoritative per-skill map)
+
+Skills whose default tool is the SDK / MCP just work here (egress permitting). The PAC-CLI-default
+skills need the SDK / Web API path or a service principal -- they are **not** "unavailable", just
+SDK-first here. This table is the single source of truth; the skills link back to it.
+
+| Skill | Headless story |
+|---|---|
+| **dv-data**, **dv-query**, **dv-metadata** | SDK / MCP-first -- work unchanged (egress permitting); no special handling. |
+| **dv-admin** | Many settings are `organization` records the SDK reads/writes; **service principal** for PAC-only settings. |
+| **dv-security** | Role assignment, application users, business units are records the SDK handles; **service principal** for PAC-only ops. |
+| **dv-solution** | Raw export/import via the Web API (`ExportSolution` / `ImportSolution`); `pac solution pack`/`unpack` (source control) are PAC-only -> **service principal**. |
+| **dv-connect** | This file. The SDK path works; the CLIs and native MCP do not. |
+
+Only a genuinely egress-blocked org domain (a failed `python scripts/auth.py --check`) makes a skill
+truly unavailable -- not the absence of the CLI.
+
+---## Reachability preflight + no fabrication (before ANY claim)
 
 A token is not a connection. Make one real data-plane call:
 

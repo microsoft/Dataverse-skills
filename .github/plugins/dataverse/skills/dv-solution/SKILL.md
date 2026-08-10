@@ -7,7 +7,7 @@ description: Dataverse solution lifecycle — create, export, import, promote ac
 
 Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
-> **Headless / restricted-egress hosts** (ChatGPT Work Mode, CI, containers): the PAC CLI can't persist a profile without a keyring. Raw solution export/import are available via the Web API (`ExportSolution` / `ImportSolution`), which works headless when egress is open; `pac solution pack`/`unpack` (source control) are PAC-only -- use **service principal** for those. Verify reachability with `python scripts/auth.py --check`; only a blocked org domain makes it fully unavailable. See `dv-connect/references/headless-hosts.md`.
+> **Headless / restricted-egress hosts**: raw export/import via the Web API (`ExportSolution` / `ImportSolution`); `pac solution pack`/`unpack` need a service principal; verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
 ## Skill boundaries
 
