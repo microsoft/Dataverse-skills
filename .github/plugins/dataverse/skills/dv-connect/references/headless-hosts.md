@@ -69,7 +69,9 @@ groundwork, skip only what cannot run:
 CLI / PAC / MCP installs and steps that cannot run. Do **not** shortcut Step 1's `pip install`; it is
 what makes the SDK path work.
 
----## Which skills work on a constrained host (authoritative per-skill map)
+---
+
+## Which skills work on a constrained host (authoritative per-skill map)
 
 Skills whose default tool is the SDK / MCP just work here (egress permitting). The PAC-CLI-default
 skills need the SDK / Web API path or a service principal -- they are **not** "unavailable", just
@@ -86,7 +88,9 @@ SDK-first here. This table is the single source of truth; the skills link back t
 Only a genuinely egress-blocked org domain (a failed `python scripts/auth.py --check`) makes a skill
 truly unavailable -- not the absence of the CLI.
 
----## Reachability preflight + no fabrication (before ANY claim)
+---
+
+## Reachability preflight + no fabrication (before ANY claim)
 
 A token is not a connection. Make one real data-plane call:
 

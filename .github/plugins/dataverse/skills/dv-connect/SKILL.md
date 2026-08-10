@@ -26,7 +26,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** Best-effort upgrade the CLI first (`npm install -g @microsoft/dataverse@latest`; ignore failures). Then confirm the detected setup (URL, profile name, MCP server name) and jump to Step 7. Do not rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** Confirm the detected setup (URL, profile name, MCP server name) and jump to Step 7. Do not rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -57,7 +57,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 `msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache \u2014 one sign-in for CLI, MCP, Python.
 
-After Node.js is confirmed, install or upgrade the Dataverse CLI to the latest version to stay current (a blocked/offline registry keeps the installed version; see [tools-setup.md](references/tools-setup.md)):
+After Node.js is confirmed, install the Dataverse CLI **only if it's missing**. Do not re-run this on every connect -- upgrade explicitly when you want a newer version; on managed devices each `@latest` fetch can trigger npm-registry security prompts (see [tools-setup.md](references/tools-setup.md)):
 ```
 npm install -g @microsoft/dataverse@latest
 ```
