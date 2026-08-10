@@ -147,10 +147,10 @@ If the file or the variable doesn't exist, the environment URL must be discovere
 
 ### 3a. Auto-discover via PAC CLI (preferred)
 
-Check if PAC CLI is available:
+Check if PAC CLI is available (bare `pac` prints the version banner; `pac --version` is not a valid command and returns non-zero):
 
 ```
-pac --version
+pac
 ```
 
 If available, check auth and list environments:

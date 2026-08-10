@@ -635,7 +635,21 @@ _CONTEXT_RE = re.compile(
 
 
 def _plugin_version():
-    """Read plugin version from .env (set by dv-connect at setup time)."""
+    """Return the plugin version for telemetry attribution.
+
+    Reads the packaged plugin.json (the source of truth) so attribution always
+    reflects the INSTALLED version, not a stale DATAVERSE_PLUGIN_VERSION that a
+    previous install may have left in .env. Falls back to that env var, then
+    "unknown", if the manifest cannot be read.
+    """
+    manifest = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+    try:
+        import json
+        version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+        if version:
+            return version
+    except Exception:
+        pass
     return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
 
 

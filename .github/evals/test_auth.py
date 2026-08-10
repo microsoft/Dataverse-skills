@@ -403,5 +403,16 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
         self.assertEqual(seen[0], "https://login.microsoftonline.com/t")
 
 
+class PluginVersionAttribution(_AuthTestBase):
+    def test_reads_manifest_not_stale_env(self):
+        # Regression guard: telemetry attribution must reflect the INSTALLED
+        # plugin version (from the packaged plugin.json), not a stale
+        # DATAVERSE_PLUGIN_VERSION that a previous install left in .env.
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.8.0"}, clear=True):
+            version = auth._plugin_version()
+        self.assertNotEqual(version, "1.8.0")
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

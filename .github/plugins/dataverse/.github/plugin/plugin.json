@@ -10,6 +10,5 @@
   "repository": "https://github.com/microsoft/Dataverse-skills",
   "keywords": ["dataverse", "mcp", "power-platform", "dynamics-365"],
   "license": "MIT",
-  "skills": ["skills/"],
-  "mcpServers": ".mcp.json"
+  "skills": ["skills/"]
 }
