@@ -250,38 +250,59 @@ _DEFAULT_WORKSPACE_CACHE_DIRNAME = ".dataverse"
 _CACHE_DIR_OPT_OUT = frozenset({"off", "0", "false", "no", "none", "disable", "disabled"})
 
 
-def _workspace_token_cache_path():
-    """Return the MSAL v3 cache file path used to persist the device-code refresh
-    token across separate Python processes, or None to keep the OS default cache.
-
-    Resolution:
-      - DATAVERSE_TOKEN_CACHE_DIR set to a path -> use it (a relative dir is anchored
-        to the workspace root, matching how load_env finds .env).
-      - DATAVERSE_TOKEN_CACHE_DIR set to an opt-out value (off/false/0/no/none) -> None.
-      - unset on a HEADLESS, non-CI host (ChatGPT web / Codex sandbox / SSH / container)
-        -> DEFAULT to ``<workspace>/.dataverse``. On these hosts the OS default cache
-        lives under $HOME, which the sandbox wipes between Python processes, so device
-        code would re-prompt every process; putting the cache in the persisted
-        workspace makes sign-in once per conversation.
-      - unset on a desktop host -> None (keep the secure OS cache: Windows DPAPI /
-        macOS Keychain / Linux desktop keyring -- no behavior change).
-
-    Security: on headless Linux the cache holds a PLAINTEXT refresh token (no keyring).
-    The directory is created owner-only (0700 on POSIX) with a self-contained
-    `.gitignore` (`*`) so the token is excluded from version control, and an ephemeral
-    sandbox is torn down after the session. To keep the OS default cache instead, set
-    DATAVERSE_TOKEN_CACHE_DIR=off.
+def _should_use_workspace_cache():
+    """Pure decision (no I/O): whether the persisted workspace token cache is used,
+    and via which source. This is the SINGLE source of truth so
+    _workspace_token_cache_path (which builds the path) and _run_diagnose (which
+    reports the tier) can never drift. Returns:
+      "explicit" -- DATAVERSE_TOKEN_CACHE_DIR is set to a usable path.
+      "default"  -- unset on a HEADLESS, non-CI host -> auto-default to <workspace>/.dataverse.
+      None       -- keep the OS default cache (desktop, CI, or an explicit opt-out).
     """
     cache_dir = os.environ.get("DATAVERSE_TOKEN_CACHE_DIR")
     if cache_dir is not None and cache_dir.strip().lower() in _CACHE_DIR_OPT_OUT:
         return None  # explicit opt-out -- keep the per-process OS default cache
-    if not cache_dir:
-        # No explicit setting: auto-default ONLY where the OS cache will not survive --
-        # a headless, non-CI host. Desktop hosts keep their secure default cache; CI
-        # never reaches an interactive tier (service principal is terminal earlier).
-        if _host_has_browser() or _is_ci():
-            return None
-        cache_dir = _DEFAULT_WORKSPACE_CACHE_DIRNAME
+    if cache_dir:
+        return "explicit"
+    # No explicit setting: auto-default ONLY where the OS cache will not survive --
+    # a headless, non-CI host. Desktop hosts keep their secure default cache; CI
+    # never reaches an interactive tier (service principal is terminal earlier).
+    if _host_has_browser() or _is_ci():
+        return None
+    return "default"
+
+
+def _workspace_token_cache_path():
+    """Return the MSAL v3 cache file path used to persist the device-code refresh
+    token across separate Python processes, or None to keep the OS default cache.
+    The use/skip decision is _should_use_workspace_cache(); this function only turns
+    a positive decision into a concrete, git-ignored, owner-only file path.
+
+    Resolution (see _should_use_workspace_cache):
+      - DATAVERSE_TOKEN_CACHE_DIR set to a path -> use it (a relative dir is anchored
+        to the workspace root, matching how load_env finds .env).
+      - opt-out value (off/false/0/no/none) -> None.
+      - unset on a HEADLESS, non-CI host (ChatGPT web / Codex sandbox / SSH / container)
+        -> DEFAULT to ``<workspace>/.dataverse`` (the OS cache lives under $HOME, which
+        the sandbox wipes between Python processes, so device code would re-prompt every
+        process; the persisted workspace cache makes sign-in once per conversation).
+      - unset on a desktop host -> None (keep the secure OS cache: Windows DPAPI /
+        macOS Keychain / Linux desktop keyring -- no behavior change).
+
+    Security: on non-Windows hosts (Linux, and macOS over SSH) the cache holds a
+    PLAINTEXT refresh token (no keyring; Windows uses DPAPI). The directory is created
+    owner-only (0700 on POSIX) with a self-contained `.gitignore` (`*`) so the token is
+    excluded from version control, and an ephemeral sandbox is torn down after the
+    session. To keep the OS default cache instead, set DATAVERSE_TOKEN_CACHE_DIR=off.
+    """
+    decision = _should_use_workspace_cache()
+    if decision is None:
+        return None
+    cache_dir = (
+        os.environ.get("DATAVERSE_TOKEN_CACHE_DIR")
+        if decision == "explicit"
+        else _DEFAULT_WORKSPACE_CACHE_DIRNAME
+    )
     try:
         path = Path(cache_dir)
         if not path.is_absolute():
@@ -852,7 +873,7 @@ def _run_diagnose():
     except ImportError:
         rows.append(("azure-cli", "n/a", "azure-identity not installed"))
 
-    if os.environ.get("DATAVERSE_TOKEN_CACHE_DIR"):
+    if _should_use_workspace_cache() is not None:
         kind = "workspace-device-code"
     elif _host_has_browser():
         kind = "interactive-browser"

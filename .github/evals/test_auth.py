@@ -565,5 +565,35 @@ class WorkspaceCacheAutoDefault(_AuthTestBase):
         self.assertEqual(path.parent.name, "mycache")
 
 
+class WorkspaceCacheDecision(_AuthTestBase):
+    """The pure _should_use_workspace_cache() predicate is the single source of truth
+    for both _workspace_token_cache_path (path building) and _run_diagnose (tier
+    reporting), so the two cannot drift.
+    """
+
+    def _decide(self, env, browser, ci=False):
+        with mock.patch.object(auth, "_host_has_browser", lambda: browser), \
+                mock.patch.object(auth, "_is_ci", lambda: ci), \
+                mock.patch.dict(os.environ, env, clear=True):
+            return auth._should_use_workspace_cache()
+
+    def test_explicit_env_regardless_of_host(self):
+        self.assertEqual(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": ".dv"}, browser=True), "explicit")
+        self.assertEqual(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": ".dv"}, browser=False), "explicit")
+
+    def test_headless_no_env_defaults(self):
+        self.assertEqual(self._decide({}, browser=False), "default")
+
+    def test_desktop_no_env_is_none(self):
+        self.assertIsNone(self._decide({}, browser=True))
+
+    def test_ci_no_env_is_none(self):
+        self.assertIsNone(self._decide({}, browser=False, ci=True))
+
+    def test_opt_out_is_none_even_headless(self):
+        for val in ("off", "false", "0", "no", "none", "OFF"):
+            self.assertIsNone(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": val}, browser=False), msg=val)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
