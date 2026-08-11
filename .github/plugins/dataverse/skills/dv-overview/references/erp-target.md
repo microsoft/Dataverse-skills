@@ -77,13 +77,20 @@ What's different from Dataverse OData:
 
 For single-record CRUD, prefer ERP MCP (≤10 records). For programmatic / scripted writes, use the CLI:
 
+**Shell escaping note.** On bash / zsh (`--data '{"key":"value"}'`) works as shown. On Windows cmd and some PowerShell versions the outer single-quotes are passed through literally and JSON parsing fails. For automation and cross-platform agent use, prefer `--data-file <path.json>`.
+
 ```bash
 dataverse data create --target erp --table CustomerGroups \
   --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}'
+# Cross-platform / agent-preferred: same create from a JSON file
+dataverse data create --target erp --table CustomerGroups --data-file body.json
 
 dataverse data update --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='demo'" \
   --data '{"Description":"demo group (updated)"}'
+# Cross-platform / agent-preferred: same update from a JSON file
+dataverse data update --target erp --table CustomerGroups \
+  --key "dataAreaId='usmf',CustomerGroupId='demo'" --data-file body.json
 
 dataverse data delete --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='demo'" --no-confirm

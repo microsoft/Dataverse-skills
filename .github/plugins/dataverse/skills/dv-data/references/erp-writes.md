@@ -5,15 +5,22 @@ When the env is ERP-linked — ERP (Finance and Operations) provisioned on the s
 1. **ERP MCP** for simple, interactive writes — if `dataverse mcp <erpUrl>` is wired up as an MCP server. Same `create_record` / `update_record` / `delete_record` shape as Dataverse MCP.
 2. **Dataverse CLI `--target erp`** for scripted single-record writes:
 
+   **Shell escaping note.** On bash / zsh (`--data '{"key":"value"}'`) works as shown. On Windows cmd and some PowerShell versions the outer single-quotes are passed through literally and JSON parsing fails. For automation and cross-platform agent use, prefer `--data-file <path.json>`.
+
 ```bash
 # Create
 dataverse data create --target erp --table CustomerGroups \
   --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}'
+# Cross-platform / agent-preferred: same create from a JSON file
+dataverse data create --target erp --table CustomerGroups --data-file body.json
 
 # Update (composite key)
 dataverse data update --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='demo'" \
   --data '{"Description":"demo group (updated)"}'
+# Cross-platform / agent-preferred: same update from a JSON file
+dataverse data update --target erp --table CustomerGroups \
+  --key "dataAreaId='usmf',CustomerGroupId='demo'" --data-file body.json
 
 # Delete (suppress interactive confirm in scripts)
 dataverse data delete --target erp --table CustomerGroups \
