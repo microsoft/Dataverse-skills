@@ -5,13 +5,13 @@ description: One-step setup for a Dataverse environment — installs tools, auth
 
 # Skill: Connect
 
-One-step connection to Dataverse. Handles tool installation, authentication, environment selection, workspace initialization, MCP configuration, and verification — all idempotently. Each step checks if it's already done and skips if so.
+One-step, idempotent Dataverse connection. Each step checks if it's already done and skips.
 
-> **Environment-First Rule** — All metadata (solutions, columns, tables, forms, views) and plugin registrations are created **in the Dynamics environment** via API or scripts, then pulled into the repo. Never write or edit solution XML by hand to create new components.
+> **Environment-First Rule** — All metadata and plugin registrations are created **in the environment** via API/scripts, then pulled into the repo. Never hand-write solution XML to create components.
 
-**Execute every step in order.** Do not skip ahead, even if a later step appears more relevant to the user's immediate goal. **Exception:** Step 0 below can short-circuit the entire flow if the workspace is already set up.
+**Execute steps in order; do not skip ahead.** **Exception:** Step 0 can short-circuit the flow if the workspace is already set up.
 
-> **Host entry test (FIRST — before Step 0).** On a **constrained host**? (ChatGPT Work Mode / Codex sandbox / CI / SSH / container, or Linux with no desktop keyring/browser.) **If YES →** follow the constrained path in [headless-hosts.md](references/headless-hosts.md): install **only** Python + pip deps, `.env`, `scripts/auth.py`, verify with `python scripts/auth.py --check`, **skip** CLI / PAC / MCP. **If NO →** run the normal flow below.
+> **Host entry test (FIRST — before Step 0).** On a **capability-constrained** host? (ChatGPT Work Mode / **Codex cloud** / CI / SSH / container / no-keyring Linux.) A **locally-sandboxed agent is capable, not constrained** — **Codex desktop / Codex CLI on Windows/macOS** runs the CLIs, keyring, and MCP; decide from a **failed probe**, not the host name. **If YES →** [headless-hosts.md](references/headless-hosts.md): install **only** Python + pip deps, `.env`, `scripts/auth.py`, verify `python scripts/auth.py --check`, **skip** CLI / PAC / MCP. **If NO →** run the normal flow below.
 
 ---
 
@@ -230,7 +230,7 @@ python scripts/auth.py --check
 **If any fail:**
 - `dataverse auth who` fails → re-run Step 2.
 - `pac org who` fails → re-run Step 2b.
-- `python scripts/auth.py --check` prints a device-code URL → browser/WAM cache has no Python-reusable token. **Auto-fix:** re-run `dataverse auth create --environment <url> --deviceCode`, then retry. If it *still* prompts, check `pip show msal msal-extensions`. **Headless hosts** (ChatGPT/Codex/CI): `dataverse auth create` can't persist here — don't loop (see [headless-hosts.md](references/headless-hosts.md)).
+- `python scripts/auth.py --check` prints a device-code URL → browser/WAM cache has no Python-reusable token. **Auto-fix:** re-run `dataverse auth create --environment <url> --deviceCode`, then retry. If it *still* prompts, check `pip show msal msal-extensions`. **Headless hosts** (ChatGPT / Codex cloud / CI): `dataverse auth create` can't persist here — don't loop (see [headless-hosts.md](references/headless-hosts.md)).
 - `python scripts/auth.py --check` prints `NOT REACHABLE` with a connection/timeout error → the org domain is blocked by network egress, not auth. Do NOT report success or a count — see [headless-hosts.md](references/headless-hosts.md) remediation.
 - Other Python error → check SDK install and `.env`.
 

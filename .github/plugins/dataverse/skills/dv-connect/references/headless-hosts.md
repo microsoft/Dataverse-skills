@@ -17,7 +17,9 @@ plus the one working path — so you never chase a dead end or report a result y
 
 **If NONE apply, STOP — you are on a capable host.** Close this file and run the normal `dv-connect`
 flow unchanged (DV CLI + PAC + native MCP + Python SDK all work). Nothing here applies; do not degrade
-a capable host with these overrides.
+a capable host with these overrides. **In particular, a *local* Codex desktop app / Codex CLI (Windows/macOS)
+is filesystem-sandboxed but fully CAPABLE — it is NOT a Codex *cloud* sandbox. Approval gates on
+paths/commands are not a capability constraint; run the normal flow.**
 
 ---
 
