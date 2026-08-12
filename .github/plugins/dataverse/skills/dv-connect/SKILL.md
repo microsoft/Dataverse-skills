@@ -11,7 +11,7 @@ One-step, idempotent Dataverse connection. Each step checks if it's already done
 
 **Execute steps in order; do not skip ahead.** **Exception:** Step 0 can short-circuit the flow if the workspace is already set up.
 
-> **Host entry test (FIRST — before Step 0).** On a **capability-constrained** host? (ChatGPT Work Mode / **Codex cloud** / CI / SSH / container / no-keyring Linux.) A **locally-sandboxed agent is capable, not constrained** — **Codex desktop / Codex CLI on Windows/macOS** runs the CLIs, keyring, and MCP; decide from a **failed probe**, not the host name. **If YES →** [headless-hosts.md](references/headless-hosts.md): install **only** Python + pip deps, `.env`, `scripts/auth.py`, verify `python scripts/auth.py --check`, **skip** CLI / PAC / MCP. **If NO →** run the normal flow below.
+> **Host entry test (FIRST — before Step 0).** A **local Windows/macOS host is capable by default, whichever agent drives it** — it can run the CLIs, use persistent credentials, and host local MCP servers; an approval/sandbox gate isn't a constraint, and a **missing CLI = install it**. **Constrained only when** a runtime **can't start**, auth **can't persist**, or the host is explicitly **ChatGPT Work Mode / Codex cloud / CI / no-keyring Linux** (deterministic table: [headless-hosts.md](references/headless-hosts.md)). **Constrained →** install **only** Python + pip deps, `.env`, `scripts/auth.py`, verify `python scripts/auth.py --check`, **skip** CLI / PAC / MCP. **Capable →** normal flow below.
 
 ---
 
