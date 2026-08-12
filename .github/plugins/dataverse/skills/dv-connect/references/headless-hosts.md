@@ -18,7 +18,7 @@ capability constraint, and a **missing CLI means install it** (see [tools-setup.
 
 | Evidence | Classification |
 |---|---|
-| Any local agent (Claude Code / Cursor / Copilot / Codex — desktop or CLI) on Windows or macOS | **Capable** (default) |
+| Any local agent (desktop or CLI) on Windows or macOS | **Capable** (default) |
 | Filesystem / command approval prompts | **Capable** — an approval gate is not a constraint |
 | A required CLI is missing | **Install it** — not evidence of constraint |
 | Explicit **Codex cloud** sandbox, **ChatGPT Work Mode**, or **CI** | **Constrained** |
@@ -34,7 +34,7 @@ capability constraint, and a **missing CLI means install it** (see [tools-setup.
 **If NONE apply, STOP — you are on a capable host.** Close this file and run the normal `dv-connect`
 flow: the host **supports** DV CLI, PAC, the Python SDK, persistent authentication, and local MCP
 configuration (capable = can be installed / configured / run, not necessarily already installed / authed /
-loaded). A *local* agent (Claude Code / Cursor / Copilot / Codex — desktop or CLI) is filesystem-sandboxed
+loaded). A *local* agent (any of the above, desktop or CLI) is filesystem-sandboxed
 but fully CAPABLE — it is NOT a *cloud* sandbox (Codex cloud / ChatGPT Work Mode); do not degrade it with
 these overrides.
 
