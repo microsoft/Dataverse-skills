@@ -72,7 +72,26 @@
         "PRIORITY_2: All three people (Alice, Bob, Charlie) are present in the created contact records.",
         "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for creating records (it loaded and used the dv-data skill)."
-      ]
+      ],
+      "verify": {
+        "entity": "contacts",
+        "scope_note": "Filters anchor on the literal names/emails this test's own prompt dictates (EvalSeed / EvalUpd / EvalDel / EvalSys / the three contoso.com addresses), which are already disjoint per test. The dv-<test_id>- convention is not used because it would require rewording the customer-voice prompts the agent is scored on.",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "emailaddress1 eq 'alice.green@contoso.com' or emailaddress1 eq 'bob.hill@contoso.com' or emailaddress1 eq 'charlie.fox@contoso.com'",
+            "equals": 3
+          },
+          {
+            "expect": "field_values",
+            "filter": "emailaddress1 eq 'alice.green@contoso.com'",
+            "fields": {
+              "firstname": "Alice",
+              "lastname": "Green"
+            }
+          }
+        ]
+      }
     },
     {
       "test_id": "data_002_bulk_create",
@@ -110,7 +129,18 @@
         "PRIORITY_2: The agent did NOT use MCP create_record for the 500-record bulk (it caps at 25 per call) -- it used the SDK bulk path instead.",
         "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-create patterns (it loaded and used the dv-data skill)."
-      ]
+      ],
+      "verify": {
+        "entity": "accounts",
+        "scope_note": "Filters anchor on the literal names/emails this test's own prompt dictates (EvalSeed / EvalUpd / EvalDel / EvalSys / the three contoso.com addresses), which are already disjoint per test. The dv-<test_id>- convention is not used because it would require rewording the customer-voice prompts the agent is scored on.",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(name,'EvalSeed Account ')",
+            "equals": 500
+          }
+        ]
+      }
     },
     {
       "test_id": "data_003_bulk_update",
@@ -146,7 +176,23 @@
         "PRIORITY_2: Agent uses the official Python SDK for the bulk operations, not raw urllib or requests.",
         "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented bulk-update patterns (it loaded and used the dv-data skill)."
-      ]
+      ],
+      "verify": {
+        "entity": "accounts",
+        "scope_note": "Filters anchor on the literal names/emails this test's own prompt dictates (EvalSeed / EvalUpd / EvalDel / EvalSys / the three contoso.com addresses), which are already disjoint per test. The dv-<test_id>- convention is not used because it would require rewording the customer-voice prompts the agent is scored on.",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(name,'EvalUpd Account ')",
+            "equals": 50
+          },
+          {
+            "expect": "row_count",
+            "filter": "startswith(name,'EvalUpd Account ') and description eq 'Reviewed 2026'",
+            "equals": 50
+          }
+        ]
+      }
     },
     {
       "test_id": "data_004_bulk_delete",
@@ -181,7 +227,17 @@
         "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
         "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented delete patterns -- query-then-per-ID-delete, no invented bulk_delete/purge (it loaded and used the dv-data skill)."
-      ]
+      ],
+      "verify": {
+        "entity": "accounts",
+        "scope_note": "Filters anchor on the literal names/emails this test's own prompt dictates (EvalSeed / EvalUpd / EvalDel / EvalSys / the three contoso.com addresses), which are already disjoint per test. The dv-<test_id>- convention is not used because it would require rewording the customer-voice prompts the agent is scored on.",
+        "checks": [
+          {
+            "expect": "query_returns_no_rows",
+            "filter": "startswith(name,'EvalDel')"
+          }
+        ]
+      }
     },
     {
       "test_id": "data_005_support_system",
@@ -217,7 +273,30 @@
         "PRIORITY_2: The agent created the accounts first, then used their returned IDs to set the contact and activity lookups -- the correct order for foreign-key resolution.",
         "PRIORITY_2: SKILL_LOADED: dv-data",
         "PRIORITY_2: The agent's response follows the dv-data skill's documented patterns for multi-table writes with lookups (it loaded and used the dv-data skill)."
-      ]
+      ],
+      "verify": {
+        "entity": "accounts",
+        "scope_note": "Filters anchor on the literal names/emails this test's own prompt dictates (EvalSeed / EvalUpd / EvalDel / EvalSys / the three contoso.com addresses), which are already disjoint per test. The dv-<test_id>- convention is not used because it would require rewording the customer-voice prompts the agent is scored on. Contacts and phone calls carry agent-invented text, so only their link back to the three dictated companies is asserted, with at_least.",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(name,'EvalSys ')",
+            "equals": 3
+          },
+          {
+            "expect": "row_count",
+            "entity": "contacts",
+            "filter": "startswith(parentcustomerid_account/name,'EvalSys ')",
+            "at_least": 6
+          },
+          {
+            "expect": "row_count",
+            "entity": "phonecalls",
+            "filter": "startswith(regardingobjectid_account/name,'EvalSys ')",
+            "at_least": 3
+          }
+        ]
+      }
     }
   ]
 }
