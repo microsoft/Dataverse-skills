@@ -34,15 +34,15 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 
 ## Step 1: Ensure tools are installed
 
-Check each tool independently — **do not use fail-fast parallel execution.** If one tool check fails, continue checking the others so you can report all missing tools at once. See [tools-setup.md](references/tools-setup.md) for installation commands and platform-specific notes.
+Check each tool independently -- report all missing tools at once. See [tools-setup.md](references/tools-setup.md) for install commands.
 
 | Tool | Check |
 |---|---|
 | Python 3 | `python --version` |
 | Git | `git --version` |
 | Node.js | `node --version` |
-| PAC CLI | `pac` (prints version banner; note: `pac --version` is not a valid command and returns a non-zero exit code) (see [tools-setup.md](references/tools-setup.md) for Windows path discovery if not in PATH) |
-| Dataverse CLI | `npm list -g @microsoft/dataverse` (prints `@microsoft/dataverse@<version>` if installed globally; prints `(empty)` if not) |
+| PAC CLI | `pac` (prints version banner; `pac --version` is not valid) (see [tools-setup.md](references/tools-setup.md) if not in PATH) |
+| Dataverse CLI | `npm list -g @microsoft/dataverse` |
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
@@ -50,14 +50,18 @@ Check each tool independently — **do not use fail-fast parallel execution.** I
 
 If any tool is missing, install it (see [tools-setup.md](references/tools-setup.md)), then verify. If `winget` installs a tool but it's not in PATH, ask the user to restart the terminal.
 
-After Python is confirmed:
+After Python is confirmed, check if deps are already present before installing:
+```
+python -c "from PowerPlatform.Dataverse.client import DataverseClient; import azure.identity, msal, msal_extensions, requests, pandas; print('OK')"
+```
+If it prints `OK`, skip pip. Otherwise:
 ```
 pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pandas msal msal-extensions
 ```
 
-`msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache \u2014 one sign-in for CLI, MCP, Python.
+`msal` + `msal-extensions` let `scripts/auth.py` reuse the `dataverse auth create` cache -- one sign-in for CLI, MCP, Python.
 
-After Node.js is confirmed, install the Dataverse CLI **only if it's missing**. Do not re-run this on every connect -- upgrade explicitly when you want a newer version; on managed devices each `@latest` fetch can trigger npm-registry security prompts (see [tools-setup.md](references/tools-setup.md)):
+After Node.js is confirmed, install the Dataverse CLI **only if missing** (do not re-run on every connect -- on managed devices each `@latest` fetch can trigger npm-registry security prompts; see [tools-setup.md](references/tools-setup.md)):
 ```
 npm install -g @microsoft/dataverse@latest
 ```

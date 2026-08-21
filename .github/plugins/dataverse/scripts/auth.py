@@ -73,6 +73,54 @@ _DATAVERSE_CLI_CLIENT_ID = "0c412cc3-0dd6-449b-987f-05b053db9457"
 # previous auth.py before the shared-cache change.
 _AUTH_RECORD_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".IdentityService" / "dataverse_cli_auth_record.json"
 
+# Cross-workspace config so returning users skip the full dv-connect dance.
+_USER_CONFIG_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".dataverse-skills"
+_USER_CONFIG_PATH = _USER_CONFIG_DIR / "config.json"
+
+
+def _load_user_config():
+    """Load DATAVERSE_URL and TENANT_ID from user-level config when .env is absent."""
+    if not _USER_CONFIG_PATH.exists():
+        return
+    try:
+        import json
+        cfg = json.loads(_USER_CONFIG_PATH.read_text(encoding="utf-8"))
+        loaded = []
+        for key in ("DATAVERSE_URL", "TENANT_ID"):
+            val = cfg.get(key)
+            if val and not os.environ.get(key):
+                os.environ.setdefault(key, val)
+                loaded.append(key)
+        if loaded:
+            print(
+                f"NOTE: loaded {', '.join(loaded)} from {_USER_CONFIG_PATH} "
+                f"(no .env found). Target: {cfg.get('DATAVERSE_URL', '?')}",
+                flush=True,
+            )
+    except Exception:
+        pass
+
+
+def _save_user_config():
+    """Persist URL and tenant to user-level config for cross-workspace reuse."""
+    import json
+    url = os.environ.get("DATAVERSE_URL")
+    tenant = os.environ.get("TENANT_ID")
+    if not url or not tenant:
+        return
+    try:
+        _USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(_USER_CONFIG_DIR, 0o700)
+        except Exception:
+            pass
+        _USER_CONFIG_PATH.write_text(
+            json.dumps({"DATAVERSE_URL": url, "TENANT_ID": tenant}, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
 
 def load_env():
     """Load key=value pairs from .env into os.environ (does not overwrite existing vars).
@@ -82,6 +130,10 @@ def load_env():
       2. The current working directory
     This ensures ``cd scripts && python auth.py`` works the same as
     ``python scripts/auth.py`` from the repo root.
+
+    Falls back to user-level config (~/.dataverse-skills/config.json) when .env
+    is absent, so returning users on ephemeral-workspace hosts (ChatGPT desktop
+    app, Codex) skip the full dv-connect setup.
     """
     script_dir = Path(__file__).resolve().parent
     candidates = [script_dir.parent / ".env", Path(".env")]
@@ -92,6 +144,8 @@ def load_env():
             if line and not line.startswith("#") and "=" in line:
                 key, _, value = line.partition("=")
                 os.environ.setdefault(key.strip(), value.strip())
+    if not os.environ.get("DATAVERSE_URL") or not os.environ.get("TENANT_ID"):
+        _load_user_config()
 
 
 _credential = None
@@ -893,6 +947,136 @@ def _run_diagnose():
         print(f"Result: no silent tier -- the next call uses the '{kind}' interactive tier.")
 
 
+def _run_ping():
+    """Lightweight reachability check: token + one HTTP call, no SDK import.
+
+    Uses only stdlib (urllib) and the credential chain (which needs msal or
+    azure-identity -- at least one is typically installed globally even before
+    pip runs in a fresh workspace). Writes .env and copies auth.py to scripts/
+    if missing, so a successful ping makes the workspace ready for SDK use
+    after pip install.
+    """
+    import shutil
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    load_env()
+    url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
+    tenant_id = os.environ.get("TENANT_ID")
+
+    if not url or not tenant_id:
+        print("PING FAILED: no DATAVERSE_URL or TENANT_ID (no .env, no user-level config).", flush=True)
+        sys.exit(1)
+
+    # Acquire a token via the credential chain (shared CLI cache, az, interactive).
+    # _get_credential needs azure-identity or msal; if neither is installed, fail cleanly.
+    try:
+        token = get_token()
+    except SystemExit:
+        print("PING FAILED: could not acquire a token (azure-identity or msal may not be installed).", flush=True)
+        sys.exit(1)
+
+    # One raw HTTP call to verify the org is reachable.
+    try:
+        req = Request(f"{url}/api/data/v9.2/WhoAmI")
+        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Accept", "application/json")
+        resp = urlopen(req, timeout=20)
+        resp.read()
+    except HTTPError as e:
+        print(f"PING FAILED: {url} returned HTTP {e.code}.", flush=True)
+        sys.exit(2)
+    except (URLError, OSError) as e:
+        reason = getattr(e, "reason", e)
+        print(f"PING FAILED: {url} unreachable ({reason}).", flush=True)
+        sys.exit(2)
+
+    # Workspace bootstrap: write .env and copy auth.py if missing.
+    workspace = Path.cwd()
+    env_path = workspace / ".env"
+    if not env_path.exists():
+        env_path.write_text(f"DATAVERSE_URL={url}\nTENANT_ID={tenant_id}\n", encoding="utf-8")
+    dest = workspace / "scripts" / "auth.py"
+    if not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).resolve(), dest)
+    gitignore = workspace / ".gitignore"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    for entry in (".env", ".dataverse/"):
+        if entry not in existing:
+            with open(gitignore, "a", encoding="utf-8") as f:
+                f.write(f"\n{entry}\n")
+
+    _save_user_config()
+    print(f"REACHABLE: {url}", flush=True)
+
+
+def _run_bootstrap(url):
+    """One-command workspace setup from a Dataverse org URL.
+
+    Probes the URL for tenant ID via WWW-Authenticate, writes .env, copies
+    auth.py to scripts/, and saves to user-level config. Uses only stdlib
+    (urllib) so it works before pip install.
+    """
+    import shutil
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    url = url.rstrip("/")
+    if not url.startswith("https://"):
+        print(f"ERROR: URL must start with https:// (got: {url})", flush=True)
+        sys.exit(1)
+
+    print(f"Probing {url} for tenant ID...", flush=True)
+    www_auth = ""
+    try:
+        req = Request(f"{url}/api/data/v9.2/", method="GET")
+        req.add_header("Accept", "application/json")
+        urlopen(req, timeout=20)
+        print("ERROR: Unexpected 200 from unauthenticated probe.", flush=True)
+        sys.exit(1)
+    except HTTPError as e:
+        www_auth = e.headers.get("WWW-Authenticate", "")
+    except URLError as e:
+        print(f"ERROR: Cannot reach {url}: {e.reason}", flush=True)
+        sys.exit(1)
+
+    match = re.search(r"login\.microsoftonline\.com/([^/,\s]+)", www_auth)
+    if not match:
+        print(f"ERROR: Could not discover tenant from {url}", flush=True)
+        print(f"  WWW-Authenticate: {www_auth[:200]}", flush=True)
+        sys.exit(1)
+    tenant_id = match.group(1)
+
+    workspace = Path.cwd()
+    env_path = workspace / ".env"
+    env_path.write_text(
+        f"DATAVERSE_URL={url}\nTENANT_ID={tenant_id}\n", encoding="utf-8",
+    )
+
+    scripts_dir = workspace / "scripts"
+    dest = scripts_dir / "auth.py"
+    if not dest.exists():
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).resolve(), dest)
+
+    gitignore = workspace / ".gitignore"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    missing = [e for e in (".env", ".dataverse/") if e not in existing]
+    if missing:
+        with open(gitignore, "a", encoding="utf-8") as f:
+            f.write("\n" + "\n".join(missing) + "\n")
+
+    os.environ["DATAVERSE_URL"] = url
+    os.environ["TENANT_ID"] = tenant_id
+    _save_user_config()
+
+    print(f"BOOTSTRAPPED: {url} (tenant {tenant_id})", flush=True)
+    print(f"  .env: {env_path}", flush=True)
+    print(f"  user config: {_USER_CONFIG_PATH}", flush=True)
+    print("  Next: pip install deps (if needed), then: python scripts/auth.py --check", flush=True)
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -907,16 +1091,38 @@ if __name__ == "__main__":
         "this is the only proof of an actual connection. Exit 0 = reachable, 2 = not reachable.",
     )
     parser.add_argument(
+        "--ping",
+        action="store_true",
+        help="Lightweight reachability check using only stdlib + msal (no SDK import). "
+        "Loads user-level config or .env, acquires a token via the credential chain, makes "
+        "one raw HTTP call to verify the org is reachable. Exit 0 = reachable + prints the "
+        "org URL, 1 = no config or no token, 2 = token OK but org unreachable. Also writes "
+        ".env and copies auth.py to scripts/ if missing.",
+    )
+    parser.add_argument(
         "--diagnose",
         action="store_true",
         help="Print which credential tiers (service principal / shared cache / az CLI / "
         "interactive) are available, WITHOUT prompting. Use when auth hangs or fails to see "
         "why and which tier would serve the next call.",
     )
+    parser.add_argument(
+        "--bootstrap", metavar="URL",
+        help="One-shot setup: probe URL for tenant, write .env, copy auth.py to scripts/, "
+        "save to user-level config. Does not authenticate -- run --check after pip install.",
+    )
     args = parser.parse_args()
 
     if args.diagnose:
         _run_diagnose()
+        sys.exit(0)
+
+    if args.bootstrap:
+        _run_bootstrap(args.bootstrap)
+        sys.exit(0)
+
+    if args.ping:
+        _run_ping()
         sys.exit(0)
 
     if not args.check:
@@ -937,6 +1143,7 @@ if __name__ == "__main__":
         client = get_client("dv-connect")
         tables = client.tables.list(select=["LogicalName"])
         print(f"REACHABLE: {url} -- {len(tables)} non-private tables")
+        _save_user_config()
         sys.exit(0)
     except Exception as e:
         print(f"NOT REACHABLE: {url} -- {type(e).__name__}: {e}", flush=True)
