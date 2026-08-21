@@ -114,6 +114,11 @@ pac auth create \
 
 This requires a service principal in your dev tenant. Once created, record `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID` in `.env`. With service principal auth, no browser is ever needed.
 
+For certificate-based SDK authentication, set `CLIENT_ID` and
+`CLIENT_CERTIFICATE_PATH` instead of `CLIENT_SECRET`. Optionally set
+`CLIENT_CERTIFICATE_PASSWORD` for an encrypted PFX and
+`CLIENT_SEND_CERTIFICATE_CHAIN=1` for SNI authentication.
+
 **Interactive user auth (corporate tenant or if no service principal yet)**
 
 ```

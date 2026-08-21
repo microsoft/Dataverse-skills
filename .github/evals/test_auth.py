@@ -371,6 +371,22 @@ class GetCredentialShape(_AuthTestBase):
         self.assertEqual(cred.kwargs["password"], "cert-pass")
         self.assertTrue(cred.kwargs["send_certificate_chain"])
 
+    def test_secret_without_client_id_warns_and_falls_back(self):
+        env = {
+            "TENANT_ID": "t",
+            "DATAVERSE_URL": "https://x.crm.dynamics.com",
+            "CLIENT_SECRET": "sec",
+        }
+        with mock.patch.object(auth, "load_env", lambda: None):
+            with mock.patch.object(auth, "_build_shared_msal_cache", lambda: None):
+                with mock.patch("builtins.print") as print_mock:
+                    with mock.patch.dict(os.environ, env, clear=True):
+                        cred = auth._get_credential()
+
+        self.assertIsInstance(cred, auth._FallbackCredential)
+        messages = " ".join(str(call.args[0]) for call in print_mock.call_args_list)
+        self.assertIn("CLIENT_SECRET is set without CLIENT_ID", messages)
+
     def test_no_sp_builds_fallback_with_azure_cli_tier(self):
         env = {"TENANT_ID": "t", "DATAVERSE_URL": "https://x.crm.dynamics.com"}
         with mock.patch.object(auth, "load_env", lambda: None):

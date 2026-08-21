@@ -697,6 +697,19 @@ def _get_credential():
             flush=True,
         )
 
+    if not client_id and (client_secret or certificate_path):
+        configured = (
+            "CLIENT_SECRET" if client_secret else "CLIENT_CERTIFICATE_PATH"
+        )
+        print(
+            f"WARNING: {configured} is set without CLIENT_ID.",
+            flush=True,
+        )
+        print(
+            "  Falling back to shared cache / device code flow.",
+            flush=True,
+        )
+
     # No service principal -> silent tiers, then a single host-gated interactive
     # tier used ONLY if every silent tier is unavailable (issue #108: never
     # strand, and never prompt when a silent path works).

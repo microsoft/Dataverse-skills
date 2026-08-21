@@ -139,11 +139,11 @@ Use the same account as Step 2. If PAC CLI is not installed, skip with a note th
 
 ## Step 3: Create .env
 
-Choose an authentication option:
+Present authentication options:
 
+> How would you like to authenticate with Dataverse?
 > 1. **Interactive login (recommended)** — Sign in via browser. No app registration needed. Token stays cached across sessions.
 > 2. **Service principal (for CI/CD)** — Uses CLIENT_ID and CLIENT_SECRET from an Azure app registration.
-> 3. **Certificate (for CI/CD)** — Uses CLIENT_ID and CLIENT_CERTIFICATE_PATH. Optional: CLIENT_CERTIFICATE_PASSWORD and CLIENT_SEND_CERTIFICATE_CHAIN=1 for SNI.
 
 Write `.env` directly — do not instruct the user to create it:
 
@@ -151,10 +151,14 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
-Set `PLUGIN_VERSION` from the loaded plugin manifest and `AGENT` to `claude-code`,
-`copilot`, `cursor`, `codex`, or `unknown`.
+Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
+
+- `PLUGIN_VERSION` — the `version` field of your loaded plugin manifest (e.g. `"1.5.0"`). At runtime, `auth.py` re-reads this from the live manifest via host env vars; this `.env` entry is a fallback for offline cases.
+- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
 
 ```python
+# Substitute these two literals from your loaded plugin context.
+# Do NOT leave the angle-bracket placeholders — replace with real values.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
 agent_host = "<your host name: claude-code | copilot | cursor | codex | unknown>"
 
@@ -171,12 +175,6 @@ with open(".env", "w") as f:
         f.write(f"CLIENT_ID={client_id}\n")
     if client_secret:
         f.write(f"CLIENT_SECRET={client_secret}\n")
-    if client_certificate_path:
-        f.write(f"CLIENT_CERTIFICATE_PATH={client_certificate_path}\n")
-    if client_certificate_password:
-        f.write(f"CLIENT_CERTIFICATE_PASSWORD={client_certificate_password}\n")
-    if client_send_certificate_chain:
-        f.write("CLIENT_SEND_CERTIFICATE_CHAIN=1\n")
 ```
 
 Ensure `.env` is in `.gitignore`:
