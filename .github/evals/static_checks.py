@@ -865,6 +865,36 @@ def check_token_budget(name, text, skill_dir):
 
 
 # ---------------------------------------------------------------------------
+# CAT-12  CLI Attribution (--context)
+# ---------------------------------------------------------------------------
+
+_CLI_CMD_RE = re.compile(r"^\s*dataverse\s+(data|api|org)\s+\S+", re.MULTILINE)
+_CONTEXT_FLAG_RE = re.compile(r"--context\s+")
+
+
+def check_cli_attribution(name, text):
+    """EVAL-CONTEXT-01: every dataverse CLI command in a bash block must carry --context.
+
+    Per CLAUDE.md verified-failure #3 and the telemetry convention, every
+    dataverse command (data, api, org) should include --context for skill
+    attribution. Scans bash fenced blocks only. Handles backslash line
+    continuations by joining them before checking.
+    """
+    failures = []
+    for i, block in extract_fenced_blocks(text, "bash"):
+        # Join backslash continuations into single logical lines
+        joined = block.replace("\\\n", " ")
+        for line in joined.splitlines():
+            if _CLI_CMD_RE.match(line) and not _CONTEXT_FLAG_RE.search(line):
+                cmd = line.strip()[:80]
+                failures.append(
+                    f"EVAL-CONTEXT-01 [{name} bash-block-{i}] CLI command missing "
+                    f"--context attribution: `{cmd}...`"
+                )
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -905,6 +935,7 @@ def main():
         all_failures.extend(check_allowlist(name, text))
         all_failures.extend(check_token_budget(name, text, f.parent))
         all_failures.extend(check_deprecated_read_api(name, text))
+        all_failures.extend(check_cli_attribution(name, text))
 
     # CAT-11 also covers reference files (Level 3), which teach the same read API
     for rf in sorted(skills_dir.glob("*/references/*.md")):
@@ -946,7 +977,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"11 categories checked"
+            f"12 categories checked"
         )
 
 
