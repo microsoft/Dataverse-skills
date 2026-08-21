@@ -5,11 +5,13 @@ description: Bulk reads, multi-page iteration, and analytics over Dataverse data
 
 # Skill: Query — Read and Analyze Dataverse Records
 
-> **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. See the overview skill's Hard Rules.
+> **This skill uses Python and the Dataverse CLI.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. See the overview skill's Hard Rules.
 
 ## Reads: prefer a managed surface, choose by shape
 
-Pick **MCP or the SDK by the shape of the read** — both handle auth, paging, and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the SDK fits bulk iteration and analytics. For `$apply` aggregation and N:N `$expand`, prefer `client.query.fetchxml()` (aggregates + link-entity) or the managed `dataverse api` escape hatch; reach for hand-rolled `urllib`/`get_token()` **only** to stay in-process inside a tight Python loop (e.g. paging thousands of rows with client-side processing — see web-api-advanced.md).
+**Fast path for simple reads:** If `dataverse auth who` shows an active profile, skip workspace setup and query directly with the CLI examples below. No `.env`, `auth.py`, pip install, or PAC needed for data reads.
+
+Pick **MCP, the Dataverse CLI, or the SDK by the shape of the read** — all three handle auth and retry (see the routing table below and the overview's **Tool Capabilities** / Hard Rule 2). MCP fits small, interactive reads; the CLI fits headless one-liners (OData, SQL, count); the SDK fits bulk iteration and analytics. For `$apply` aggregation and N:N `$expand`, prefer `client.query.fetchxml()` (aggregates + link-entity) or the managed `dataverse api` escape hatch; reach for hand-rolled `urllib`/`get_token()` **only** to stay in-process inside a tight Python loop (e.g. paging thousands of rows with client-side processing — see web-api-advanced.md).
 
 ### Dataverse CLI gotchas (custom tables + Windows)
 
@@ -17,6 +19,27 @@ When you drive the `dataverse` CLI directly (headless reads/CRUD; note the CLI n
 
 - **Custom-table SQL pluralization.** `dataverse data query` in SQL mode auto-pluralizes the table name, and irregular plurals resolve wrong: `FROM im_category` looks up entity set `im_categorys` and returns a **404** that reads like "table missing." It is not — switch to OData mode with the explicit entity set: `dataverse data query --table im_categories --select im_name`. Discover the real `EntitySetName` from `EntityDefinitions` when unsure; never conclude the table doesn't exist from this 404.
 - **Windows shell quoting.** Wrap the whole `--path` value in double quotes so `cmd.exe`/PowerShell don't treat `&` as a command separator. Keep `&` **literal** — it separates OData query options; encoding it to `%26` merges them and breaks the query. Encode only `$`->`%24` (in PowerShell a bare `$select` is read as a variable). If an unquoted `&` splits the command, the wrapper can exit nonzero *even when the API returned valid JSON* — quoting prevents it. (This is why the `dataverse api request` examples in other skills quote the path, use `%24`, and leave `&` literal.)
+
+### Dataverse CLI query examples (copy-paste ready)
+
+All `dataverse` commands take `--context` for skill attribution (global flag).
+
+```bash
+# OData filtered read (--table takes the EntitySet name, e.g. accounts not account)
+dataverse data query --table accounts --select "name,accountid" --filter "name eq 'john'" --top 10 --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+
+# Count records
+dataverse data count --table accounts --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+
+# SQL mode (uses the logical name, e.g. account not accounts)
+dataverse data query --sql "SELECT name, accountid FROM account WHERE name LIKE '%john%'" --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+
+# Get single record by ID
+dataverse data get --table accounts --id <guid> --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+
+# Raw API escape hatch
+dataverse api request --target dataverse --path "/api/data/v9.2/accounts?%24select=name&%24top=5" --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+```
 
 **ERP target is a separate path.** ERP (Finance and Operations), when linked to a Dataverse env, does not go through the Python SDK. See [`references/erp-reads.md`](references/erp-reads.md).
 
@@ -26,15 +49,15 @@ When the user asks a question about their data, pick the approach by **what they
 
 | User asks... | Approach | Why |
 |---|---|---|
-| "show me open tickets" / simple filter | **MCP** `read_query` (if available) or `client.records.list(table, filter=...)` | Small result, no aggregation |
-| "how many X" / simple count | **MCP** `read_query`, or `client.query.sql("SELECT COUNT(*) AS n FROM <table> WHERE ...")` | Server-side count (no row download) |
+| "show me open tickets" / simple filter | **MCP** `read_query`, **CLI** `dataverse data query --table ... --filter ...`, or `client.records.list(table, filter=...)` | Small result, no aggregation |
+| "how many X" / simple count | **CLI** `dataverse data count --table ...`, **MCP** `read_query`, or `client.query.sql("SELECT COUNT(*) ...")` | Server-side count (no row download) |
 | Single-table aggregation (most/sum/avg/top-N) | **`$apply`** (raw) or **`client.query.sql()`** GROUP BY | Both run server-side, return only grouped results |
 | Cross-table aggregation | **`client.query.sql("...INNER JOIN...GROUP BY...")`** or **`client.query.fetchxml(...)`** (server-side); else builder->DataFrame + `pd.merge()` | `sql()` supports INNER/LEFT JOIN + GROUP BY; pandas merge for shapes SQL can't express |
 | "show me X with related Y" / resolve lookups | `client.records.list(table, expand=...)` or **QueryBuilder** | Lookup resolution |
 | "export this data" / bulk extract | **`client.query.builder(t).select(...).execute().to_dataframe()`** | Direct to DataFrame → CSV |
 | "load into notebook" / interactive analysis | **`client.query.builder(t).select(...).execute().to_dataframe()`** | pandas native |
 | "find duplicates" / complex filter | `client.records.list(table, filter=...)` or **QueryBuilder** | SDK handles pagination |
-| Simple filtered read (<5K rows) | **`client.query.sql()`** | Lightweight SQL SELECT with WHERE, ORDER BY, TOP |
+| Simple filtered read (<5K rows) | **CLI** `dataverse data query --sql "SELECT ..."`, or **`client.query.sql()`** | Lightweight single call |
 
 **Key principle:** Let the server do the work. For single-table aggregation, use `$apply` (raw) or `client.query.sql()` GROUP BY — both run server-side and return only grouped results. For cross-table questions, prefer a server-side `sql()` JOIN (INNER/LEFT) or `fetchxml()` link-entity; when SQL can't express it, pull each table via `client.query.builder(t).select(...).execute().to_dataframe()` and `pd.merge()` — the merge is sub-second; the bottleneck is network transfer, which `select` minimizes.
 
