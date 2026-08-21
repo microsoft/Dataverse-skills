@@ -57,7 +57,7 @@ ls .env scripts/auth.py 2>/dev/null
 ```
 
 - If BOTH exist: proceed to the task.
-- If EITHER is missing: run `python <plugin-scripts>/auth.py --ping`. If it prints `REACHABLE` (exit 0), the workspace is bootable without pip -- copy `auth.py` to `scripts/` if absent, confirm the URL, and proceed. If `--ping` fails, **run `dv-connect`**.
+- If EITHER is missing: run `python <plugin-scripts>/auth.py --ping`. If it prints `REACHABLE` (exit 0), the workspace is bootable without pip -- confirm the URL and proceed. If `--ping` fails, **run `dv-connect`**.
 
 ### 1. Python for scripting; the CLIs and MCP are first-class
 

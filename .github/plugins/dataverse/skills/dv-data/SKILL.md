@@ -95,10 +95,10 @@ dataverse data upload --table account --id <guid> --column new_document --file r
 dataverse data describe --table account --include all --json
 
 # Invoke a discovered custom API by name (use 'api list' to find names)
-dataverse api invoke <CustomApiName> --target dataverse --param Input=value
+dataverse api invoke <CustomApiName> --target dataverse --param Input=value --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Raw API escape hatch for built-in actions (--target is required)
-dataverse api request --target dataverse --path "/api/data/v9.2/WhoAmI"
+dataverse api request --target dataverse --path "/api/data/v9.2/WhoAmI" --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 ```
 
 ---

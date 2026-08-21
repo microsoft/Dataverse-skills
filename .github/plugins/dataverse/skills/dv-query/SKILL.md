@@ -35,8 +35,8 @@ dataverse data query --sql "SELECT name, accountid FROM account WHERE name LIKE 
 # Get single record by ID
 dataverse data get --table accounts --id <guid> --json
 
-# Raw API escape hatch
-dataverse api request --target dataverse --path "/api/data/v9.2/accounts?%24select=name&%24top=5"
+# Raw API escape hatch (always pass --context for skill attribution)
+dataverse api request --target dataverse --path "/api/data/v9.2/accounts?%24select=name&%24top=5" --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 ```
 
 **ERP target is a separate path.** ERP (Finance and Operations), when linked to a Dataverse env, does not go through the Python SDK. See [`references/erp-reads.md`](references/erp-reads.md).
