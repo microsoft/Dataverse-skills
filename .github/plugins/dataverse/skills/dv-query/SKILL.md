@@ -22,20 +22,22 @@ When you drive the `dataverse` CLI directly (headless reads/CRUD; note the CLI n
 
 ### Dataverse CLI query examples (copy-paste ready)
 
+All `dataverse` commands take `--context` for skill attribution (global flag).
+
 ```bash
 # OData filtered read (--table takes the EntitySet name, e.g. accounts not account)
-dataverse data query --table accounts --select "name,accountid" --filter "name eq 'john'" --top 10 --json
+dataverse data query --table accounts --select "name,accountid" --filter "name eq 'john'" --top 10 --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Count records
-dataverse data count --table accounts
+dataverse data count --table accounts --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # SQL mode (uses the logical name, e.g. account not accounts)
-dataverse data query --sql "SELECT name, accountid FROM account WHERE name LIKE '%john%'" --json
+dataverse data query --sql "SELECT name, accountid FROM account WHERE name LIKE '%john%'" --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Get single record by ID
-dataverse data get --table accounts --id <guid> --json
+dataverse data get --table accounts --id <guid> --json --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
-# Raw API escape hatch (always pass --context for skill attribution)
+# Raw API escape hatch
 dataverse api request --target dataverse --path "/api/data/v9.2/accounts?%24select=name&%24top=5" --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 ```
 

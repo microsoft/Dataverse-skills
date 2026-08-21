@@ -69,30 +69,32 @@ Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modi
 
 ### Dataverse CLI data examples (copy-paste ready)
 
+All `dataverse` commands take `--context` for skill attribution (global flag).
+
 ```bash
 # Create a record (--table is the EntitySet name)
-dataverse data create --table accounts --data '{"name":"Contoso"}' --return --json
+dataverse data create --table accounts --data '{"name":"Contoso"}' --return --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Update by GUID
-dataverse data update --table accounts --id <guid> --data '{"name":"Contoso (updated)"}' --json
+dataverse data update --table accounts --id <guid> --data '{"name":"Contoso (updated)"}' --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Upsert by alternate key (idempotent — safe to re-run)
-dataverse data upsert --table accounts --key "accountnumber='ACC-001'" --data '{"name":"Contoso Ltd"}' --json
+dataverse data upsert --table accounts --key "accountnumber='ACC-001'" --data '{"name":"Contoso Ltd"}' --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Delete (--no-confirm skips the prompt)
-dataverse data delete --table accounts --id <guid> --no-confirm
+dataverse data delete --table accounts --id <guid> --no-confirm --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Associate two records (N:N or lookup)
-dataverse data associate --table accounts --id <guid> --relationship contact_customer_accounts --related contacts --related-id <contact-guid>
+dataverse data associate --table accounts --id <guid> --relationship contact_customer_accounts --related contacts --related-id <contact-guid> --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Disassociate (N:N — pass --related-id; clear a lookup — omit --related-id)
-dataverse data disassociate --table accounts --id <guid> --relationship contact_customer_accounts --related-id <contact-guid>
+dataverse data disassociate --table accounts --id <guid> --relationship contact_customer_accounts --related-id <contact-guid> --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Upload a file to a file column (--table takes LogicalName, not EntitySet)
-dataverse data upload --table account --id <guid> --column new_document --file report.pdf
+dataverse data upload --table account --id <guid> --column new_document --file report.pdf --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Describe entity schema (attributes, relationships, actions)
-dataverse data describe --table account --include all --json
+dataverse data describe --table account --include all --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Invoke a discovered custom API by name (use 'api list' to find names)
 dataverse api invoke <CustomApiName> --target dataverse --param Input=value --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
