@@ -572,16 +572,18 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All six version fields match across manifest files.
+    EVAL-VERSION-01: All eight version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The six version fields live in five files:
+    The eight version fields live in six files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
       4. .github/plugins/dataverse/.github/plugin/plugin.json -- version
       5. .github/plugins/dataverse/.cursor-plugin/plugin.json -- version
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
+      7. .cursor-plugin/marketplace.json -- metadata.version
+      8. .cursor-plugin/marketplace.json -- plugins[0].version
     """
     failures = []
 
@@ -615,6 +617,16 @@ def check_version_consistency(repo_root):
             ".github/plugins/dataverse/.codex-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
+        ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: d.get("metadata", {}).get("version"),
+            "metadata.version",
+        ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: (d.get("plugins") or [{}])[0].get("version"),
+            "plugins[0].version",
         ),
     ]
 
