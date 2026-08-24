@@ -291,9 +291,10 @@
           },
           {
             "expect": "row_count",
-            "entity": "phonecall",
-            "filter": "startswith(regardingobjectid_account/name,'EvalSys ')",
-            "at_least": 3
+            "entity": "activitypointer",
+            "filter": "activitytypecode eq 'phonecall' and startswith(regardingobjectid_account/name,'EvalSys ')",
+            "at_least": 3,
+            "description": "at least 3 phone calls logged against an EvalSys company (read via activitypointer: the phonecalls entity set returns HTTP 500 when a filter walks regardingobjectid_account to a non-key attribute)"
           }
         ]
       }
