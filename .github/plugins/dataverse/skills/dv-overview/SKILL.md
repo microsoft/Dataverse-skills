@@ -20,6 +20,7 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data writes — record CRUD, bulk create/update/upsert, CSV/FK-ordered import, sample data | `dv-data` |
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
+| Finance and Operations X++ — scaffold, compile/build, deploy, DB sync, verification | `dv-xpp` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 
@@ -90,7 +91,7 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 Three entry points, one shared sign-in:
 - **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache. That sign-in serves CLI, MCP proxy, **and** `scripts/auth.py` via `msal-extensions`.
 - **`scripts/auth.py`** is the Python/SDK auth entry point. Order: service principal → shared CLI cache → device-code. Use `get_client(skill)` (SDK) or `get_plugin_headers(skill, get_token())` (raw Web API) — both stamp attribution.
-- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution` and `dv-admin`.
+- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution`, `dv-admin`, and `dv-xpp`.
 
 **Telemetry attribution (keep it deterministic):** every request carries a closed-schema `app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>` context so the server sees which skill routed each OData call. It is baked in — `get_client(skill)` and `get_plugin_headers(skill, ...)` stamp it on the SDK and raw-HTTP paths; the Dataverse CLI auto-stamps `DataverseCli/<ver>` + the command, and you add the skill with `--context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"` (the CLI wraps it in parentheses itself — do not pre-wrap). Never modify, omit, or free-form this context — it is a closed schema (allowlisted skill/agent, no PII).
 
@@ -122,7 +123,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Python SDK (`dv-data`)** | Scripted data writes, especially at volume. Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | global Option Sets, record association (`$ref`), `$apply` aggregation, table/column/relationship creation (use `dv-metadata`), custom action invocation |
 | **Python SDK (`dv-query`)** | Bulk reads and analytics. Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API, GUID-free display (formatted values), `$expand` to resolve lookups, **aggregation and N:N joins via `client.query.fetchxml()`** (aggregate FetchXML + link-entity), pandas DataFrame handoff (`client.query.builder(...).execute().to_dataframe()`) for exports, Jupyter notebook snippets | OData `$apply` and N:N `$expand` on the **QueryBuilder** path — use `records.list(expand=...)` for N:N, or `fetchxml()` for aggregates (not raw `urllib`) |
 | **Dataverse CLI (`dataverse`)** | Headless data plane: `data` CRUD, `associate`/`disassociate` (N:N + `$ref`), `data upload`; `api request`/`invoke` (Web API escape hatch); `api list`/`describe` (Custom API discovery) | Metadata/schema (use SDK — `dv-metadata`), solution ALM (use PAC), forms/views; **blocked on ChatGPT web / Codex cloud** (no .NET runtime) — use the SDK |
-| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), add solution components (`pac solution add-solution-component`) | Data CRUD, metadata creation (tables/columns/forms), listing solution components (no `list-components` — query `solutioncomponent` via SDK/CLI) |
+| **PAC CLI** | Solution export/import/pack/unpack, ERP X++ SDK install + package scaffold/compile/deploy/DB sync, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), add solution components (`pac solution add-solution-component`) | Data CRUD, Dataverse metadata creation (tables/columns/forms), listing solution components (no `list-components` — query `solutioncomponent` via SDK/CLI); X++ SDK install/compile require Windows |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 | **Raw Web API** (last resort) | Only when **no** managed surface exposes the operation — i.e. not doable via MCP, the Python SDK, the Dataverse CLI, or the `dataverse api` escape hatch. Genuine cases: unbound actions like `PublishXml`, global option sets, and similar edge cases (**not** forms/views — those are SDK record CRUD on `systemform`/`savedquery`). Even then, prefer `dataverse api` (managed auth + skill attribution) over hand-rolled `urllib`. | Functionally nothing (full OData/MetadataService) — but raw `urllib` bypasses managed auth, paging, retry, and skill attribution, so treat it as the path of last resort |
@@ -238,4 +239,3 @@ The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition 
 ## Windows Scripting
 
 Platform-specific shell rules (ASCII in `.py`, no multiline `python -c`, PAC PowerShell wrapper, unbuffered background output) live in [`references/windows-scripting.md`](references/windows-scripting.md). Read it when running on Windows.
-

@@ -2,7 +2,7 @@
 
 On Unified Operations environments, ERP is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the ERP linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
 
-The same skills (dv-connect, dv-query, dv-data) cover both targets — the routing differs by **which tool** the agent reaches for, not which skill.
+The specialist skills cover both targets — routing depends on the requested operation: data-plane work stays with `dv-query`/`dv-data`, batch administration uses `dv-admin`, and X++ development uses `dv-xpp`.
 
 ## Detecting ERP context
 
@@ -36,7 +36,9 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 4. **`dataverse erp batch list|cancel`** for ERP batch jobs on the linked ERP instance.
 
-5. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
+5. **PAC CLI X++ lifecycle** for source models and deployable packages: `pac package init --package-type erp`, `pac tool xpp install`, `pac package compile --package-type erp`, `pac package deploy --package-type erp`, and `pac package db-sync`. Use **dv-xpp**.
+
+6. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
    ```
    GetAzureWriteUrl     → returns blob SAS URL
    (upload package.zip to that URL)
@@ -104,10 +106,13 @@ dataverse data describe --target erp --table SalesOrderHeaders --json
 
 The output reflects what is **actually routable at runtime** — empty `Actions[]` means the entity exposes no bound actions on this env (even if X++ declares some). This avoids the "try the action, get a 404, try a different name" exploration loop.
 
+## X++ development
+
+ERP X++ authoring, SDK installation, package compilation/build, deployment, database synchronization, and runnable-class verification are covered by **dv-xpp**. Do not route these requests through ERP OData, MCP, DMF, or Dataverse solution ALM.
+
 ## What's out of scope for skills
 
-- **ERP X++ authoring and package builds** — these go through `pac package init/compile/db-sync/deploy`; not a runtime data-plane operation.
 - **ERP UI customization** (form personalizations, workflow editor) — out of skill scope.
 - **LCS / Power Platform admin tasks specific to ERP** (LCS uploads, environment lifecycle) — out of skill scope.
 
-For anything in scope, the skills (dv-connect, dv-query, dv-data) handle Dataverse and ERP through the same routing — pick the target and the right tool follows.
+For anything in scope, the skills (`dv-connect`, `dv-query`, `dv-data`, `dv-admin`, `dv-xpp`) handle Dataverse and ERP through the same routing — pick the target and the right tool follows.

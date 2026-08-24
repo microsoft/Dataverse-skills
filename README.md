@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-platform-intro) through natural language. The plugin teaches AI coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — for everything from designing data models and answering CRM questions to deploying solutions across environments.
+Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-platform-intro) and linked Dynamics 365 Finance and Operations environments through natural language. The plugin teaches AI coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — from designing data models and answering CRM questions to deploying Dataverse solutions and X++ packages.
 
 | Skill | What it does |
 |---|---|
@@ -11,6 +11,7 @@ Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us
 | **dv-data** | Single-record CRUD plus bulk import — CSV loads, multi-table imports with foreign-key dependencies, upsert by alternate key, and AI-generated sample data. |
 | **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
 | **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
+| **dv-xpp** | Handles the Finance and Operations X++ lifecycle: model scaffolding, matching SDK installation, compile/build, package deployment, database synchronization, and runnable-class verification. |
 | **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
 | **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
 | **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
@@ -90,6 +91,7 @@ After the connect flow finishes, describe what you want — the plugin picks MCP
 - *"Import this CSV into the contacts table"*
 - *"Create a customer feedback table with name, rating, and comment columns"*
 - *"Pull the schema and pack it into a solution"*
+- *"Create an X++ runnable class, compile it, and deploy it to my Finance environment"*
 - *"Bulk delete activities older than 2024"*
 - *"Add a teammate to the sales team on the dev environment"*
 

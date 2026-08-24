@@ -1,0 +1,147 @@
+# X++ workflow recipes
+
+Every online workflow begins with explicit environment confirmation and:
+
+```bash
+pac org who --environment <dataverse-url>
+```
+
+Require the output to match the confirmed Dataverse URL and show ERP linkage.
+
+## Compile/build only
+
+Use when the user wants artifacts but no environment mutation:
+
+```bash
+pac tool xpp list
+pac package compile --solution-root <root> --package-type erp \
+  --app-version <x.y.z.w> --language en-US
+```
+
+If the matching SDK is absent:
+
+```bash
+pac tool xpp install --environment <dataverse-url>
+```
+
+Success criteria:
+
+- PAC exits zero.
+- Compile summary reports every requested model succeeded.
+- Best-practice checks have no errors; address warnings unless accepted.
+- A current `<Model>_<version>_managed.zip` exists under `<root>/bin` or the explicit output directory.
+
+Do not deploy or DB-sync.
+
+## Deploy one prebuilt package only
+
+Inspect the exact ZIP path and state the selected modes before asking for confirmation:
+
+```bash
+pac package deploy --environment <dataverse-url> --package-type erp \
+  --package <managed-zip> \
+  --build-type Full --release-type Dev --db-sync None \
+  --logConsole
+```
+
+Success means PAC reports `Deploy completed successfully.` after polling. Capture the async operation ID. Do not compile, redeploy other models, or DB-sync.
+
+## Deploy a multi-model solution
+
+Compile all configured models:
+
+```bash
+pac package compile --solution-root <root> --package-type erp \
+  --app-version <x.y.z.w> --language en-US
+```
+
+Then omit `--package` so PAC reads `.erp/xpp.json`, orders dependencies, and deploys every current ZIP:
+
+```bash
+pac package deploy --environment <dataverse-url> --package-type erp \
+  --solution-root <root> \
+  --build-type Full --release-type Dev --db-sync None \
+  --logConsole
+```
+
+Do not manually loop deployments. PAC deliberately waits between packages for ERP orchestration to settle.
+
+## DB-sync only
+
+Do not compile or deploy.
+
+Full:
+
+```bash
+pac package db-sync --environment <dataverse-url> --db-sync Full
+```
+
+Module:
+
+```bash
+pac package db-sync --environment <dataverse-url> \
+  --db-sync Module --modules <ModelA,ModelB>
+```
+
+Incremental:
+
+```bash
+pac package db-sync --environment <dataverse-url> \
+  --db-sync Incremental --argument-file <incremental-sync.json>
+```
+
+Require the user to choose the mode. Show modules or argument-file path in the confirmation. PAC waits for the asynchronous operation; success requires a successful terminal state.
+
+## Deploy and synchronize in one operation
+
+One package:
+
+```bash
+pac package deploy --environment <dataverse-url> --package-type erp \
+  --package <managed-zip> \
+  --build-type Full --release-type Dev \
+  --db-sync Module --modules <ModelName> \
+  --logConsole
+```
+
+All configured models, followed by one sync:
+
+```bash
+pac package deploy --environment <dataverse-url> --package-type erp \
+  --solution-root <root> \
+  --build-type Full --release-type Dev \
+  --db-sync Full \
+  --logConsole
+```
+
+Use integrated sync only when the user requests deployment plus synchronization. Otherwise keep deploy and DB sync independent.
+
+## End-to-end code change
+
+1. Inspect `.erp/xpp.json`, descriptors, metadata paths, current branch, and working tree.
+2. Scaffold only missing models with `pac package init --package-type erp`.
+3. Create/edit the requested metadata. Add label resources for user-facing strings.
+4. Validate XML files before invoking the compiler.
+5. Confirm the target Dataverse URL and verify `pac org who`.
+6. Run `pac tool xpp list`; install the environment-matching SDK only if missing.
+7. Use incremental compile while fixing errors.
+8. Run one final non-incremental compile with best-practice checks.
+9. Identify the ZIP created by that final run.
+10. Deploy with explicit `Full|Incremental|Delete`, `Dev|Release`, and DB-sync choices.
+11. Require PAC's successful terminal result.
+12. If the change includes a runnable class, open the `SysClassRunner` URL and have the user observe the infolog.
+13. Persist source changes in the repository; do not commit generated `bin/`, compiler caches, or logs unless repository policy explicitly tracks them.
+
+## Failure handling
+
+| Failure | Action |
+|---|---|
+| `tool xpp` / `compile` / `db-sync` missing | Update PAC through **dv-connect**; do not invent another verb |
+| Active environment differs | Stop, select/create the correct PAC auth profile, rerun `pac org who` |
+| No linked ERP URL/version | Stop; the environment is not ready for ERP package operations |
+| SDK version mismatch | Install the version reported by the target or pass the correct `--app-version` |
+| `XPPLC2010` no-label warning causes failure | Add valid `AxLabelFile` metadata and label text |
+| Compile errors | Fix source; never deploy a stale ZIP |
+| Deployment failure | Report operation ID and terminal error; do not immediately retry blindly |
+| DB-sync failure | Report operation ID/mode and server message; do not redeploy unless the deployment itself failed |
+
