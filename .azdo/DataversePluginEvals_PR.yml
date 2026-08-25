@@ -61,6 +61,11 @@ resources:
 steps:
 - checkout: self
   displayName: 'Checkout Dataverse-skills'
+  # pr_file_filter diffs the PR against its target branch to decide which tests to
+  # run. A shallow clone has neither origin/main nor HEAD~1, so every diff strategy
+  # fails and the filter fails OPEN -- running the whole live suite on PRs that never
+  # touched a skill. Full history gives the HEAD~1 fallback a parent to diff against.
+  fetchDepth: 0
 
 - checkout: BicEvalsService
   displayName: 'Checkout evaluator prompts'
