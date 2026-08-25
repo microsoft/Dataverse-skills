@@ -31,7 +31,8 @@ All applicable checks must pass:
 5. If deployment includes DB sync, PAC also prints `Database synchronization completed successfully.`
 6. The deployed artifact passes its runtime check:
    - Runnable class: run its `SysClassRunner` URL and observe the expected infolog or behavior.
-   - Custom service/API: directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare the returned value with the expected result.
+   - Custom service: directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare the returned value with the expected result.
+   - `ICustomAPI` action: find it through ERP MCP `api_find_actions`, validate the action menu-item identity and contract, invoke it through `api_invoke_action`, and compare its `Result` properties with expected values.
    - Public OData data entity: `describe` the entity set, then run a bounded query.
 
 A ZIP upload, package-row creation, async operation ID, or HTTP success is only an intermediate milestone. None independently proves successful deployment.
@@ -90,6 +91,12 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | `api list` or `api describe` stalls | Broad ERP service metadata discovery is slow or unresponsive | Stop the discovery request. If names and parameters are known from source, invoke the fully qualified `erp:<group>/<service>/<operation>` directly. |
 | Custom service is absent from `api list` | `AxService`/`AxServiceGroup` metadata was not deployed, names differ, or activation is incomplete | Confirm exact metadata names and successful deployment; use fully qualified invocation when names are known, or retry discovery after propagation. |
 | Custom service invocation fails | Operation name or request contract does not match | Run `dataverse api describe` and invoke with the returned parameter shape. |
+| ERP MCP `/mcp` returns `403` | The calling application is not allow-listed for the ERP MCP endpoint | Add the approved client application through the supported environment administration flow, then reinitialize MCP. Do not bypass the allow list. |
+| `ICustomAPI` is absent from `api_find_actions` | Deployment/DB sync has not completed, the action menu item is missing or named differently, security access is missing, or metadata propagation is incomplete | Confirm successful compile/deploy/sync, exact `AxMenuItemAction` name and class target, privilege/duty/role coverage, and caller access; then reinitialize MCP and retry after propagation. |
+| `api_find_actions` reports skipped actions or metadata errors | Another or the requested action has invalid class/menu-item metadata | Record `SkippedActions` and the metadata message. Fix the named action's `ICustomAPI` class, attributes, menu item, or security metadata before claiming complete discovery. |
+| `api_invoke_action` rejects parameters | `parameters` is not a JSON-encoded string, data-member names differ, or JSON types do not match the discovered contract | Use the exact input schema from `api_find_actions`; encode it as a JSON string and preserve integer, Boolean, date, and enum types. |
+| `api_invoke_action` returns `isError: true` | The action ran unsuccessfully or ERP MCP rejected execution | Capture the MCP activity ID and returned error, verify company context and security, and fix the X++ or request contract. Do not treat JSON-RPC HTTP success as action success. |
+| `ICustomAPI` returns an unexpected value | Business logic or parameter mapping is incorrect | Compare the discovered contract and response properties with source, then test representative positive, zero, negative, and boundary inputs. |
 | Public entity is absent from `data describe` | Entity is not public, entity-set name is wrong, deployment failed, or required DB sync did not complete | Check `<IsPublic>Yes</IsPublic>`, the exact entity-set name, deployment status, and DB-sync result. |
 | Runnable class URL does not execute | Class name differs, `main(Args)` is not public static, or the deployed package lacks the class | Verify metadata/class names and current package contents, then recompile and redeploy if needed. |
 
@@ -103,5 +110,6 @@ Report:
 - Async operation ID, terminal state, status code, and friendly/raw server message.
 - Whether DB sync started, its separate operation ID, and its result.
 - Artifact verification command/URL and observed response.
+- For `ICustomAPI`, the discovered action menu-item name, contract, test inputs/outputs, MCP `isError` value, and activity ID on failure.
 
 Do not include access tokens, credentials, or raw authentication headers.

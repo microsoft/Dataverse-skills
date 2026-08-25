@@ -131,7 +131,8 @@ Use integrated sync only when the user requests deployment plus synchronization.
 11. Require PAC's successful terminal result and apply every applicable success gate in [`validation.md`](validation.md).
 12. Verify each deployed artifact through its runtime surface:
     - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>` and observe the infolog.
-    - Custom service/API: when names are known from source, use `dataverse api invoke 'erp:<ServiceGroup>/<Service>/<Operation>' --target erp --param '<name>=<value>' --json`; reserve `list`/`describe` for unknown names or contracts.
+    - Custom service: when names are known from source, use `dataverse api invoke 'erp:<ServiceGroup>/<Service>/<Operation>' --target erp --param '<name>=<value>' --json`; reserve `list`/`describe` for unknown names or contracts.
+    - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu-item name and input/output contract, then call `api_invoke_action` with a JSON-encoded `parameters` string. Require `isError: false` and validate representative positive, zero, negative, and boundary results.
     - Public OData data entity: use `dataverse data describe --target erp --table <EntitySet>`, then `dataverse data query --target erp --table <EntitySet> --top <n>`.
 13. Persist source changes in the repository; do not commit generated `bin/`, compiler caches, or logs unless repository policy explicitly tracks them.
 

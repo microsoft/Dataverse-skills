@@ -109,7 +109,7 @@ The ERP host comes from `pac org who --environment <dataverse-url>`. Do not gues
 
 Opening the URL is the execution step. Deployment alone does not prove the class ran or that its infolog message appeared.
 
-## ERP custom service/API
+## ERP custom service
 
 An ERP custom service requires all of the following:
 
@@ -164,6 +164,102 @@ dataverse api invoke \
 Use the exact X++ method parameter name, including a leading underscore when present (for example, `--param '_value=7'`). Pass repeated `--param name=value` values for primitive parameters; use `--body` or `--body-file` for structured contracts. Compare the returned value with the expected business result.
 
 Use `dataverse api list --target erp --service-group <group>` and `dataverse api describe erp:<group>/<service>/<operation>` only when the deployed names or contract are unknown. Discovery is not a prerequisite when the source metadata already provides them; if discovery stalls, stop it and use the fully qualified invocation rather than waiting indefinitely.
+
+## ERP `ICustomAPI` action
+
+An F&O `ICustomAPI` action is not an `AxService`/`AxServiceGroup` custom service. It requires:
+
+- A final X++ class implementing `ICustomAPI`.
+- `[CustomAPI(...)]`, `[AIPluginOperationAttribute]`, and `[DataContract]` class attributes.
+- `[CustomAPIRequestParameter(...)]` plus `[DataMember(...)]` on each input accessor.
+- `[CustomAPIResponseProperty(...)]` plus `[DataMember(...)]` on each output accessor.
+- A public `run(Args _args)` method that sets the response properties.
+- An `AxMenuItemAction` targeting the class.
+- A security privilege containing that menu-item action as an entry point, referenced by a duty and role.
+- Label resources for security labels and descriptions.
+
+PAC does not scaffold these artifacts. Create them under `AxClass`, `AxMenuItemAction`, `AxSecurityPrivilege`, `AxSecurityDuty`, and `AxSecurityRole` in the model metadata tree.
+
+Example class source inside `AxClass/ContosoSubtractCustomAPI.xml`:
+
+```xpp
+[CustomAPI('Subtract ten', 'Returns the supplied integer minus ten')]
+[AIPluginOperationAttribute]
+[DataContract]
+public final class ContosoSubtractCustomAPI implements ICustomAPI
+{
+    private int inputValue;
+    private int result;
+
+    [CustomAPIRequestParameter('The integer to subtract ten from', true),
+     DataMember('inputValue')]
+    public int parmInputValue(int _inputValue = inputValue)
+    {
+        inputValue = _inputValue;
+        return inputValue;
+    }
+
+    [CustomAPIResponseProperty('The supplied integer minus ten'),
+     DataMember('result')]
+    public int parmResult(int _result = result)
+    {
+        result = _result;
+        return result;
+    }
+
+    public void run(Args _args)
+    {
+        this.parmResult(this.parmInputValue() - 10);
+    }
+}
+```
+
+The action menu-item name is the external action identity:
+
+```xml
+<AxMenuItemAction xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns="Microsoft.Dynamics.AX.Metadata.V1">
+  <Name>ContosoSubtractCustomAPI</Name>
+  <Object>ContosoSubtractCustomAPI</Object>
+  <ObjectType>Class</ObjectType>
+  <SubscriberAccessLevel>
+    <Read xmlns="">Allow</Read>
+  </SubscriberAccessLevel>
+</AxMenuItemAction>
+```
+
+Create a privilege whose entry point has `<ObjectName>ContosoSubtractCustomAPI</ObjectName>` and `<ObjectType>MenuItemAction</ObjectType>`, reference that privilege from a duty, and reference the duty from a role. Missing security metadata can produce best-practice warnings or make the action unavailable to callers. Ensure the invoking user has a role that grants the action; system-administrator access is sufficient for development verification.
+
+Compile and deploy with the normal PAC X++ flow. Run Module DB sync for the changed model when the deployment requires metadata synchronization:
+
+```bash
+pac package compile --solution-root <root> --package-type erp \
+  --model <ModelName> --app-version <x.y.z.w> --language en-US
+
+pac package deploy --environment <dataverse-url> --package-type erp \
+  --package <root>/bin/<ModelName>_<version>_managed.zip \
+  --build-type Full --release-type Dev --db-sync None \
+  --logConsole --logFile <deployment-log-path>
+
+pac package db-sync --environment <dataverse-url> \
+  --db-sync Module --modules <ModelName>
+```
+
+Verify the action through the ERP MCP server at the linked ERP host's `/mcp` endpoint. Initialize MCP, then call the generic tools rather than expecting one MCP tool per custom action:
+
+1. Call `api_find_actions` with `{"searchTerm":"ContosoSubtractCustomAPI"}`.
+2. Require a returned action whose `ActionMenuItemName` exactly matches and whose input/output names and types match the authored data members.
+3. Call `api_invoke_action` with:
+
+```json
+{
+  "name": "ContosoSubtractCustomAPI",
+  "parameters": "{\"inputValue\":25}",
+  "returnAsResource": false
+}
+```
+
+`parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties with expected business results. Test representative positive, zero, negative, and boundary values applicable to the contract; for this example, `25 -> 15`, `0 -> -10`, and `-5 -> -15`.
 
 ## Public OData data entity
 
