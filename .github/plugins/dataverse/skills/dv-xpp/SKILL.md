@@ -1,6 +1,6 @@
 ---
 name: dv-xpp
-description: Finance and Operations X++ development lifecycle — scaffold models, author metadata, install matching SDKs, compile deployable packages, deploy packages, synchronize databases, and run verification classes. Use when the user wants to build, compile, package, deploy, or DB-sync X++ customizations, or complete an end-to-end ERP code change.
+description: Finance and Operations X++ development lifecycle — scaffold models, author classes, custom services/APIs, and data entities, install matching SDKs, compile deployable packages, deploy packages, synchronize databases, and verify deployed artifacts. Use when the user wants to create, build, compile, package, deploy, DB-sync, or verify X++ customizations, or complete an end-to-end ERP code change.
 ---
 
 # Skill: Finance and Operations X++ Development
@@ -26,6 +26,7 @@ PAC CLI is the managed surface for the X++ lifecycle. Do not replace these comma
 | Deploy one prebuilt ZIP | `pac package deploy --package-type erp --package <zip>` |
 | Deploy all models in a repo | `pac package deploy --package-type erp --solution-root <root>` |
 | Run DB sync only | `pac package db-sync` |
+| Create an ERP custom service/API | Author its X++ class/contracts plus `AxService` and `AxServiceGroup` metadata, then compile and deploy |
 | Author, compile, deploy, and verify | Follow [End-to-end workflow](#end-to-end-workflow) |
 
 **There is no `pac package build` or top-level `pac xpp` command.** For ERP, `pac package compile --package-type erp` compiles labels and X++, runs best-practice checks, and builds deployable managed ZIPs.
@@ -102,7 +103,7 @@ The repo root contains `.erp/xpp.json`; source defaults to `src/`. Each model ha
   src/<Model>/<Model>/AxClass/<Class>.xml
 ```
 
-Run `pac package init` instead of hand-writing the descriptor/config. Add metadata files surgically after inspecting existing paths. For a valid runnable class, label resource, and verification URL, use [`references/authoring.md`](references/authoring.md).
+Run `pac package init` instead of hand-writing the descriptor/config. Add metadata files surgically after inspecting existing paths. PAC compiles and packages authored metadata; it does not scaffold custom services or data entities. For runnable classes, labels, custom service/API metadata, public OData data entities, and artifact-specific verification, use [`references/authoring.md`](references/authoring.md).
 
 ## Compile/build rules
 
@@ -133,18 +134,16 @@ For “make this X++ change and deploy it”:
 1. Inspect the repo and preserve existing work.
 2. Confirm model/class names, publisher, and layer before scaffolding a new model.
 3. Run `pac package init --package-type erp` only when the model does not exist.
-4. Add or edit X++ metadata and required labels.
+4. Add or edit the requested X++ metadata, such as classes, contracts, custom services, service groups, public data entities, and required labels.
 5. Confirm/authenticate the target environment and verify ERP linkage/version.
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
 8. Deploy with explicit build/release/DB-sync modes.
-9. Verify PAC reaches success. For a runnable class, open:
-
-```text
-https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>
-```
-
-10. Report the package path, environment, async operation ID, terminal status, DB-sync mode, and verification URL. Never claim the infolog text appeared unless the class was actually run and observed.
+9. Verify PAC reaches success, then verify the deployed artifact through its actual surface:
+   - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
+   - Custom service/API: discover and invoke it with `dataverse api list|describe|invoke --target erp`.
+   - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`.
+10. Report the package path, environment, async operation ID, terminal status, DB-sync mode, and artifact-specific verification result. Never claim runtime behavior that was not actually observed.
 
 ## Common mistakes — do not use these
 

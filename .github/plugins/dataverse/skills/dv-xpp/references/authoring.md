@@ -23,7 +23,10 @@ Expected layout:
         ContosoVerification.xml
       ContosoVerification/
         AxClass/
+        AxDataEntityView/
         AxLabelFile/
+        AxService/
+        AxServiceGroup/
 ```
 
 ## Runnable verification class
@@ -106,3 +109,71 @@ The ERP host comes from `pac org who --environment <dataverse-url>`. Do not gues
 
 Opening the URL is the execution step. Deployment alone does not prove the class ran or that its infolog message appeared.
 
+## ERP custom service/API
+
+An ERP custom service requires all of the following:
+
+- An X++ service class containing the public operation methods.
+- Optional `[DataContract]` classes for structured request and response payloads.
+- An `AxService` file mapping each external operation to its X++ method.
+- An `AxServiceGroup` file exposing the service.
+
+PAC does not scaffold these artifacts. Create them under the model metadata tree, preserving the naming and XML structure used by existing services in the repository.
+
+Create `AxService/ContosoVerificationService.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<AxService xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <Name>ContosoVerificationService</Name>
+  <Class>ContosoVerificationServiceClass</Class>
+  <ExternalName>ContosoVerificationService</ExternalName>
+  <ServiceOperations>
+    <AxServiceOperation>
+      <Name>VerifyDeployment</Name>
+      <Method>VerifyDeployment</Method>
+    </AxServiceOperation>
+  </ServiceOperations>
+</AxService>
+```
+
+Create `AxServiceGroup/ContosoVerificationServiceGroup.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<AxServiceGroup xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+  <Name>ContosoVerificationServiceGroup</Name>
+  <Services>
+    <AxServiceGroupService>
+      <Name>ContosoVerificationService</Name>
+      <Service>ContosoVerificationService</Service>
+    </AxServiceGroupService>
+  </Services>
+</AxServiceGroup>
+```
+
+The class named by `<Class>` must exist, and every `<Method>` must match a public method on that class. After compiling and deploying, verify the service rather than assuming deployment made it callable:
+
+```bash
+dataverse api list --target erp --service-group ContosoVerificationServiceGroup
+dataverse api describe \
+  erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment
+dataverse api invoke \
+  erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment \
+  --body '{"request":{"message":"Hello"}}'
+```
+
+Use `dataverse api describe` to confirm the actual parameter shape before invoking. Pass `name=value` or repeated `--param name=value` for simple parameters; use `--body` or `--body-file` for structured contracts.
+
+## Public OData data entity
+
+An OData-facing entity is authored as `AxDataEntityView` metadata and must have `<IsPublic>Yes</IsPublic>`. Follow an existing entity in the target codebase for its data sources, fields, keys, labels, configuration keys, and entity-set naming; those details are business-schema specific and PAC does not generate them.
+
+After compiling and deploying the model, use the entity-set name, not the X++ class or metadata file name:
+
+```bash
+dataverse data describe --target erp --table <EntitySet>
+dataverse data query --target erp --table <EntitySet> --top 10
+```
+
+`describe` proves the public entity is exposed and shows its exact properties and keys. A successful `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.

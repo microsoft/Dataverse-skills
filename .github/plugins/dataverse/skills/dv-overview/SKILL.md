@@ -20,7 +20,7 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data writes — record CRUD, bulk create/update/upsert, CSV/FK-ordered import, sample data | `dv-data` |
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
-| Finance and Operations X++ — scaffold, compile/build, deploy, DB sync, verification | `dv-xpp` |
+| Finance and Operations X++ — author, build, deploy, DB sync, verify | `dv-xpp` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 

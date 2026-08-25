@@ -2,7 +2,7 @@
 
 On Unified Operations environments, ERP is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the ERP linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
 
-The specialist skills cover both targets — routing depends on the requested operation: data-plane work stays with `dv-query`/`dv-data`, batch administration uses `dv-admin`, and X++ development uses `dv-xpp`.
+The same skills (`dv-connect`, `dv-query`, `dv-data`) cover both targets — the routing differs by which tool the agent reaches for, not which skill. Batch administration uses `dv-admin`, and X++ development uses `dv-xpp`.
 
 ## Detecting ERP context
 
@@ -108,7 +108,7 @@ The output reflects what is **actually routable at runtime** — empty `Actions[
 
 ## X++ development
 
-ERP X++ authoring, SDK installation, package compilation/build, deployment, database synchronization, and runnable-class verification are covered by **dv-xpp**. Do not route these requests through ERP OData, MCP, DMF, or Dataverse solution ALM.
+ERP X++ authoring, SDK installation, package compilation/build, deployment, database synchronization, and verification of deployed X++ artifacts are covered by **dv-xpp**. Verification can include ERP custom services/APIs, runnable classes, and public OData data entities. Use ERP API or data commands only for post-deployment verification; do not use ERP OData, MCP, DMF, or Dataverse solution ALM to author, compile, package, or deploy X++ customizations.
 
 ## What's out of scope for skills
 

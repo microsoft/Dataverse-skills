@@ -11,7 +11,7 @@ Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us
 | **dv-data** | Single-record CRUD plus bulk import — CSV loads, multi-table imports with foreign-key dependencies, upsert by alternate key, and AI-generated sample data. |
 | **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
 | **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
-| **dv-xpp** | Handles the Finance and Operations X++ lifecycle: model scaffolding, matching SDK installation, compile/build, package deployment, database synchronization, and runnable-class verification. |
+| **dv-xpp** | Handles the Finance and Operations X++ lifecycle: model and metadata authoring, matching SDK installation, compile/build, package deployment, database synchronization, and verification of custom services/APIs, runnable classes, and public OData data entities. |
 | **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
 | **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
 | **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
