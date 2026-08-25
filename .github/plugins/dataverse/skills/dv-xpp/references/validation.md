@@ -31,7 +31,7 @@ All applicable checks must pass:
 5. If deployment includes DB sync, PAC also prints `Database synchronization completed successfully.`
 6. The deployed artifact passes its runtime check:
    - Runnable class: run its `SysClassRunner` URL and observe the expected infolog or behavior.
-   - Custom service/API: `list`, `describe`, and invoke the expected operation.
+   - Custom service/API: directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare the returned value with the expected result.
    - Public OData data entity: `describe` the entity set, then run a bounded query.
 
 A ZIP upload, package-row creation, async operation ID, or HTTP success is only an intermediate milestone. None independently proves successful deployment.
@@ -87,7 +87,8 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | Deployment reaches `Failed` or `Cancelled` | Server rejected or could not apply the package | Capture operation ID, status code, friendly/raw message, and PAC log; fix that cause before retrying. |
 | Deployment polling times out | Client wait limit elapsed; server state is unknown | Query `asyncoperations` and check LCS. Do not redeploy until the original operation is terminal. |
 | DB sync fails | Schema synchronization failed after or independently of deployment | Capture its separate operation ID, mode, and server message. Fix the schema/sync issue; do not redeploy unless package deployment itself failed. |
-| Custom service is absent from `api list` | `AxService`/`AxServiceGroup` metadata was not deployed, names differ, or activation is incomplete | Confirm exact metadata names and successful deployment; retry discovery after propagation before rebuilding. |
+| `api list` or `api describe` stalls | Broad ERP service metadata discovery is slow or unresponsive | Stop the discovery request. If names and parameters are known from source, invoke the fully qualified `erp:<group>/<service>/<operation>` directly. |
+| Custom service is absent from `api list` | `AxService`/`AxServiceGroup` metadata was not deployed, names differ, or activation is incomplete | Confirm exact metadata names and successful deployment; use fully qualified invocation when names are known, or retry discovery after propagation. |
 | Custom service invocation fails | Operation name or request contract does not match | Run `dataverse api describe` and invoke with the returned parameter shape. |
 | Public entity is absent from `data describe` | Entity is not public, entity-set name is wrong, deployment failed, or required DB sync did not complete | Check `<IsPublic>Yes</IsPublic>`, the exact entity-set name, deployment status, and DB-sync result. |
 | Runnable class URL does not execute | Class name differs, `main(Args)` is not public static, or the deployed package lacks the class | Verify metadata/class names and current package contents, then recompile and redeploy if needed. |

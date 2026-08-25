@@ -152,18 +152,18 @@ Create `AxServiceGroup/ContosoVerificationServiceGroup.xml`:
 </AxServiceGroup>
 ```
 
-The class named by `<Class>` must exist, and every `<Method>` must match a public method on that class. After compiling and deploying, verify the service rather than assuming deployment made it callable:
+The class named by `<Class>` must exist, and every `<Method>` must match a public method on that class. After compiling and deploying, verify the service rather than assuming deployment made it callable. When the authored names and parameter contract are known, invoke the fully qualified ERP operation directly:
 
 ```bash
-dataverse api list --target erp --service-group ContosoVerificationServiceGroup
-dataverse api describe \
-  erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment
 dataverse api invoke \
-  erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment \
-  --body '{"request":{"message":"Hello"}}'
+  'erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment' \
+  --target erp --param '<parameter-name>=<value>' --json \
+  --environment <dataverse-url>
 ```
 
-Use `dataverse api describe` to confirm the actual parameter shape before invoking. Pass `name=value` or repeated `--param name=value` for simple parameters; use `--body` or `--body-file` for structured contracts.
+Use the exact X++ method parameter name, including a leading underscore when present (for example, `--param '_value=7'`). Pass repeated `--param name=value` values for primitive parameters; use `--body` or `--body-file` for structured contracts. Compare the returned value with the expected business result.
+
+Use `dataverse api list --target erp --service-group <group>` and `dataverse api describe erp:<group>/<service>/<operation>` only when the deployed names or contract are unknown. Discovery is not a prerequisite when the source metadata already provides them; if discovery stalls, stop it and use the fully qualified invocation rather than waiting indefinitely.
 
 ## Public OData data entity
 
