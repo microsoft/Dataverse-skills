@@ -41,10 +41,10 @@ Inspect the exact ZIP path and state the selected modes before asking for confir
 pac package deploy --environment <dataverse-url> --package-type erp \
   --package <managed-zip> \
   --build-type Full --release-type Dev --db-sync None \
-  --logConsole
+  --logConsole --logFile <deployment-log-path>
 ```
 
-Success means PAC reports `Deploy completed successfully.` after polling. Capture the async operation ID. Do not compile, redeploy other models, or DB-sync.
+Success means PAC exits zero and reports `Deploy completed successfully.` after polling. Capture the async operation ID and log path, then apply [`validation.md`](validation.md). Do not compile, redeploy other models, or DB-sync.
 
 ## Deploy a multi-model solution
 
@@ -61,10 +61,10 @@ Then omit `--package` so PAC reads `.erp/xpp.json`, orders dependencies, and dep
 pac package deploy --environment <dataverse-url> --package-type erp \
   --solution-root <root> \
   --build-type Full --release-type Dev --db-sync None \
-  --logConsole
+  --logConsole --logFile <deployment-log-path>
 ```
 
-Do not manually loop deployments. PAC deliberately waits between packages for ERP orchestration to settle.
+Do not manually loop deployments. PAC deliberately waits between packages for ERP orchestration to settle. Validate every planned model and the final deployed-model count as described in [`validation.md`](validation.md).
 
 ## DB-sync only
 
@@ -90,7 +90,7 @@ pac package db-sync --environment <dataverse-url> \
   --db-sync Incremental --argument-file <incremental-sync.json>
 ```
 
-Require the user to choose the mode. Show modules or argument-file path in the confirmation. PAC waits for the asynchronous operation; success requires a successful terminal state.
+Require the user to choose the mode. Show modules or argument-file path in the confirmation. PAC waits for the asynchronous operation; capture its ID and require `Database synchronization completed successfully.` Apply the DB-sync failure guidance in [`validation.md`](validation.md).
 
 ## Deploy and synchronize in one operation
 
@@ -101,7 +101,7 @@ pac package deploy --environment <dataverse-url> --package-type erp \
   --package <managed-zip> \
   --build-type Full --release-type Dev \
   --db-sync Module --modules <ModelName> \
-  --logConsole
+  --logConsole --logFile <deployment-log-path>
 ```
 
 All configured models, followed by one sync:
@@ -111,7 +111,7 @@ pac package deploy --environment <dataverse-url> --package-type erp \
   --solution-root <root> \
   --build-type Full --release-type Dev \
   --db-sync Full \
-  --logConsole
+  --logConsole --logFile <deployment-log-path>
 ```
 
 Use integrated sync only when the user requests deployment plus synchronization. Otherwise keep deploy and DB sync independent.
@@ -128,7 +128,7 @@ Use integrated sync only when the user requests deployment plus synchronization.
 8. Run one final non-incremental compile with best-practice checks.
 9. Identify the ZIP created by that final run.
 10. Deploy with explicit `Full|Incremental|Delete`, `Dev|Release`, and DB-sync choices.
-11. Require PAC's successful terminal result.
+11. Require PAC's successful terminal result and apply every applicable success gate in [`validation.md`](validation.md).
 12. Verify each deployed artifact through its runtime surface:
     - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>` and observe the infolog.
     - Custom service/API: use `dataverse api list --target erp`, `dataverse api describe erp:<ServiceGroup>/<Service>/<Operation>`, then `dataverse api invoke erp:<ServiceGroup>/<Service>/<Operation> [name=value ...]`.
@@ -137,13 +137,4 @@ Use integrated sync only when the user requests deployment plus synchronization.
 
 ## Failure handling
 
-| Failure | Action |
-|---|---|
-| `tool xpp` / `compile` / `db-sync` missing | Update PAC through **dv-connect**; do not invent another verb |
-| Active environment differs | Stop, select/create the correct PAC auth profile, rerun `pac org who` |
-| No linked ERP URL/version | Stop; the environment is not ready for ERP package operations |
-| SDK version mismatch | Install the version reported by the target or pass the correct `--app-version` |
-| `XPPLC2010` no-label warning causes failure | Add valid `AxLabelFile` metadata and label text |
-| Compile errors | Fix source; never deploy a stale ZIP |
-| Deployment failure | Report operation ID and terminal error; do not immediately retry blindly |
-| DB-sync failure | Report operation ID/mode and server message; do not redeploy unless the deployment itself failed |
+Use [`validation.md`](validation.md) for compile diagnostics, async-operation inspection, deployment and DB-sync success criteria, the validation error reference, and the required failure report.

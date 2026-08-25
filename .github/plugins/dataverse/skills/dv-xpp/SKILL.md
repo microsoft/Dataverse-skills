@@ -82,12 +82,13 @@ pac package compile --solution-root <root> --package-type erp \
 # Deploy one compiled package, without DB sync
 pac package deploy --environment <dataverse-url> --package-type erp \
   --package <root>/bin/<Model>_<version>_managed.zip \
-  --build-type Full --release-type Dev --db-sync None
+  --build-type Full --release-type Dev --db-sync None \
+  --logConsole --logFile <deployment-log-path>
 
 # Deploy every model in .erp/xpp.json in dependency order
 pac package deploy --environment <dataverse-url> --package-type erp \
   --solution-root <root> --build-type Full --release-type Dev \
-  --db-sync None
+  --db-sync None --logConsole --logFile <deployment-log-path>
 ```
 
 Use explicit values rather than relying on defaults in automation. Full argument tables and DB-sync rules are in [`references/commands.md`](references/commands.md).
@@ -125,7 +126,7 @@ Run `pac package init` instead of hand-writing the descriptor/config. Add metada
 - PAC injects `fnomoduledefinition.json` into the ZIP at deploy time. Copy the artifact first if an immutable checksum must be retained.
 - Standalone DB sync and deploy-with-sync are separate supported workflows; never redeploy merely to satisfy a DB-sync-only request.
 
-See [`references/workflows.md`](references/workflows.md) for compile-only, deploy-only, DB-sync-only, multi-model, and full lifecycle sequences.
+See [`references/workflows.md`](references/workflows.md) for compile-only, deploy-only, DB-sync-only, multi-model, and full lifecycle sequences. Apply the success gates, diagnostics flow, and error mappings in [`references/validation.md`](references/validation.md) to every compile, deployment, DB sync, and runtime verification.
 
 ## End-to-end workflow
 
@@ -139,7 +140,7 @@ For “make this X++ change and deploy it”:
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
 8. Deploy with explicit build/release/DB-sync modes.
-9. Verify PAC reaches success, then verify the deployed artifact through its actual surface:
+9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md), then verify the deployed artifact through its actual surface:
    - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
    - Custom service/API: discover and invoke it with `dataverse api list|describe|invoke --target erp`.
    - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`.
