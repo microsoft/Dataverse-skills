@@ -150,7 +150,7 @@ Contributors who aren't on the maintainers team need two team members to review.
 
 ## Version Bumping
 
-When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all six fields (across five files):
+When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the plugin version before merging. Version must be updated in all eight fields (across six files):
 
 1. `.github/plugin/marketplace.json` — top-level `metadata.version`
 2. `.github/plugin/marketplace.json` — plugin entry `version`
@@ -158,8 +158,10 @@ When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the 
 4. `.github/plugins/dataverse/.github/plugin/plugin.json` — `version`
 5. `.github/plugins/dataverse/.cursor-plugin/plugin.json` — `version`
 6. `.github/plugins/dataverse/.codex-plugin/plugin.json` — `version`
+7. `.cursor-plugin/marketplace.json` — top-level `metadata.version`
+8. `.cursor-plugin/marketplace.json` — plugin entry `version`
 
-All six must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any of the six fields drift.
+All eight must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any of the eight fields drift.
 
 Run the PR-level bump check to verify the bump level matches the structural changes in your branch:
 
