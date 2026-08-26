@@ -115,4 +115,4 @@ ERP X++ authoring, SDK installation, package compilation/build, deployment, data
 - **ERP UI customization** (form personalizations, workflow editor) — out of skill scope.
 - **LCS / Power Platform admin tasks specific to ERP** (LCS uploads, environment lifecycle) — out of skill scope.
 
-For anything in scope, the skills (`dv-connect`, `dv-query`, `dv-data`, `dv-admin`, `erp-xpp`) handle Dataverse and ERP through the same routing — pick the target and the right tool follows.
+For supported data and administration operations, `dv-connect`, `dv-query`, `dv-data`, and `dv-admin` route to the appropriate Dataverse or ERP target. `erp-xpp` is exclusively for Finance and Operations X++ development and deployment; it does not handle Dataverse customizations.
