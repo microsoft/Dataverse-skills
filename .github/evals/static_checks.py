@@ -64,7 +64,7 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-       EVAL-VERSION-01  All six version fields match (5 files, 6 fields total)
+       EVAL-VERSION-01  All eight version fields match (6 files, 8 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
@@ -572,16 +572,18 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All six version fields match across manifest files.
+    EVAL-VERSION-01: All eight version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The six version fields live in five files:
+    The eight version fields live in six files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
       4. .github/plugins/dataverse/.github/plugin/plugin.json -- version
       5. .github/plugins/dataverse/.cursor-plugin/plugin.json -- version
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
+      7. .cursor-plugin/marketplace.json -- metadata.version
+      8. .cursor-plugin/marketplace.json -- plugins[0].version
     """
     failures = []
 
@@ -615,6 +617,16 @@ def check_version_consistency(repo_root):
             ".github/plugins/dataverse/.codex-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
+        ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: d.get("metadata", {}).get("version"),
+            "metadata.version",
+        ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: (d.get("plugins") or [{}])[0].get("version"),
+            "plugins[0].version",
         ),
     ]
 
@@ -667,9 +679,9 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in four plugin.json manifests (one per
-# harness/marketplace format) and the plugins[0] entry of three marketplace.json
-# catalogs. All seven describe the same plugin and must match. The
+# The plugin description appears in five plugin manifest fields (including
+# Codex's long description) and the plugins[0] entry of three marketplace.json
+# catalogs. All eight describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
 # describes the marketplace, not the plugin) and is deliberately excluded.
 _DESCRIPTION_SOURCES = [
@@ -679,6 +691,9 @@ _DESCRIPTION_SOURCES = [
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.codex-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
+    (".github/plugins/dataverse/.codex-plugin/plugin.json",
+     lambda d: (d.get("interface") or {}).get("longDescription"),
+     "interface.longDescription"),
     (".github/plugins/dataverse/.github/plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugin/marketplace.json",
