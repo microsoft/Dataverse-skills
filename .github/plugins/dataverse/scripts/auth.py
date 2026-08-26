@@ -5,14 +5,16 @@ Auth chain (silent tiers first; interactive only when every silent tier is
 unavailable, so a working path wins without stranding the user -- issue #108):
   1. Service principal (CLIENT_ID + CLIENT_SECRET in .env) -- non-interactive,
      terminal (CI fails fast; no interactive fallback when SP is configured).
-  2. Shared Dataverse CLI token cache -- silent, no prompt, populated by
+  2. Certificate (CLIENT_ID + CLIENT_CERTIFICATE_PATH in .env) -- non-interactive,
+     terminal (CI fails fast; no interactive fallback when configured).
+  3. Shared Dataverse CLI token cache -- silent, no prompt, populated by
      `dataverse auth create` (see dv-connect Step 2). Uses the same MSAL v3
      cache the `@microsoft/dataverse` stdio MCP proxy reads. Probed at build
      time against both the tenant-specific and `organizations` authority so an
      authority mismatch falls through instead of hard-failing.
-  3. Azure CLI (`az login`) -- silent, scoped to TENANT_ID; skipped when az is
+  4. Azure CLI (`az login`) -- silent, scoped to TENANT_ID; skipped when az is
      absent or not logged in.
-  4. Interactive (host-gated, last): workspace-cache device-code when
+  5. Interactive (host-gated, last): workspace-cache device-code when
      DATAVERSE_TOKEN_CACHE_DIR is set (ephemeral hosts); else a system-browser
      InteractiveBrowserCredential on a desktop host (beats the CA device-code
      block, and uses the browser not the MSAL broker so it sidesteps the macOS
@@ -50,6 +52,9 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
     TENANT_ID          — required
     CLIENT_ID          — optional, enables service principal auth
     CLIENT_SECRET      — optional, enables service principal auth
+    CLIENT_CERTIFICATE_PATH — optional, enables certificate auth (.pfx or .pem)
+    CLIENT_CERTIFICATE_PASSWORD — optional, decrypts a password-protected certificate
+    CLIENT_SEND_CERTIFICATE_CHAIN — optional, set to 1 for SNI authentication
     DATAVERSE_TOKEN_CACHE_DIR — optional; on ephemeral hosts (ChatGPT web / Codex
                          sandbox) where $HOME is wiped between turns, set this to a
                          workspace-relative dir (e.g. .dataverse) so the device-code
@@ -656,9 +661,9 @@ def _get_credential():
     Return a TokenCredential, creating one on first call.
 
     The credential is cached for the lifetime of the process. Resolution
-    order: service principal (terminal) -> silent chain (shared DataverseCLI
-    cache, then az CLI) -> single host-gated interactive tier, used only when
-    every silent tier is unavailable (issue #108).
+    order: service principal or certificate (terminal) -> silent chain (shared
+    DataverseCLI cache, then az CLI) -> single host-gated interactive tier,
+    used only when every silent tier is unavailable (issue #108).
     """
     global _credential
     if _credential is not None:
@@ -670,6 +675,8 @@ def _get_credential():
     dataverse_url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
     client_id = os.environ.get("CLIENT_ID")
     client_secret = os.environ.get("CLIENT_SECRET")
+    certificate_path = os.environ.get("CLIENT_CERTIFICATE_PATH")
+    certificate_password = os.environ.get("CLIENT_CERTIFICATE_PASSWORD")
 
     if not tenant_id or not dataverse_url:
         missing = [k for k, v in [("TENANT_ID", tenant_id), ("DATAVERSE_URL", dataverse_url)] if not v]
@@ -678,15 +685,14 @@ def _get_credential():
         sys.exit(1)
 
     try:
-        from azure.identity import AzureCliCredential, ClientSecretCredential
+        from azure.identity import (
+            AzureCliCredential,
+            CertificateCredential,
+            ClientSecretCredential,
+        )
     except ImportError:
         print("ERROR: azure-identity not installed. Run: pip install --upgrade azure-identity", flush=True)
         sys.exit(1)
-
-    # Warn if only one of CLIENT_ID / CLIENT_SECRET is set
-    if bool(client_id) != bool(client_secret):
-        print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for", flush=True)
-        print("  service principal auth. Falling back to shared cache / az / interactive.", flush=True)
 
     # Tier 1: Service principal. Terminal -- CI must fail fast, never fall to an
     # interactive prompt that would hang an unattended run.
@@ -698,12 +704,72 @@ def _get_credential():
         )
         return _credential
 
+    # Tier 2: Certificate-based service principal. Terminal for the same reason.
+    if client_id and certificate_path:
+        path = Path(certificate_path)
+        if not path.exists():
+            print(
+                f"ERROR: CLIENT_CERTIFICATE_PATH does not exist: {certificate_path}",
+                flush=True,
+            )
+            sys.exit(1)
+        if not path.is_file() or not os.access(path, os.R_OK):
+            print(
+                f"ERROR: CLIENT_CERTIFICATE_PATH is not a readable file: {certificate_path}",
+                flush=True,
+            )
+            sys.exit(1)
+
+        try:
+            _credential = CertificateCredential(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                certificate_path=str(path),
+                password=certificate_password,
+                send_certificate_chain=(
+                    os.environ.get("CLIENT_SEND_CERTIFICATE_CHAIN") == "1"
+                ),
+            )
+        except ValueError as exc:
+            print(
+                "ERROR: Could not load CLIENT_CERTIFICATE_PATH. Verify the "
+                "certificate format and CLIENT_CERTIFICATE_PASSWORD.",
+                flush=True,
+            )
+            print(f"  {exc}", flush=True)
+            sys.exit(1)
+        return _credential
+
+    if client_id and not client_secret and not certificate_path:
+        print(
+            "WARNING: CLIENT_ID is set without CLIENT_SECRET or "
+            "CLIENT_CERTIFICATE_PATH.",
+            flush=True,
+        )
+        print(
+            "  Falling back to shared cache / device code flow.",
+            flush=True,
+        )
+
+    if not client_id and (client_secret or certificate_path):
+        configured = (
+            "CLIENT_SECRET" if client_secret else "CLIENT_CERTIFICATE_PATH"
+        )
+        print(
+            f"WARNING: {configured} is set without CLIENT_ID.",
+            flush=True,
+        )
+        print(
+            "  Falling back to shared cache / device code flow.",
+            flush=True,
+        )
+
     # No service principal -> silent tiers, then a single host-gated interactive
     # tier used ONLY if every silent tier is unavailable (issue #108: never
     # strand, and never prompt when a silent path works).
     silent_tiers = []
 
-    # Tier 2: Shared DataverseCLI MSAL cache (populated by `dataverse auth
+    # Tier 3: Shared DataverseCLI MSAL cache (populated by `dataverse auth
     # create`; same client ID as the @microsoft/dataverse MCP proxy). Probed at
     # build time so it is only selected when it actually yields a token.
     shared = _build_shared_msal_cache()
@@ -711,7 +777,7 @@ def _get_credential():
         app, accounts = shared
         silent_tiers.append(("shared-cache", _MsalSharedCacheCredential(app, accounts)))
 
-    # Tier 3: Azure CLI (`az login`). Scoped to TENANT_ID; AzureCliCredential
+    # Tier 4: Azure CLI (`az login`). Scoped to TENANT_ID; AzureCliCredential
     # raises CredentialUnavailableError when az is absent / not logged in, so it
     # is free when unused and a high-value silent win when present.
     silent_tiers.append(("azure-cli", AzureCliCredential(tenant_id=tenant_id)))

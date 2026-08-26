@@ -14,6 +14,8 @@ Guards the #108 invariants:
   - the interactive tier is host-gated (workspace / browser / device-code);
   - a configured service principal is terminal (no interactive fallback -- CI
     must fail fast).
+  - a configured certificate credential is terminal and preserves password and
+    SNI options.
 """
 
 import os
@@ -47,6 +49,14 @@ class _FakeClientSecret:
 
     def get_token(self, *scopes, **kwargs):
         return _AccessToken("sp-token", 9999999999)
+
+
+class _FakeCertificate:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def get_token(self, *scopes, **kwargs):
+        return _AccessToken("certificate-token", 9999999999)
 
 
 class _FakeAzureCli:
@@ -109,6 +119,7 @@ def _install_azure_fakes():
     azure_identity = types.ModuleType("azure.identity")
     azure_identity.CredentialUnavailableError = _CredUnavailable
     azure_identity.ClientSecretCredential = _FakeClientSecret
+    azure_identity.CertificateCredential = _FakeCertificate
     azure_identity.AzureCliCredential = _FakeAzureCli
     azure_identity.InteractiveBrowserCredential = _FakeInteractiveBrowser
     azure_identity.DeviceCodeCredential = _FakeDeviceCode
@@ -340,6 +351,41 @@ class GetCredentialShape(_AuthTestBase):
             with mock.patch.dict(os.environ, env, clear=True):
                 cred = auth._get_credential()
         self.assertIsInstance(cred, _FakeClientSecret)  # terminal, no fallback wrapper
+
+    def test_certificate_is_terminal_and_preserves_options(self):
+        with tempfile.NamedTemporaryFile(suffix=".pfx") as certificate:
+            env = {
+                "TENANT_ID": "t",
+                "DATAVERSE_URL": "https://x.crm.dynamics.com",
+                "CLIENT_ID": "cid",
+                "CLIENT_CERTIFICATE_PATH": certificate.name,
+                "CLIENT_CERTIFICATE_PASSWORD": "cert-pass",
+                "CLIENT_SEND_CERTIFICATE_CHAIN": "1",
+            }
+            with mock.patch.object(auth, "load_env", lambda: None):
+                with mock.patch.dict(os.environ, env, clear=True):
+                    cred = auth._get_credential()
+
+        self.assertIsInstance(cred, _FakeCertificate)
+        self.assertEqual(cred.kwargs["certificate_path"], certificate.name)
+        self.assertEqual(cred.kwargs["password"], "cert-pass")
+        self.assertTrue(cred.kwargs["send_certificate_chain"])
+
+    def test_secret_without_client_id_warns_and_falls_back(self):
+        env = {
+            "TENANT_ID": "t",
+            "DATAVERSE_URL": "https://x.crm.dynamics.com",
+            "CLIENT_SECRET": "sec",
+        }
+        with mock.patch.object(auth, "load_env", lambda: None):
+            with mock.patch.object(auth, "_build_shared_msal_cache", lambda: None):
+                with mock.patch("builtins.print") as print_mock:
+                    with mock.patch.dict(os.environ, env, clear=True):
+                        cred = auth._get_credential()
+
+        self.assertIsInstance(cred, auth._FallbackCredential)
+        messages = " ".join(str(call.args[0]) for call in print_mock.call_args_list)
+        self.assertIn("CLIENT_SECRET is set without CLIENT_ID", messages)
 
     def test_no_sp_builds_fallback_with_azure_cli_tier(self):
         env = {"TENANT_ID": "t", "DATAVERSE_URL": "https://x.crm.dynamics.com"}
