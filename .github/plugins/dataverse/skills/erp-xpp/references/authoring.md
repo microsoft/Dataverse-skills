@@ -158,12 +158,13 @@ The class named by `<Class>` must exist, and every `<Method>` must match a publi
 dataverse api invoke \
   'erp:ContosoVerificationServiceGroup/ContosoVerificationService/VerifyDeployment' \
   --target erp --param '<parameter-name>=<value>' --json \
+  --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>" \
   --environment <dataverse-url>
 ```
 
 Use the exact X++ method parameter name, including a leading underscore when present (for example, `--param '_value=7'`). Pass repeated `--param name=value` values for primitive parameters; use `--body` or `--body-file` for structured contracts. Compare the returned value with the expected business result.
 
-Use `dataverse api list --target erp --service-group <group>` and `dataverse api describe erp:<group>/<service>/<operation>` only when the deployed names or contract are unknown. Discovery is not a prerequisite when the source metadata already provides them; if discovery stalls, stop it and use the fully qualified invocation rather than waiting indefinitely.
+Use `dataverse api list --target erp --service-group <group> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` and `dataverse api describe erp:<group>/<service>/<operation> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` only when the deployed names are unknown. Obtain parameter names and types from the X++ method or data-contract source; a fully qualified ERP `api describe` result may not include request parameters. Discovery is not a prerequisite when source metadata provides the names; if discovery stalls, stop it and use the fully qualified invocation rather than waiting indefinitely.
 
 ## ERP `ICustomAPI` action
 
@@ -268,8 +269,10 @@ An OData-facing entity is authored as `AxDataEntityView` metadata and must have 
 After compiling and deploying the model, use the entity-set name, not the X++ class or metadata file name:
 
 ```bash
-dataverse data describe --target erp --table <EntitySet>
-dataverse data query --target erp --table <EntitySet> --top 10
+dataverse data describe --target erp --table <EntitySet> \
+  --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
+dataverse data query --target erp --table <EntitySet> --top 10 \
+  --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
 ```
 
 `describe` proves the public entity is exposed and shows its exact properties and keys. A successful `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.

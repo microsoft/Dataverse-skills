@@ -47,7 +47,8 @@ Query the corresponding Dataverse async operation when the terminal output is in
 dataverse data get --target dataverse \
   --table asyncoperations --id <async-operation-id> \
   --select "asyncoperationid,statecode,statuscode,message,friendlymessage" \
-  --environment <dataverse-url> --json
+  --environment <dataverse-url> --json \
+  --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
 ```
 
 Dataverse async-operation terminal status codes used by the ERP package flow are:
@@ -90,7 +91,7 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | DB sync fails | Schema synchronization failed after or independently of deployment | Capture its separate operation ID, mode, and server message. Fix the schema/sync issue; do not redeploy unless package deployment itself failed. |
 | `api list` or `api describe` stalls | Broad ERP service metadata discovery is slow or unresponsive | Stop the discovery request. If names and parameters are known from source, invoke the fully qualified `erp:<group>/<service>/<operation>` directly. |
 | Custom service is absent from `api list` | `AxService`/`AxServiceGroup` metadata was not deployed, names differ, or activation is incomplete | Confirm exact metadata names and successful deployment; use fully qualified invocation when names are known, or retry discovery after propagation. |
-| Custom service invocation fails | Operation name or request contract does not match | Run `dataverse api describe` and invoke with the returned parameter shape. |
+| Custom service invocation fails | Operation name or request contract does not match | Run `dataverse api describe erp:<group>/<service>/<operation> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to verify the operation identity. Obtain the parameter contract from the X++ method or data-contract source before invoking. |
 | ERP MCP `/mcp` returns `403` | The calling application is not allow-listed for the ERP MCP endpoint | Add the approved client application through the supported environment administration flow, then reinitialize MCP. Do not bypass the allow list. |
 | `ICustomAPI` is absent from `api_find_actions` | Deployment/DB sync has not completed, the action menu item is missing or named differently, security access is missing, or metadata propagation is incomplete | Confirm successful compile/deploy/sync, exact `AxMenuItemAction` name and class target, privilege/duty/role coverage, and caller access; then reinitialize MCP and retry after propagation. |
 | `api_find_actions` reports skipped actions or metadata errors | Another or the requested action has invalid class/menu-item metadata | Record `SkippedActions` and the metadata message. Fix the named action's `ICustomAPI` class, attributes, menu item, or security metadata before claiming complete discovery. |

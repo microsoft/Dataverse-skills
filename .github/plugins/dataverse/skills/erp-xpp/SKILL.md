@@ -143,9 +143,9 @@ For “make this X++ change and deploy it”:
 8. Deploy with explicit build/release/DB-sync modes.
 9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md), then verify the deployed artifact through its actual surface:
    - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
-   - Custom service: when names are known, invoke `erp:<ServiceGroup>/<Service>/<Operation>` directly with `dataverse api invoke --target erp`; use `list`/`describe` only for discovery.
+   - Custom service: when names are known, invoke `erp:<ServiceGroup>/<Service>/<Operation>` directly with `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; use `list`/`describe` only for discovery.
    - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu item and contract, then `api_invoke_action` with JSON parameters and compare every returned property with the expected result.
-   - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`.
+   - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`, adding `--context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to each command.
 10. Report the package path, environment, async operation ID, terminal status, DB-sync mode, and artifact-specific verification result. Never claim runtime behavior that was not actually observed.
 
 ## Common mistakes — do not use these

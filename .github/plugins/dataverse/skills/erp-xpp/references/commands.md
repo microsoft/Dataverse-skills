@@ -91,7 +91,7 @@ Defaults are `build-type Full`, `release-type Dev`, and `db-sync None`. Specify 
 - Without `--package`, PAC enters solution mode and requires `.erp/xpp.json` under `--solution-root` (or current directory).
 - Solution mode finds each model's current ZIP under `<root>/bin`, orders model dependencies, deploys each package, and runs DB sync once at the end.
 - The command waits for the asynchronous deployment to reach a terminal state.
-- Always include `--logConsole --logFile <path>` for diagnosable deployments. An async operation ID proves only that orchestration started; require the successful terminal message and the checks in [`validation.md`](validation.md).
+- Always include `--logConsole --logFile <path>` for diagnosable deployments. An async operation ID proves only that orchestration started; require the successful terminal message and apply the validation guidance linked from the skill body.
 
 ## Standalone database synchronization
 

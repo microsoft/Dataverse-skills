@@ -44,7 +44,7 @@ pac package deploy --environment <dataverse-url> --package-type erp \
   --logConsole --logFile <deployment-log-path>
 ```
 
-Success means PAC exits zero and reports `Deploy completed successfully.` after polling. Capture the async operation ID and log path, then apply [`validation.md`](validation.md). Do not compile, redeploy other models, or DB-sync.
+Success means PAC exits zero and reports `Deploy completed successfully.` after polling. Capture the async operation ID and log path, then apply the validation guidance linked from the skill body. Do not compile, redeploy other models, or DB-sync.
 
 ## Deploy a multi-model solution
 
@@ -64,7 +64,7 @@ pac package deploy --environment <dataverse-url> --package-type erp \
   --logConsole --logFile <deployment-log-path>
 ```
 
-Do not manually loop deployments. PAC deliberately waits between packages for ERP orchestration to settle. Validate every planned model and the final deployed-model count as described in [`validation.md`](validation.md).
+Do not manually loop deployments. PAC deliberately waits between packages for ERP orchestration to settle. Validate every planned model and the final deployed-model count using the validation guidance linked from the skill body.
 
 ## DB-sync only
 
@@ -90,7 +90,7 @@ pac package db-sync --environment <dataverse-url> \
   --db-sync Incremental --argument-file <incremental-sync.json>
 ```
 
-Require the user to choose the mode. Show modules or argument-file path in the confirmation. PAC waits for the asynchronous operation; capture its ID and require `Database synchronization completed successfully.` Apply the DB-sync failure guidance in [`validation.md`](validation.md).
+Require the user to choose the mode. Show modules or argument-file path in the confirmation. PAC waits for the asynchronous operation; capture its ID and require `Database synchronization completed successfully.` Apply the DB-sync failure guidance linked from the skill body.
 
 ## Deploy and synchronize in one operation
 
@@ -128,14 +128,14 @@ Use integrated sync only when the user requests deployment plus synchronization.
 8. Run one final non-incremental compile with best-practice checks.
 9. Identify the ZIP created by that final run.
 10. Deploy with explicit `Full|Incremental|Delete`, `Dev|Release`, and DB-sync choices.
-11. Require PAC's successful terminal result and apply every applicable success gate in [`validation.md`](validation.md).
+11. Require PAC's successful terminal result and apply every applicable success gate from the validation guidance linked from the skill body.
 12. Verify each deployed artifact through its runtime surface:
     - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>` and observe the infolog.
-    - Custom service: when names are known from source, use `dataverse api invoke 'erp:<ServiceGroup>/<Service>/<Operation>' --target erp --param '<name>=<value>' --json`; reserve `list`/`describe` for unknown names or contracts.
+    - Custom service: when names are known from source, use `dataverse api invoke 'erp:<ServiceGroup>/<Service>/<Operation>' --target erp --param '<name>=<value>' --json --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; reserve `list`/`describe` for unknown deployed names and obtain parameter contracts from the X++ source.
     - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu-item name and input/output contract, then call `api_invoke_action` with a JSON-encoded `parameters` string. Require `isError: false` and validate representative positive, zero, negative, and boundary results.
-    - Public OData data entity: use `dataverse data describe --target erp --table <EntitySet>`, then `dataverse data query --target erp --table <EntitySet> --top <n>`.
+    - Public OData data entity: use `dataverse data describe --target erp --table <EntitySet> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`, then `dataverse data query --target erp --table <EntitySet> --top <n> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`.
 13. Persist source changes in the repository; do not commit generated `bin/`, compiler caches, or logs unless repository policy explicitly tracks them.
 
 ## Failure handling
 
-Use [`validation.md`](validation.md) for compile diagnostics, async-operation inspection, deployment and DB-sync success criteria, the validation error reference, and the required failure report.
+Use the validation guidance linked from the skill body for compile diagnostics, async-operation inspection, deployment and DB-sync success criteria, the validation error reference, and the required failure report.
