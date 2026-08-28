@@ -57,7 +57,9 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
-        "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)"
+        "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.6"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -110,7 +112,9 @@
       "custom_metadata": {
         "skill": "dv-data",
         "tool_routing": "SDK CreateMultiple (bulk >25; MCP caps 25, CLI is single-record)",
-        "trap": "per-record loop antipattern or MCP for a 500-record bulk"
+        "trap": "per-record loop antipattern or MCP for a 500-record bulk",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.1,4.7"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -159,7 +163,9 @@
       "custom_metadata": {
         "skill": "dv-data",
         "tool_routing": "SDK CreateMultiple to seed, then SDK UpdateMultiple for the bulk update (query-for-IDs via any managed read)",
-        "trap": "one-by-one update loop or create/upsert on the existing seeded records"
+        "trap": "one-by-one update loop or create/upsert on the existing seeded records",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.1,4.3"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**",
@@ -212,7 +218,9 @@
         "skill": "dv-data",
         "tool_routing": "SDK CreateMultiple to seed, then query-then-per-ID-delete via SDK client.records.delete or CLI data delete (no DeleteMultiple)",
         "nist_rmf": "Safe",
-        "trap": "invented bulk_delete/purge method or delete without confirmation"
+        "trap": "invented bulk_delete/purge method or delete without confirmation",
+        "spec_scenarios": "S05,S12",
+        "spec_criteria": "4.1,4.4"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**",
@@ -256,7 +264,9 @@
       "custom_metadata": {
         "skill": "dv-data",
         "tool_routing": "MCP or Dataverse CLI or SDK (small multi-table write with FK resolution)",
-        "scenario": "S02 Support Ticket -- seed related data across tables"
+        "scenario": "S02 Support Ticket -- seed related data across tables",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.10,4.11"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -295,6 +305,139 @@
             "filter": "activitytypecode eq 'phonecall' and startswith(regardingobjectid_account/name,'EvalSys ')",
             "at_least": 3,
             "description": "at least 3 phone calls logged against an EvalSys company (read via activitypointer: the phonecalls entity set returns HTTP 500 when a filter walks regardingobjectid_account to a non-key attribute)"
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_006_csv_bulk_import",
+      "prompt": "Create a CSV file in the workspace with 40 companies named 'EvalCsv Company 001' through 'EvalCsv Company 040', each with accountnumber 'ECSV-001' through 'ECSV-040' and city alternating between Seattle and Redmond. Import all 40 into the live Dataverse account table efficiently, and report the created count.",
+      "expected_response": "The agent writes a valid CSV, parses it with Python, maps name/accountnumber/address1_city, and sends the records through one SDK bulk create list so Dataverse uses CreateMultiple. It does not issue 40 individual calls or use raw HTTP.",
+      "category": "data",
+      "description": "S05 CSV bulk import with type/column mapping.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "csv-import"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "Python SDK CreateMultiple from parsed CSV",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.7"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: All 40 CSV rows were created as live account records with exact name, accountnumber, and alternating city values.",
+        "PRIORITY_1: The agent uses Python CSV parsing and one SDK list passed to client.records.create so the SDK uses CreateMultiple.",
+        "PRIORITY_1: A per-record create loop, MCP for all 40, or raw urllib/requests is not acceptable.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "account",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(accountnumber,'ECSV-')",
+            "equals": 40
+          },
+          {
+            "expect": "field_values",
+            "filter": "accountnumber eq 'ECSV-001'",
+            "fields": {
+              "name": "EvalCsv Company 001",
+              "address1_city": "Seattle"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_007_dataframe_writeback",
+      "prompt": "Use pandas to create 30 Dataverse contacts with last name 'EvalDf 001' through 'EvalDf 030' and email 'evaldf001@example.test' through 'evaldf030@example.test'. Write the DataFrame in bulk, then update all 30 through the DataFrame API so job title becomes 'DataFrame Pilot'.",
+      "expected_response": "The agent constructs a DataFrame, uses client.dataframe.create for bulk creation and client.dataframe.update for write-back, preserves returned IDs for update, and does not call deprecated dataframe.get or use per-record HTTP.",
+      "category": "data",
+      "description": "S05/S06 DataFrame create and update workflow.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "dataframe-writeback"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "SDK client.dataframe create/update",
+        "spec_scenarios": "S05,S06",
+        "spec_criteria": "4.7"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: 30 contacts exist and all have jobtitle 'DataFrame Pilot'.",
+        "PRIORITY_1: The agent uses client.dataframe.create and client.dataframe.update with real created IDs.",
+        "PRIORITY_1: It does not use deprecated client.dataframe.get or a one-request-per-row loop.",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "contact",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(emailaddress1,'evaldf') and endswith(emailaddress1,'@example.test')",
+            "equals": 30
+          },
+          {
+            "expect": "row_count",
+            "filter": "startswith(emailaddress1,'evaldf') and endswith(emailaddress1,'@example.test') and jobtitle eq 'DataFrame Pilot'",
+            "equals": 30
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_008_associate_contact",
+      "prompt": "In the live Dataverse org, create account 'EvalAssoc Contoso' and contact Avery Stone (avery.stone.evalassoc@example.test), then associate Avery as a contact of that account using the account/contact relationship. Use the real IDs returned by creation.",
+      "expected_response": "The agent performs two managed creates, captures IDs, then uses the Dataverse CLI associate command or SDK-supported lookup update with the correct relationship/navigation property. It does not invent GUIDs or raw HTTP.",
+      "category": "data",
+      "description": "S02/S07 single-record association using returned IDs.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "associate"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "tool_routing": "Dataverse CLI associate or SDK lookup update",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.3,4.10"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: Avery Stone and EvalAssoc Contoso were created and the contact is linked to that exact account.",
+        "PRIORITY_1: The relationship uses the real IDs returned by create calls; no GUID is fabricated or hardcoded.",
+        "PRIORITY_1: The agent uses a managed associate/lookup surface and not raw urllib/requests.",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "contact",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "emailaddress1 eq 'avery.stone.evalassoc@example.test' and parentcustomerid_account/name eq 'EvalAssoc Contoso'",
+            "equals": 1
+          },
+          {
+            "expect": "lookup_resolves",
+            "filter": "emailaddress1 eq 'avery.stone.evalassoc@example.test'",
+            "lookup": "parentcustomerid"
           }
         ]
       }

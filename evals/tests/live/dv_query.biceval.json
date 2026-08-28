@@ -1,0 +1,311 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Query",
+  "description": "Live read-only coverage for dv-query across discovery, filtering, counts, SQL aggregation, joins, formatted values, paging, and DataFrame export. Tests use out-of-box administrative tables that always contain data in a test environment, so the lane does not depend on another skill seeding fixtures and never mutates the environment.",
+  "enabled_evaluators": [
+    {
+      "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
+      "passing_score": 3,
+      "priority": 1,
+      "settings": {
+        "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"
+      }
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/correctness.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty",
+      "passing_score": 3,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty",
+      "passing_score": 1,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty",
+      "passing_score": 1,
+      "priority": 1
+    },
+    {
+      "name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty",
+      "passing_score": 1,
+      "priority": 1
+    }
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent achieved the goal on its first approach without fumbling, error-recovery pivots, or retries that indicate the skill should have guided better"
+  ],
+  "tests": [
+    {
+      "test_id": "query_001_environment_summary",
+      "prompt": "Use the live Dataverse environment to tell me the organization name, organization ID, and current Dataverse version. Keep the output readable and do not change anything.",
+      "expected_response": "The agent uses a managed read surface against the organization table, selects only the requested fields, and reports the live values. It does not rely on local configuration as the source of truth and does not mutate the org.",
+      "category": "query",
+      "description": "S01/S06 connectivity and focused live read against the singleton organization row.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "filtered-read"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S01,S06",
+        "spec_criteria": "1.1,4.2,4.6"
+      },
+      "pr_file_filter": [
+        "**/skills/dv-query/**",
+        "**/skills/dv-connect/**"
+      ],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The agent queried the live organization row and returned an organization name, organization ID, and version from the tool result.",
+        "PRIORITY_1: The agent used a managed Dataverse read surface (MCP, Dataverse CLI, or Python SDK) and selected only the requested columns.",
+        "PRIORITY_1: The response is readable and does not expose credentials or tokens.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "organization",
+        "checks": [
+          {
+            "expect": "record_exists",
+            "filter": "name ne null",
+            "fields": {
+              "name": { "not_null": true },
+              "organizationid": { "type": "guid" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_002_active_users_formatted",
+      "prompt": "Show up to 20 enabled interactive users in this Dataverse environment. Include each person's full name, domain name, and the display label for access mode instead of a raw option-set number. Do not modify users or roles.",
+      "expected_response": "The agent filters systemuser to enabled interactive users, selects only needed columns, requests formatted-value annotations for accessmode, and renders names rather than GUID-heavy output.",
+      "category": "query",
+      "description": "S06/S07 filtered read plus formatted option-set display.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "formatted-values"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S06,S07",
+        "spec_criteria": "4.2,4.6,4.10"
+      },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The tool result contains enabled interactive system users from the live org, capped at 20.",
+        "PRIORITY_1: The query filters isdisabled=false and interactive accessmode, and requests the formatted display value for accessmode.",
+        "PRIORITY_1: The user-facing result shows names and labels, not a list of unexplained GUIDs or raw choice integers.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "systemuser",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "isdisabled eq false and accessmode eq 0",
+            "at_least": 1
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_003_solution_aggregate",
+      "prompt": "Analyze the solutions in this live Dataverse environment. Give me the number of managed and unmanaged solutions and sort the groups by count, using a server-side aggregate rather than downloading every solution row.",
+      "expected_response": "The agent uses client.query.sql with COUNT and GROUP BY (or equivalent FetchXML aggregation), runs the aggregate server-side, and reports both group labels and counts.",
+      "category": "query",
+      "description": "S05/S06 server-side aggregation using a stable system table.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "aggregate"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S05,S06",
+        "spec_criteria": "4.2,4.6"
+      },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The result reports solution counts grouped by managed versus unmanaged state from the live org.",
+        "PRIORITY_1: The aggregation executes server-side with COUNT plus GROUP BY through client.query.sql or aggregate FetchXML; downloading all rows and counting in Python is not acceptable.",
+        "PRIORITY_1: The query does not use unsupported SELECT * or HAVING syntax.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "solution",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "uniquename ne null",
+            "at_least": 1
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_004_solution_publisher_join",
+      "prompt": "From the live environment, list the 15 newest solutions with each solution's unique name, version, publisher unique name, and publisher customization prefix. Use a server-side join and keep the output compact.",
+      "expected_response": "The agent uses the Dataverse SQL subset or FetchXML link-entity to join solution and publisher server-side, applies TOP 15 and ordering, and returns only the four requested values.",
+      "category": "query",
+      "description": "S05/S06 cross-table server-side join.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "join"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S05,S06",
+        "spec_criteria": "4.2,4.6"
+      },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The live result contains solution values joined to publisher unique name and customization prefix.",
+        "PRIORITY_1: The agent uses a server-side INNER or LEFT JOIN via client.query.sql, or FetchXML link-entity; a client-side nested loop is not acceptable.",
+        "PRIORITY_1: The query limits to 15 rows, orders newest first, and selects only requested fields.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "publisher",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "uniquename ne null",
+            "at_least": 1
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_005_dataframe_export",
+      "prompt": "Pull the active solutions from the live Dataverse environment into a pandas DataFrame with unique name, friendly name, version, and managed status. Save the result as active-solutions.csv and tell me the row and column count. Do not query local copies.",
+      "expected_response": "The agent uses QueryBuilder with select and execute().to_dataframe(), writes the CSV in the workspace, and reports DataFrame shape. It queries Dataverse live and avoids deprecated QueryBuilder.to_dataframe().",
+      "category": "query",
+      "description": "S05/S06 notebook/DataFrame bridge and export.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "dataframe"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S05,S06",
+        "spec_criteria": "4.6"
+      },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: A non-empty active-solutions.csv was created from the live Dataverse query and the response reports its row and column count.",
+        "PRIORITY_1: The implementation selects only uniquename, friendlyname, version, and ismanaged, then uses execute().to_dataframe().",
+        "PRIORITY_1: NOT_CONTAINS: QueryBuilder.to_dataframe()",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "solution",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "isvisible eq true",
+            "at_least": 1
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_006_stream_users",
+      "prompt": "Stream all enabled Dataverse users page by page without loading the full set into memory. Print only full name and domain name and tell me how many pages and users were read.",
+      "expected_response": "The agent uses records.list_pages or QueryBuilder.execute_pages with a small page size, selects only fullname and domainname, iterates page then record, and reports totals from the live tool result.",
+      "category": "query",
+      "description": "S06 memory-efficient paging over a live table.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Query",
+        "Skill": "dv-query",
+        "Type": "paging"
+      },
+      "custom_metadata": {
+        "skill": "dv-query",
+        "spec_scenarios": "S06",
+        "spec_criteria": "4.2,4.6"
+      },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The agent executed a live paged query and reports both page count and user count from the iteration.",
+        "PRIORITY_1: It uses records.list_pages or QueryBuilder.execute_pages, not records.list that accumulates every page in memory.",
+        "PRIORITY_1: It selects only fullname and domainname and filters disabled users out.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ],
+      "verify": {
+        "entity": "systemuser",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "isdisabled eq false",
+            "at_least": 1
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "query_007_cross_table_search",
+      "prompt": "Search the live Dataverse environment for records containing the text 'Eval' across account, contact, and phone call tables. Report results grouped by table, including an explicit zero count for any table with no matches. This is read-only.",
+      "expected_response": "The agent uses managed queries against all three requested tables, applies an appropriate text predicate to human-readable columns, and returns a compact per-table result/count summary without inventing matches or modifying data.",
+      "category": "query",
+      "description": "S06 cross-table text search with explicit empty-table reporting.",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "Query", "Skill": "dv-query", "Type": "cross-table-search" },
+      "custom_metadata": { "skill": "dv-query", "spec_scenarios": "S06", "spec_criteria": "4.5,4.6" },
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The agent executed read-only searches against account, contact, and phone call and reported a result or explicit zero count for each table.",
+        "PRIORITY_1: It searches human-readable text columns with managed Dataverse query surfaces and does not use raw HTTP or fabricate cross-table joins.",
+        "PRIORITY_1: The output is grouped by table and distinguishes no matches from a query failure.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "query_008_notebook_connection_snippet",
+      "prompt": "Do not execute anything. Give me a notebook-ready Python snippet that connects to the currently configured Dataverse environment and loads the five newest active accounts into a pandas DataFrame with name and account number. Do not put credentials or tokens in the notebook.",
+      "expected_response": "The agent provides a self-contained Python notebook cell using the supported SDK authentication helper or DefaultAzureCredential, QueryBuilder with a five-row order/limit, and execute().to_dataframe(). Secrets remain outside source and no live query runs.",
+      "category": "query",
+      "description": "S06 notebook-ready, secret-free Dataverse query snippet.",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "Query", "Skill": "dv-query", "Type": "notebook-snippet" },
+      "custom_metadata": { "skill": "dv-query", "spec_scenarios": "S06", "spec_criteria": "4.9" },
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-connect/**"],
+      "assertions": [
+        "PRIORITY_1: The response contains one runnable Python notebook cell using the supported Dataverse SDK and a credential chain or existing auth helper, with no embedded secret or token.",
+        "PRIORITY_1: The query filters active accounts, orders newest first, limits to five, selects name and accountnumber, and converts the executed result with execute().to_dataframe().",
+        "PRIORITY_1: SAFETY: No query or authentication flow executes because the prompt explicitly requests a snippet only.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    }
+  ]
+}
