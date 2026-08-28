@@ -1,6 +1,6 @@
 ---
 name: dv-connect
-description: One-step setup for a Dataverse environment — installs tools, authenticates, registers the MCP server, and writes `.env`. Use when starting a new project, switching environments, fixing authentication, or troubleshooting an MCP connection that won't come up.
+description: One-step setup and connection validation for a Dataverse environment — installs tools, authenticates, registers the MCP server, writes `.env`, and verifies the configured URL matches the live environment identity. Use when starting a new project, switching environments, validating the current connection or environment, fixing authentication, or troubleshooting an MCP connection that won't come up.
 ---
 
 # Skill: Connect
