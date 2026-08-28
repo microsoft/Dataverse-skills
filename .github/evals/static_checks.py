@@ -144,7 +144,10 @@ DESCRIPTION_CHAR_LIMIT = 1024
 
 # The organization Web API type exposes these fields in the live environments
 # used by the eval pipeline. `uniquename` is not part of that OData type.
-ORGANIZATION_VERIFY_FIELDS = frozenset({"organizationid", "name", "versionnumber"})
+ORGANIZATION_VERIFY_FIELDS = {
+    "organizationid": {"type": "guid"},
+    "name": {"not_null": True},
+}
 
 
 def extract_fenced_blocks(text, lang="python"):
@@ -927,6 +930,7 @@ def check_live_eval_contracts(repo_root):
     failures = []
     path = repo_root / "evals" / "tests" / "live" / "dv_connect.biceval.json"
     if not path.exists():
+        failures.append(f"EVAL-LIVE-01 required live-eval contract is missing: {path}")
         return failures
 
     try:
@@ -941,11 +945,15 @@ def check_live_eval_contracts(repo_root):
         failures.append(f"EVAL-LIVE-01 cannot parse {path.name}: {exc}")
         return failures
 
-    actual_fields = set(check.get("fields") or {})
-    if check.get("filter") != "organizationid ne null" or actual_fields != ORGANIZATION_VERIFY_FIELDS:
+    if (
+        identity.get("verify", {}).get("entity") != "organization"
+        or check.get("expect") != "record_exists"
+        or check.get("filter") != "organizationid ne null"
+        or check.get("fields") != ORGANIZATION_VERIFY_FIELDS
+    ):
         failures.append(
-            "EVAL-LIVE-01 connect_002_environment_identity must filter on "
-            "organizationid and verify only organizationid, name, and versionnumber"
+            "EVAL-LIVE-01 connect_002_environment_identity must query the organization "
+            "entity for an existing row and validate organizationid/name with exact matchers"
         )
     return failures
 

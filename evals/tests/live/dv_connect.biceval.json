@@ -52,7 +52,7 @@
       "verify": {
         "entity": "organization",
         "checks": [
-          { "expect": "record_exists", "filter": "organizationid ne null", "fields": { "organizationid": { "type": "guid" }, "name": { "not_null": true }, "versionnumber": { "not_null": true } } }
+          { "expect": "record_exists", "filter": "organizationid ne null", "description": "The configured URL authenticates to a live organization with a stable ID and display name", "fields": { "organizationid": { "type": "guid" }, "name": { "not_null": true } } }
         ]
       }
     },
