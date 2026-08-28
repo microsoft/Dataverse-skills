@@ -98,6 +98,11 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-13 Live Eval Contract Accuracy
+    Checks deterministic live-eval contracts against known Dataverse Web API
+    schema constraints.
+    EVAL-LIVE-01  dv-connect organization identity check uses supported fields
 """
 
 import argparse
@@ -136,6 +141,10 @@ NO_REFERENCES_NUDGE_EXEMPT = {"dv-overview"}
 
 # Anthropic's Skills spec hard limit on the description field (per docs.claude.com).
 DESCRIPTION_CHAR_LIMIT = 1024
+
+# The organization Web API type exposes these fields in the live environments
+# used by the eval pipeline. `uniquename` is not part of that OData type.
+ORGANIZATION_VERIFY_FIELDS = frozenset({"organizationid", "name", "versionnumber"})
 
 
 def extract_fenced_blocks(text, lang="python"):
@@ -910,6 +919,38 @@ def check_cli_attribution(name, text):
 
 
 # ---------------------------------------------------------------------------
+# CAT-13  Live Eval Contract Accuracy
+# ---------------------------------------------------------------------------
+
+def check_live_eval_contracts(repo_root):
+    """EVAL-LIVE-01: keep deterministic live checks on supported Web API fields."""
+    failures = []
+    path = repo_root / "evals" / "tests" / "live" / "dv_connect.biceval.json"
+    if not path.exists():
+        return failures
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        identity = next(
+            test
+            for test in document["tests"]
+            if test["test_id"] == "connect_002_environment_identity"
+        )
+        check = identity["verify"]["checks"][0]
+    except (KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"EVAL-LIVE-01 cannot parse {path.name}: {exc}")
+        return failures
+
+    actual_fields = set(check.get("fields") or {})
+    if check.get("filter") != "organizationid ne null" or actual_fields != ORGANIZATION_VERIFY_FIELDS:
+        failures.append(
+            "EVAL-LIVE-01 connect_002_environment_identity must filter on "
+            "organizationid and verify only organizationid, name, and versionnumber"
+        )
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -973,6 +1014,7 @@ def main():
 
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
+    all_failures.extend(check_live_eval_contracts(repo_root))
 
     if all_failures:
         # Group output by category prefix for readability
@@ -992,7 +1034,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"12 categories checked"
+            f"13 categories checked"
         )
 
 
