@@ -29,13 +29,27 @@ All applicable checks must pass:
 3. The operation reaches `Succeeded`; PAC prints `Deploy completed successfully.`
 4. In solution mode, every planned model deploys and PAC prints the expected deployed-model count.
 5. If deployment includes DB sync, PAC also prints `Database synchronization completed successfully.`
-6. The deployed artifact passes its runtime check:
+6. Before any ERP CLI or MCP runtime check, the selected Dataverse CLI profile's environment URL and linked `erpUrl` match the confirmed PAC target. For MCP, direct HTTP targets `<erpUrl>/mcp`, or the stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`.
+7. The deployed artifact passes its runtime check:
    - Runnable class: run its `SysClassRunner` URL and observe the expected infolog or behavior.
-   - Custom service: directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare the returned value with the expected result.
-   - `ICustomAPI` action: find it through ERP MCP `api_find_actions`, validate the action menu-item identity and contract, invoke it through `api_invoke_action`, and compare its `Result` properties with expected values.
+   - Custom service: after side-effect classification and approval, directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare its response and expected mutations with observed results.
+   - `ICustomAPI` action: find it through ERP MCP `api_find_actions`, validate the action menu-item identity and contract, invoke only approved inputs through `api_invoke_action`, and compare its `Result` properties and expected mutations with observed results.
    - Public OData data entity: `describe` the entity set, then run a bounded query.
+8. Security acceptance for an `ICustomAPI` succeeds through a fresh MCP session whose caller is proven by an MCP-originated identity/current-session check to be a non-administrator test user assigned the intended custom role. Administrator execution or CLI identity alone is not acceptance evidence for the privilege/duty/role chain.
 
 A ZIP upload, package-row creation, async operation ID, or HTTP success is only an intermediate milestone. None independently proves successful deployment.
+
+## Runtime verification safety gates
+
+Before executing a custom service or action:
+
+- Inspect its X++ implementation and contract; classify it as side-effect-free, idempotent mutation, or non-idempotent mutation.
+- Use non-production and isolated test data by default.
+- Record the exact input, expected response, and expected business-data or downstream mutations in the confirmation.
+- Stop for confirmation if those runtime effects were not already approved.
+- Run a representative matrix only for proven side-effect-free logic. For non-idempotent logic, run one minimal approved case and verify the resulting state.
+- Validate custom security through a fresh, transport-specific MCP session authenticated as a non-administrator user assigned the intended role. Prove the caller through MCP itself; if that is unavailable, use another runtime surface that can prove identity and report MCP security acceptance as unverified. Use System Administrator only as an optional control.
+- Run an optional negative check only with a disposable test user and an independently guaranteed restoration path. Capture the exact role assignment, restore it even if invocation fails, verify restoration, and skip the check when those guarantees are unavailable.
 
 ## Investigate a failed or interrupted operation
 
@@ -78,6 +92,8 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | --- | --- | --- |
 | `tool xpp`, `compile`, or `db-sync` is missing | PAC CLI is older than the ERP command surface | Update the PAC CLI .NET tool through **dv-connect**, then recheck `pac package help` and `pac tool xpp help`. |
 | Target has no linked ERP URL/version | Environment is not ERP-linked or the wrong auth profile is active | Stop; select the confirmed Dataverse environment and rerun `pac org who`. |
+| ERP runtime target differs from PAC target | The active Dataverse CLI profile points to another environment | Stop; run `dataverse auth who` and `dataverse org who --json`, select the correct profile with `dataverse auth select --name <profile-name>`, and repeat both checks before any invocation or query. |
+| ERP MCP target differs from linked `erpUrl` | The existing MCP connection was configured for another ERP endpoint | Stop; for direct HTTP use the confirmed `<erpUrl>/mcp`; for stdio pass the confirmed base `<erpUrl>` to the proxy and verify its effective `/mcp` endpoint. Reconnect or reinitialize before discovery or invocation. |
 | SDK not found or version mismatch | Target application version is not installed locally, or SDK selection is ambiguous | Run `pac tool xpp list`; install the target version or pass `--app-version`. |
 | Label stage fails with `XPPLC2010` | The model has no valid label resource and PAC treated LabelC output as an error | Add valid `AxLabelFile` metadata and label text; do not suppress the stage. |
 | X++ compile fails | Source/metadata diagnostic from `xppc` | Use the emitted file/line and compiler log, fix the first causal error, and rerun compile. |
@@ -97,7 +113,8 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | `api_find_actions` reports skipped actions or metadata errors | Another or the requested action has invalid class/menu-item metadata | Record `SkippedActions` and the metadata message. Fix the named action's `ICustomAPI` class, attributes, menu item, or security metadata before claiming complete discovery. |
 | `api_invoke_action` rejects parameters | `parameters` is not a JSON-encoded string, data-member names differ, or JSON types do not match the discovered contract | Use the exact input schema from `api_find_actions`; encode it as a JSON string and preserve integer, Boolean, date, and enum types. |
 | `api_invoke_action` returns `isError: true` | The action ran unsuccessfully or ERP MCP rejected execution | Capture the MCP activity ID and returned error, verify company context and security, and fix the X++ or request contract. Do not treat JSON-RPC HTTP success as action success. |
-| `ICustomAPI` returns an unexpected value | Business logic or parameter mapping is incorrect | Compare the discovered contract and response properties with source, then test representative positive, zero, negative, and boundary inputs. |
+| `ICustomAPI` returns an unexpected value | Business logic or parameter mapping is incorrect | Compare the discovered contract and response properties with source, then rerun only an approved input appropriate to the operation's side-effect classification. |
+| Action succeeds only as System Administrator | The custom privilege/duty/role chain may be missing, incorrect, not assigned, or the MCP session still uses administrator credentials | Establish a fresh transport-specific MCP session as a non-administrator user assigned the intended role and prove caller identity through MCP before invoking. Treat administrator execution as deployment diagnosis, not security acceptance. |
 | Public entity is absent from `data describe` | Entity is not public, entity-set name is wrong, deployment failed, or required DB sync did not complete | Check `<IsPublic>Yes</IsPublic>`, the exact entity-set name, deployment status, and DB-sync result. |
 | Runnable class URL does not execute | Class name differs, `main(Args)` is not public static, or the deployed package lacks the class | Verify metadata/class names and current package contents, then recompile and redeploy if needed. |
 
@@ -112,5 +129,7 @@ Report:
 - Whether DB sync started, its separate operation ID, and its result.
 - Artifact verification command/URL and observed response.
 - For `ICustomAPI`, the discovered action menu-item name, contract, test inputs/outputs, MCP `isError` value, and activity ID on failure.
+- Selected Dataverse CLI identity/profile URL, linked ERP URL, ERP MCP server URL, and MCP caller used for runtime verification.
+- Runtime side-effect classification, approved input, expected mutations, observed state, and the non-administrator role used for security acceptance. If a negative role test ran, include restoration verification.
 
 Do not include access tokens, credentials, or raw authentication headers.

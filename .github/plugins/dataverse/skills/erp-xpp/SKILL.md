@@ -12,6 +12,8 @@ description: Finance and Operations X++ development lifecycle — scaffold model
 > 3. **Never assume Full DB sync.** Although standalone `pac package db-sync` defaults to `Full`, require the user to choose `Full`, `Module`, or `Incremental` when the request is ambiguous.
 > 4. **Do not call deployment successful until PAC reaches a successful terminal state.** Preserve and report the async operation ID on failure.
 > 5. **Do not overwrite existing models or source files.** Inspect `.erp/xpp.json`, descriptors, and target metadata paths before scaffolding or editing.
+> 6. **Pin every runtime surface before ERP verification.** PAC and the Dataverse CLI have separate active profiles. Before any `dataverse ... --target erp` check, require `dataverse auth who` and `dataverse org who --json` to match the confirmed Dataverse and linked ERP URLs. Validate ERP MCP according to its transport: direct HTTP must target `<erp-url>/mcp`; an stdio proxy must receive the base `<erp-url>` and route effectively to `/mcp`. Profile selection does not retarget an existing MCP connection.
+> 7. **Treat service and action verification as possible data mutation.** Inspect the X++ implementation first, disclose exact test inputs and expected mutations, and obtain confirmation when runtime execution was not already approved. Do not apply a generic test matrix to non-idempotent operations.
 
 PAC CLI is the managed surface for the X++ lifecycle. Do not replace these commands with raw Dataverse APIs, direct calls to the ERP sidecar, LCS upload automation, or hand-written compiler invocations.
 
@@ -57,7 +59,21 @@ pac org who --environment <dataverse-url>
 
 The output must identify the confirmed Dataverse environment and include a linked ERP URL/version. Do not substitute the ERP URL for `--environment`; PAC accepts the Dataverse URL and resolves ERP linkage.
 
-5. Before a first SDK install, explain that it downloads roughly 4 GB and expands to roughly 16 GB under `%LOCALAPPDATA%\Microsoft\Dynamics365\<version>\PackagesLocalDirectory`.
+5. Before runtime verification through the Dataverse CLI or ERP MCP, run:
+
+```bash
+dataverse auth who
+dataverse org who --json \
+  --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
+```
+
+Require the selected CLI profile's environment URL and returned `erpUrl` to match the PAC target confirmed above. If they do not, run `dataverse auth select --name <profile-name>`, then repeat both checks. Pass `--environment <dataverse-url>` on commands that support it, but never treat that option as a substitute for selecting the correct profile; some ERP data commands have no environment override.
+
+For ERP MCP verification, inspect the active server configuration. Require direct HTTP to use the confirmed `<erp-url>/mcp`, or require an stdio proxy such as `dataverse mcp` to receive the confirmed base `<erp-url>` and use its effective `/mcp` endpoint. If it differs, stop and reconnect or reinitialize the matching ERP MCP server before discovery or invocation.
+
+For security acceptance, establish a fresh transport-specific MCP session as the intended test user and verify the caller through an MCP-originated identity/current-session check before invoking the custom action. `dataverse auth who` proves only the CLI identity. If the MCP surface cannot prove its caller, do not claim security acceptance through that session; use a verification surface that can.
+
+6. Before a first SDK install, explain that it downloads roughly 4 GB and expands to roughly 16 GB under `%LOCALAPPDATA%\Microsoft\Dynamics365\<version>\PackagesLocalDirectory`.
 
 ## Command quick reference
 
@@ -141,11 +157,12 @@ For “make this X++ change and deploy it”:
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
 8. Deploy with explicit build/release/DB-sync modes.
-9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md), then verify the deployed artifact through its actual surface:
+9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md), pin the Dataverse CLI profile and transport-specific ERP MCP target to the confirmed environment, then verify the deployed artifact through its actual surface:
    - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
-   - Custom service: when names are known, invoke `erp:<ServiceGroup>/<Service>/<Operation>` directly with `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; use `list`/`describe` only for discovery.
-   - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu item and contract, then `api_invoke_action` with JSON parameters and compare every returned property with the expected result.
+   - Custom service: inspect the X++ implementation for side effects before invoking `erp:<ServiceGroup>/<Service>/<Operation>` with `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; use `list`/`describe` only for discovery.
+   - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu item and contract, then invoke only approved inputs and compare every returned property and expected mutation with the observed result.
    - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`, adding `--context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to each command.
+   - Security acceptance: invoke an `ICustomAPI` as a non-administrator test user assigned the intended custom role. Administrator execution is diagnostic only and does not validate the privilege/duty/role chain.
 10. Report the package path, environment, async operation ID, terminal status, DB-sync mode, and artifact-specific verification result. Never claim runtime behavior that was not actually observed.
 
 ## Common mistakes — do not use these

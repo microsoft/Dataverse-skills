@@ -109,6 +109,18 @@ The ERP host comes from `pac org who --environment <dataverse-url>`. Do not gues
 
 Opening the URL is the execution step. Deployment alone does not prove the class ran or that its infolog message appeared.
 
+## Runtime invocation safety
+
+Before invoking any custom service or `ICustomAPI`:
+
+1. Pin the Dataverse CLI profile as required by the skill preflight and verify that its Dataverse URL and linked `erpUrl` match the confirmed PAC target. For MCP, verify direct HTTP against `<erpUrl>/mcp`, or verify that an stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`; reconnect or reinitialize it if necessary.
+2. Inspect the X++ implementation and request contract. Classify execution as side-effect-free, idempotent mutation, or non-idempotent mutation.
+3. Default mutation tests to a non-production environment and isolated test data. State the exact input, expected response, and expected record, transaction, batch, or downstream effects before execution.
+4. If runtime mutation and its inputs were not included in the user's confirmed operation, stop and obtain confirmation.
+5. For a non-idempotent operation, run one minimal approved case and verify the resulting state. Do not automatically run positive, zero, negative, or boundary matrices.
+
+Discovery calls do not prove runtime behavior. Invocation calls execute X++ business logic and must not be treated as read-only probes.
+
 ## ERP custom service
 
 An ERP custom service requires all of the following:
@@ -229,7 +241,15 @@ The action menu-item name is the external action identity:
 </AxMenuItemAction>
 ```
 
-Create a privilege whose entry point has `<ObjectName>ContosoSubtractCustomAPI</ObjectName>` and `<ObjectType>MenuItemAction</ObjectType>`, reference that privilege from a duty, and reference the duty from a role. Missing security metadata can produce best-practice warnings or make the action unavailable to callers. Ensure the invoking user has a role that grants the action; system-administrator access is sufficient for development verification.
+Create a privilege whose entry point has `<ObjectName>ContosoSubtractCustomAPI</ObjectName>` and `<ObjectType>MenuItemAction</ObjectType>`, reference that privilege from a duty, and reference the duty from a role. Missing security metadata can produce best-practice warnings or make the action unavailable to callers.
+
+The required security acceptance test uses a non-administrator test user assigned the intended custom role. Successful execution as System Administrator is only an optional deployment diagnostic because it can bypass a broken privilege -> duty -> role chain.
+
+Before acceptance, authenticate the Dataverse CLI as that test user and verify its identity and target with `dataverse auth who` and `dataverse org who --json`. Then establish a fresh transport-specific MCP authentication/session as the test user: direct HTTP uses its host-managed sign-in, while an stdio proxy must be restarted after selecting the intended shared-cache identity. Do not reuse an administrator-authenticated MCP session.
+
+Verify the caller through an MCP-originated identity or current-session check before invoking the action. CLI identity alone is insufficient. If the MCP server exposes no way to prove the caller, report security acceptance as unverified and use another authenticated runtime surface that can prove the non-administrator identity.
+
+A negative role test is optional and may use only a disposable non-administrator test user. Before removing the role, record the exact assignment and establish a restoration path that does not depend on the test user. Restore the assignment immediately even if invocation fails, verify restoration, and do not report completion while access remains altered. Skip the negative test when guaranteed restoration is unavailable.
 
 Compile and deploy with the normal PAC X++ flow. Run Module DB sync for the changed model when the deployment requires metadata synchronization:
 
@@ -250,7 +270,7 @@ Verify the action through the ERP MCP server at the linked ERP host's `/mcp` end
 
 1. Call `api_find_actions` with `{"searchTerm":"ContosoSubtractCustomAPI"}`.
 2. Require a returned action whose `ActionMenuItemName` exactly matches and whose input/output names and types match the authored data members.
-3. Call `api_invoke_action` with:
+3. Apply the runtime invocation safety gate above, then call `api_invoke_action` with:
 
 ```json
 {
@@ -260,7 +280,9 @@ Verify the action through the ERP MCP server at the linked ERP host's `/mcp` end
 }
 ```
 
-`parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties with expected business results. Test representative positive, zero, negative, and boundary values applicable to the contract; for this example, `25 -> 15`, `0 -> -10`, and `-5 -> -15`.
+`parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties and expected mutations with observed results. Only use a representative input matrix after the X++ implementation is proven side-effect-free. The arithmetic example is side-effect-free, so `25 -> 15`, `0 -> -10`, and `-5 -> -15` are appropriate. For mutating or non-idempotent actions, follow the single minimal approved-case rule.
+
+4. Repeat the approved acceptance case through a fresh transport-specific MCP session authenticated as the non-administrator test user assigned the intended custom role. Verify the target and caller from the MCP session itself first. Do not claim that the authored security chain works when the caller cannot be proven or based only on System Administrator execution.
 
 ## Public OData data entity
 
