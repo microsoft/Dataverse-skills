@@ -92,14 +92,14 @@ DeploymentComplete=Hello, this is done.
 
 Use the label as `@ContosoVerification:DeploymentComplete`. Do not embed user-facing text directly in `info()`; the best-practice checker reports `BPErrorLabelIsText`.
 
-## Compile and run
+## Compile and optionally run
 
 ```bash
 pac package compile --solution-root <root> --package-type erp \
   --model ContosoVerification --language en-US
 ```
 
-After a successful deploy, run:
+After a successful deploy, apply the runtime validation safety gate below. Only when the user explicitly opts in, open:
 
 ```text
 https://<erp-host>/?mi=SysClassRunner&cls=ContosoVerificationJob
@@ -109,15 +109,16 @@ The ERP host comes from `pac org who --environment <dataverse-url>`. Do not gues
 
 Opening the URL is the execution step. Deployment alone does not prove the class ran or that its infolog message appeared.
 
-## Runtime invocation safety
+## Runtime validation safety
 
-Before invoking any custom service or `ICustomAPI`:
+Before executing or querying any deployed artifact, including a runnable class, custom service, `ICustomAPI`, or public data entity:
 
-1. Pin the Dataverse CLI profile as required by the skill preflight and verify that its Dataverse URL and linked `erpUrl` match the confirmed PAC target. For MCP, verify direct HTTP against `<erpUrl>/mcp`, or verify that an stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`; reconnect or reinitialize it if necessary.
-2. Inspect the X++ implementation and request contract. Classify execution as side-effect-free, idempotent mutation, or non-idempotent mutation.
-3. Default mutation tests to a non-production environment and isolated test data. State the exact input, expected response, and expected record, transaction, batch, or downstream effects before execution.
-4. If runtime mutation and its inputs were not included in the user's confirmed operation, stop and obtain confirmation.
-5. For a non-idempotent operation, run one minimal approved case and verify the resulting state. Do not automatically run positive, zero, negative, or boundary matrices.
+1. Wait for terminal deployment success, then ask whether the user wants the agent to perform runtime validation. Stop if they decline and report that runtime behavior remains unvalidated.
+2. If accepted, inspect only the deployed custom artifact's X++ implementation and request contract. Ask for every required input. If the user's prompt already supplies exact values, repeat them for confirmation; never invent or broaden the test data. For an artifact with no input, confirm the expected behavior and execution context.
+3. Classify execution as side-effect-free, idempotent mutation, or non-idempotent mutation. State the approved input, expected response, and expected record, transaction, batch, or downstream effects before execution.
+4. Default mutation tests to a non-production environment and isolated test data. If the disclosed runtime effects were not approved, stop and obtain confirmation.
+5. Pin the Dataverse CLI profile as required by the skill preflight and verify that its Dataverse URL and linked `erpUrl` match the confirmed PAC target. For MCP, verify direct HTTP against `<erpUrl>/mcp`, or verify that an stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`; reconnect or reinitialize it if necessary.
+6. For a non-idempotent operation, run one minimal approved case and verify the resulting state. Do not automatically run positive, zero, negative, or boundary matrices.
 
 Discovery calls do not prove runtime behavior. Invocation calls execute X++ business logic and must not be treated as read-only probes.
 
@@ -164,7 +165,7 @@ Create `AxServiceGroup/ContosoVerificationServiceGroup.xml`:
 </AxServiceGroup>
 ```
 
-The class named by `<Class>` must exist, and every `<Method>` must match a public method on that class. After compiling and deploying, verify the service rather than assuming deployment made it callable. When the authored names and parameter contract are known, invoke the fully qualified ERP operation directly:
+The class named by `<Class>` must exist, and every `<Method>` must match a public method on that class. After compiling and deploying, do not assume deployment made the service callable. If the user opts into runtime validation and confirms the required inputs, invoke the fully qualified ERP operation directly:
 
 ```bash
 dataverse api invoke \
@@ -270,17 +271,17 @@ Verify the action through the ERP MCP server at the linked ERP host's `/mcp` end
 
 1. Call `api_find_actions` with `{"searchTerm":"ContosoSubtractCustomAPI"}`.
 2. Require a returned action whose `ActionMenuItemName` exactly matches and whose input/output names and types match the authored data members.
-3. Apply the runtime invocation safety gate above, then call `api_invoke_action` with:
+3. After the user accepts runtime validation and confirms the exact input, apply the remaining safety gates above, then call `api_invoke_action` with:
 
 ```json
 {
   "name": "ContosoSubtractCustomAPI",
-  "parameters": "{\"inputValue\":25}",
+  "parameters": "{\"inputValue\":<confirmed-input-value>}",
   "returnAsResource": false
 }
 ```
 
-`parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties and expected mutations with observed results. Only use a representative input matrix after the X++ implementation is proven side-effect-free. The arithmetic example is side-effect-free, so `25 -> 15`, `0 -> -10`, and `-5 -> -15` are appropriate. For mutating or non-idempotent actions, follow the single minimal approved-case rule.
+Replace `<confirmed-input-value>` with a value supplied by the user or an exact value from the prompt that the user reconfirms. `parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties and expected mutations with observed results. Do not add matrix or boundary values that the user did not supply. For mutating or non-idempotent actions, follow the single minimal approved-case rule.
 
 4. Repeat the approved acceptance case through a fresh transport-specific MCP session authenticated as the non-administrator test user assigned the intended custom role. Verify the target and caller from the MCP session itself first. Do not claim that the authored security chain works when the caller cannot be proven or based only on System Administrator execution.
 
@@ -288,13 +289,14 @@ Verify the action through the ERP MCP server at the linked ERP host's `/mcp` end
 
 An OData-facing entity is authored as `AxDataEntityView` metadata and must have `<IsPublic>Yes</IsPublic>`. Follow an existing entity in the target codebase for its data sources, fields, keys, labels, configuration keys, and entity-set naming; those details are business-schema specific and PAC does not generate them.
 
-After compiling and deploying the model, use the entity-set name, not the X++ class or metadata file name:
+After compiling and deploying the model, ask whether the user wants runtime validation. If accepted, confirm the exact entity set, company/filter context, and bounded row count; then use the entity-set name, not the X++ class or metadata file name:
 
 ```bash
 dataverse data describe --target erp --table <EntitySet> \
   --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
-dataverse data query --target erp --table <EntitySet> --top 10 \
+dataverse data query --target erp --table <EntitySet> \
+  --top <confirmed-row-limit> --filter "<confirmed-filter>" \
   --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
 ```
 
-`describe` proves the public entity is exposed and shows its exact properties and keys. A successful `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.
+Omit `--filter` only when the user explicitly confirms an unfiltered bounded query. Add `--cross-company` only when cross-company access is explicitly requested and confirmed; otherwise the query uses the caller's default company. `describe` proves the public entity is exposed and shows its exact properties and keys. A successful `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.

@@ -29,13 +29,16 @@ All applicable checks must pass:
 3. The operation reaches `Succeeded`; PAC prints `Deploy completed successfully.`
 4. In solution mode, every planned model deploys and PAC prints the expected deployed-model count.
 5. If deployment includes DB sync, PAC also prints `Database synchronization completed successfully.`
-6. Before any ERP CLI or MCP runtime check, the selected Dataverse CLI profile's environment URL and linked `erpUrl` match the confirmed PAC target. For MCP, direct HTTP targets `<erpUrl>/mcp`, or the stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`.
-7. The deployed artifact passes its runtime check:
+6. After terminal deployment success, the agent asks whether the user wants post-deployment runtime validation. Runtime execution is not implied by deployment approval.
+7. If validation is declined, stop and report deployment success with runtime behavior explicitly marked unvalidated.
+8. If validation is accepted, ask for every required input from the custom artifact's source contract. Use only exact values supplied in the prompt or explicitly confirmed by the user; never invent a generic test matrix or invoke unrelated ERP operations.
+9. Before any ERP CLI or MCP runtime check, the selected Dataverse CLI profile's environment URL and linked `erpUrl` match the confirmed PAC target. For MCP, direct HTTP targets `<erpUrl>/mcp`, or the stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`.
+10. The approved deployed artifact passes its runtime check:
    - Runnable class: run its `SysClassRunner` URL and observe the expected infolog or behavior.
    - Custom service: after side-effect classification and approval, directly invoke the fully qualified `erp:<ServiceGroup>/<Service>/<Operation>` name and compare its response and expected mutations with observed results.
    - `ICustomAPI` action: find it through ERP MCP `api_find_actions`, validate the action menu-item identity and contract, invoke only approved inputs through `api_invoke_action`, and compare its `Result` properties and expected mutations with observed results.
    - Public OData data entity: `describe` the entity set, then run a bounded query.
-8. Security acceptance for an `ICustomAPI` succeeds through a fresh MCP session whose caller is proven by an MCP-originated identity/current-session check to be a non-administrator test user assigned the intended custom role. Administrator execution or CLI identity alone is not acceptance evidence for the privilege/duty/role chain.
+11. Security acceptance for an `ICustomAPI` succeeds through a fresh MCP session whose caller is proven by an MCP-originated identity/current-session check to be a non-administrator test user assigned the intended custom role. Administrator execution or CLI identity alone is not acceptance evidence for the privilege/duty/role chain.
 
 A ZIP upload, package-row creation, async operation ID, or HTTP success is only an intermediate milestone. None independently proves successful deployment.
 
@@ -43,6 +46,8 @@ A ZIP upload, package-row creation, async operation ID, or HTTP success is only 
 
 Before executing a custom service or action:
 
+- Ask whether the user wants runtime validation after deployment succeeds. Do not execute on an assumed or earlier blanket approval.
+- Ask for every contract input, or repeat exact values already present in the prompt and obtain confirmation. Never invent values.
 - Inspect its X++ implementation and contract; classify it as side-effect-free, idempotent mutation, or non-idempotent mutation.
 - Use non-production and isolated test data by default.
 - Record the exact input, expected response, and expected business-data or downstream mutations in the confirmation.
@@ -128,6 +133,7 @@ Report:
 - Async operation ID, terminal state, status code, and friendly/raw server message.
 - Whether DB sync started, its separate operation ID, and its result.
 - Artifact verification command/URL and observed response.
+- Whether runtime validation was accepted or declined; when accepted, record the user-confirmed inputs and exact custom artifact tested.
 - For `ICustomAPI`, the discovered action menu-item name, contract, test inputs/outputs, MCP `isError` value, and activity ID on failure.
 - Selected Dataverse CLI identity/profile URL, linked ERP URL, ERP MCP server URL, and MCP caller used for runtime verification.
 - Runtime side-effect classification, approved input, expected mutations, observed state, and the non-administrator role used for security acceptance. If a negative role test ran, include restoration verification.

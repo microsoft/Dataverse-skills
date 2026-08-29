@@ -145,14 +145,16 @@ For security acceptance, establish fresh transport-specific authentication as th
 9. Identify the ZIP created by that final run.
 10. Deploy with explicit `Full|Incremental|Delete`, `Dev|Release`, and DB-sync choices.
 11. Require PAC's successful terminal result and apply every applicable success gate from the validation guidance linked from the skill body.
-12. Before invoking custom X++ logic, inspect it for side effects, classify it, disclose exact inputs and expected mutations, and obtain any required confirmation. Use non-production isolated data by default; run only one minimal approved case for non-idempotent operations.
-13. Verify each deployed artifact through its runtime surface:
+12. After terminal deployment success, ask whether the user wants the agent to perform post-deployment runtime validation. Do not execute the artifact on deployment approval alone.
+13. If declined, report deployment success and mark runtime behavior unvalidated. If accepted, inspect only the deployed custom artifact and its contract, ask for every required input, and repeat any exact values from the prompt for confirmation. Never invent or broaden test inputs.
+14. Inspect the approved custom X++ logic for side effects, classify it, disclose expected mutations, and obtain any additional confirmation. Use non-production isolated data by default; run only one minimal approved case for non-idempotent operations.
+15. Verify only the approved deployed artifact through its runtime surface:
     - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>` and observe the infolog.
     - Custom service: when names are known from source, use `dataverse api invoke 'erp:<ServiceGroup>/<Service>/<Operation>' --target erp --param '<name>=<value>' --json --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; reserve `list`/`describe` for unknown deployed names, obtain parameter contracts from X++ source, and verify the approved response and expected mutations.
     - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu-item name and input/output contract, then call `api_invoke_action` with a JSON-encoded `parameters` string. Require `isError: false` and verify only approved results and mutations.
     - Public OData data entity: use `dataverse data describe --target erp --table <EntitySet> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`, then `dataverse data query --target erp --table <EntitySet> --top <n> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`.
-14. For `ICustomAPI` security acceptance, authenticate a fresh transport-specific MCP session as a non-administrator test user assigned the intended custom role, prove its caller through MCP, and invoke the approved case. Administrator execution is diagnostic only. Any optional negative role test must use a disposable user, guarantee restoration independently, and verify that restoration completed.
-15. Persist source changes in the repository; do not commit generated `bin/`, compiler caches, or logs unless repository policy explicitly tracks them.
+16. For `ICustomAPI` security acceptance, authenticate a fresh transport-specific MCP session as a non-administrator test user assigned the intended custom role, prove its caller through MCP, and invoke the approved case. Administrator execution is diagnostic only. Any optional negative role test must use a disposable user, guarantee restoration independently, and verify that restoration completed.
+17. Persist source changes in the repository; do not commit generated `bin/`, compiler caches, or logs unless repository policy explicitly tracks them.
 
 ## Failure handling
 

@@ -13,7 +13,8 @@ description: Finance and Operations X++ development lifecycle — scaffold model
 > 4. **Do not call deployment successful until PAC reaches a successful terminal state.** Preserve and report the async operation ID on failure.
 > 5. **Do not overwrite existing models or source files.** Inspect `.erp/xpp.json`, descriptors, and target metadata paths before scaffolding or editing.
 > 6. **Pin every runtime surface before ERP verification.** PAC and the Dataverse CLI have separate active profiles. Before any `dataverse ... --target erp` check, require `dataverse auth who` and `dataverse org who --json` to match the confirmed Dataverse and linked ERP URLs. Validate ERP MCP according to its transport: direct HTTP must target `<erp-url>/mcp`; an stdio proxy must receive the base `<erp-url>` and route effectively to `/mcp`. Profile selection does not retarget an existing MCP connection.
-> 7. **Treat service and action verification as possible data mutation.** Inspect the X++ implementation first, disclose exact test inputs and expected mutations, and obtain confirmation when runtime execution was not already approved. Do not apply a generic test matrix to non-idempotent operations.
+> 7. **Treat runtime verification as possible data mutation.** After the separate post-deployment opt-in, inspect the X++ implementation, disclose exact test inputs and expected mutations, and obtain confirmation for those inputs and effects. Do not apply a generic test matrix to non-idempotent operations.
+> 8. **Runtime validation is always a separate opt-in after deployment.** After PAC reports terminal deployment success, ask whether the user wants the agent to run the deployed artifact. If yes, ask for or explicitly confirm the exact inputs from the user's prompt and the custom artifact's contract. Never invent test values or execute unrelated ERP operations.
 
 PAC CLI is the managed surface for the X++ lifecycle. Do not replace these commands with raw Dataverse APIs, direct calls to the ERP sidecar, LCS upload automation, or hand-written compiler invocations.
 
@@ -157,13 +158,16 @@ For “make this X++ change and deploy it”:
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
 8. Deploy with explicit build/release/DB-sync modes.
-9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md), pin the Dataverse CLI profile and transport-specific ERP MCP target to the confirmed environment, then verify the deployed artifact through its actual surface:
+9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md).
+10. After deployment succeeds, ask whether the user wants post-deployment runtime validation. Do not execute the artifact until the user explicitly agrees, even when verification was mentioned earlier.
+11. If validation is declined, report deployment success and state that runtime behavior was not validated. If accepted, inspect only the deployed custom artifact and its contract, then ask for each required input. When the prompt already contains exact values, repeat those values and obtain confirmation; never invent additional inputs.
+12. Pin the Dataverse CLI profile and transport-specific ERP MCP target to the confirmed environment, then verify only the approved artifact through its actual surface:
    - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
    - Custom service: inspect the X++ implementation for side effects before invoking `erp:<ServiceGroup>/<Service>/<Operation>` with `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; use `list`/`describe` only for discovery.
    - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu item and contract, then invoke only approved inputs and compare every returned property and expected mutation with the observed result.
    - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`, adding `--context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to each command.
    - Security acceptance: invoke an `ICustomAPI` as a non-administrator test user assigned the intended custom role. Administrator execution is diagnostic only and does not validate the privilege/duty/role chain.
-10. Report the package path, environment, async operation ID, terminal status, DB-sync mode, and artifact-specific verification result. Never claim runtime behavior that was not actually observed.
+13. Report the package path, environment, async operation ID, terminal status, DB-sync mode, whether runtime validation was accepted or declined, and any observed artifact-specific result. Never claim runtime behavior that was not actually observed.
 
 ## Common mistakes — do not use these
 
