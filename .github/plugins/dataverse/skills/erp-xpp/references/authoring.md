@@ -113,11 +113,11 @@ Opening the URL is the execution step. Deployment alone does not prove the class
 
 Before executing or querying any deployed artifact, including a runnable class, custom service, `ICustomAPI`, or public data entity:
 
-1. Wait for terminal deployment success, then ask whether the user wants the agent to perform runtime validation. Stop if they decline and report that runtime behavior remains unvalidated.
-2. If accepted, inspect only the deployed custom artifact's X++ implementation and request contract. Ask for every required input. If the user's prompt already supplies exact values, repeat them for confirmation; never invent or broaden the test data. For an artifact with no input, confirm the expected behavior and execution context.
-3. Classify execution as side-effect-free, idempotent mutation, or non-idempotent mutation. State the approved input, expected response, and expected record, transaction, batch, or downstream effects before execution.
+1. Wait for the PAC deployment command's terminal result, then ask whether the user wants runtime validation. This opt-in covers runtime execution only; do not infer permission from approval of another post-deployment check. Stop if they decline and report that runtime behavior remains unvalidated.
+2. If accepted, inspect only the deployed custom artifact's X++ implementation and request contract. Ask for every required input and for explicit success and failure criteria. If the user's prompt already supplies exact values or criteria, repeat them for confirmation; never invent or broaden them. For an artifact with no input, confirm the expected behavior and execution context.
+3. Classify execution as side-effect-free, idempotent mutation, or non-idempotent mutation. State the approved input, success criteria, failure criteria, expected response, and expected record, transaction, batch, or downstream effects before execution. Failure criteria do not authorize a negative test; ask separately before executing one.
 4. Default mutation tests to a non-production environment and isolated test data. If the disclosed runtime effects were not approved, stop and obtain confirmation.
-5. Pin the Dataverse CLI profile as required by the skill preflight and verify that its Dataverse URL and linked `erpUrl` match the confirmed PAC target. For MCP, verify direct HTTP against `<erpUrl>/mcp`, or verify that an stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`; reconnect or reinitialize it if necessary.
+5. Pin the Dataverse CLI profile as required by the skill preflight and verify that its Dataverse URL and linked `erpUrl` match the confirmed PAC target. For MCP, verify direct HTTP against `<erpUrl>/mcp`, or verify that an stdio proxy receives the base `<erpUrl>` and routes effectively to `/mcp`; reconnect or reinitialize it if necessary. Before any MCP invocation, prove the caller through an MCP-originated identity/current-session check; stop if the caller cannot be verified.
 6. For a non-idempotent operation, run one minimal approved case and verify the resulting state. Do not automatically run positive, zero, negative, or boundary matrices.
 
 Discovery calls do not prove runtime behavior. Invocation calls execute X++ business logic and must not be treated as read-only probes.
@@ -175,7 +175,7 @@ dataverse api invoke \
   --environment <dataverse-url>
 ```
 
-Use the exact X++ method parameter name, including a leading underscore when present (for example, `--param '_value=7'`). Pass repeated `--param name=value` values for primitive parameters; use `--body` or `--body-file` for structured contracts. Compare the returned value with the expected business result.
+Use the exact X++ method parameter name, including a leading underscore when present (for example, `--param '_value=<user-confirmed-value>'`). Pass repeated `--param name=value` values for primitive parameters; use `--body` or `--body-file` for structured contracts. Compare the returned value with the user-confirmed success and failure criteria.
 
 Use `dataverse api list --target erp --service-group <group> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` and `dataverse api describe erp:<group>/<service>/<operation> --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` only when the deployed names are unknown. Obtain parameter names and types from the X++ method or data-contract source; a fully qualified ERP `api describe` result may not include request parameters. Discovery is not a prerequisite when source metadata provides the names; if discovery stalls, stop it and use the fully qualified invocation rather than waiting indefinitely.
 
@@ -194,28 +194,28 @@ An F&O `ICustomAPI` action is not an `AxService`/`AxServiceGroup` custom service
 
 PAC does not scaffold these artifacts. Create them under `AxClass`, `AxMenuItemAction`, `AxSecurityPrivilege`, `AxSecurityDuty`, and `AxSecurityRole` in the model metadata tree.
 
-Example class source inside `AxClass/ContosoSubtractCustomAPI.xml`:
+Use this structural template only after replacing every uppercase placeholder from the user's requested custom behavior. It is intentionally not compile-ready and contains no default business logic or test values:
 
 ```xpp
-[CustomAPI('Subtract ten', 'Returns the supplied integer minus ten')]
+[CustomAPI('CUSTOM_API_DISPLAY_NAME', 'CUSTOM_API_DESCRIPTION')]
 [AIPluginOperationAttribute]
 [DataContract]
-public final class ContosoSubtractCustomAPI implements ICustomAPI
+public final class CUSTOM_API_CLASS implements ICustomAPI
 {
-    private int inputValue;
-    private int result;
+    private INPUT_TYPE inputValue;
+    private OUTPUT_TYPE result;
 
-    [CustomAPIRequestParameter('The integer to subtract ten from', true),
-     DataMember('inputValue')]
-    public int parmInputValue(int _inputValue = inputValue)
+    [CustomAPIRequestParameter('INPUT_DESCRIPTION', INPUT_IS_OPTIONAL),
+     DataMember('INPUT_DATA_MEMBER')]
+    public INPUT_TYPE parmInputValue(INPUT_TYPE _inputValue = inputValue)
     {
         inputValue = _inputValue;
         return inputValue;
     }
 
-    [CustomAPIResponseProperty('The supplied integer minus ten'),
-     DataMember('result')]
-    public int parmResult(int _result = result)
+    [CustomAPIResponseProperty('OUTPUT_DESCRIPTION'),
+     DataMember('OUTPUT_DATA_MEMBER')]
+    public OUTPUT_TYPE parmResult(OUTPUT_TYPE _result = result)
     {
         result = _result;
         return result;
@@ -223,18 +223,20 @@ public final class ContosoSubtractCustomAPI implements ICustomAPI
 
     public void run(Args _args)
     {
-        this.parmResult(this.parmInputValue() - 10);
+        this.parmResult(RESULT_FROM_USER_REQUESTED_BUSINESS_LOGIC);
     }
 }
 ```
+
+`INPUT_IS_OPTIONAL` is the request parameter's optional flag: use `true` for an optional input and `false` for a required input.
 
 The action menu-item name is the external action identity:
 
 ```xml
 <AxMenuItemAction xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
                   xmlns="Microsoft.Dynamics.AX.Metadata.V1">
-  <Name>ContosoSubtractCustomAPI</Name>
-  <Object>ContosoSubtractCustomAPI</Object>
+  <Name>CUSTOM_API_MENU_ITEM_NAME</Name>
+  <Object>CUSTOM_API_CLASS</Object>
   <ObjectType>Class</ObjectType>
   <SubscriberAccessLevel>
     <Read xmlns="">Allow</Read>
@@ -242,13 +244,13 @@ The action menu-item name is the external action identity:
 </AxMenuItemAction>
 ```
 
-Create a privilege whose entry point has `<ObjectName>ContosoSubtractCustomAPI</ObjectName>` and `<ObjectType>MenuItemAction</ObjectType>`, reference that privilege from a duty, and reference the duty from a role. Missing security metadata can produce best-practice warnings or make the action unavailable to callers.
+Create a privilege whose entry point uses the confirmed custom API menu-item name as `<ObjectName>` and `<ObjectType>MenuItemAction</ObjectType>`, reference that privilege from a duty, and reference the duty from a role. Missing security metadata can produce best-practice warnings or make the action unavailable to callers.
 
-The required security acceptance test uses a non-administrator test user assigned the intended custom role. Successful execution as System Administrator is only an optional deployment diagnostic because it can bypass a broken privilege -> duty -> role chain.
+If the user selects security acceptance, use a non-administrator test user assigned the intended custom role. Successful execution as System Administrator is only an optional deployment diagnostic because it can bypass a broken privilege -> duty -> role chain.
 
-Before acceptance, authenticate the Dataverse CLI as that test user and verify its identity and target with `dataverse auth who` and `dataverse org who --json`. Then establish a fresh transport-specific MCP authentication/session as the test user: direct HTTP uses its host-managed sign-in, while an stdio proxy must be restarted after selecting the intended shared-cache identity. Do not reuse an administrator-authenticated MCP session.
+Before a selected security-acceptance check, authenticate the Dataverse CLI as that test user and verify its identity and target with `dataverse auth who` and `dataverse org who --json`. Then establish a fresh transport-specific MCP authentication/session as the test user: direct HTTP uses its host-managed sign-in, while an stdio proxy must be restarted after selecting the intended shared-cache identity. Do not reuse an administrator-authenticated MCP session.
 
-Verify the caller through an MCP-originated identity or current-session check before invoking the action. CLI identity alone is insufficient. If the MCP server exposes no way to prove the caller, report security acceptance as unverified and use another authenticated runtime surface that can prove the non-administrator identity.
+For selected security acceptance, verify the caller through an MCP-originated identity or current-session check before invoking the action. CLI identity alone is insufficient. If the MCP server exposes no way to prove the caller, report security acceptance as unverified and use another authenticated runtime surface that can prove the non-administrator identity.
 
 A negative role test is optional and may use only a disposable non-administrator test user. Before removing the role, record the exact assignment and establish a restoration path that does not depend on the test user. Restore the assignment immediately even if invocation fails, verify restoration, and do not report completion while access remains altered. Skip the negative test when guaranteed restoration is unavailable.
 
@@ -267,36 +269,44 @@ pac package db-sync --environment <dataverse-url> \
   --db-sync Module --modules <ModelName>
 ```
 
-Verify the action through the ERP MCP server at the linked ERP host's `/mcp` endpoint. Initialize MCP, then call the generic tools rather than expecting one MCP tool per custom action:
+If the user selects API/action discovery, use the ERP MCP server at the linked ERP host's `/mcp` endpoint. Initialize MCP, then call the generic tools rather than expecting one MCP tool per custom action:
 
-1. Call `api_find_actions` with `{"searchTerm":"ContosoSubtractCustomAPI"}`.
+1. Call `api_find_actions` with the confirmed custom API menu-item name as `searchTerm`.
 2. Require a returned action whose `ActionMenuItemName` exactly matches and whose input/output names and types match the authored data members.
-3. After the user accepts runtime validation and confirms the exact input, apply the remaining safety gates above, then call `api_invoke_action` with:
+
+Discovery is not required when the source already provides a confirmed menu-item name and contract. Only if the user separately selects runtime execution and confirms the exact inputs and criteria, call `api_invoke_action` using either the confirmed source contract or an approved discovery result:
 
 ```json
 {
-  "name": "ContosoSubtractCustomAPI",
-  "parameters": "{\"inputValue\":<confirmed-input-value>}",
+  "name": "CONFIRMED_CUSTOM_API_MENU_ITEM_NAME",
+  "parameters": "USER_CONFIRMED_JSON_INPUTS",
   "returnAsResource": false
 }
 ```
 
-Replace `<confirmed-input-value>` with a value supplied by the user or an exact value from the prompt that the user reconfirms. `parameters` is a JSON-encoded string, not a nested object. Require `isError: false` and compare the returned `Result` properties and expected mutations with observed results. Do not add matrix or boundary values that the user did not supply. For mutating or non-idempotent actions, follow the single minimal approved-case rule.
+Replace both placeholders with the discovered menu-item name and a JSON-encoded string built only from user-confirmed inputs. `parameters` is a JSON-encoded string, not a nested object. Evaluate the result against the user-confirmed success and failure criteria. Do not add matrix, boundary, or negative values that the user did not supply and approve. For mutating or non-idempotent actions, follow the single minimal approved-case rule.
 
-4. Repeat the approved acceptance case through a fresh transport-specific MCP session authenticated as the non-administrator test user assigned the intended custom role. Verify the target and caller from the MCP session itself first. Do not claim that the authored security chain works when the caller cannot be proven or based only on System Administrator execution.
+Only if the user separately selects both runtime execution and security acceptance, repeat the approved case through a fresh transport-specific MCP session authenticated as the non-administrator test user assigned the intended custom role. Verify the target and caller from the MCP session itself first. Do not claim that the authored security chain works when the caller cannot be proven or based only on System Administrator execution.
 
 ## Public OData data entity
 
 An OData-facing entity is authored as `AxDataEntityView` metadata and must have `<IsPublic>Yes</IsPublic>`. Follow an existing entity in the target codebase for its data sources, fields, keys, labels, configuration keys, and entity-set naming; those details are business-schema specific and PAC does not generate them.
 
-After compiling and deploying the model, ask whether the user wants runtime validation. If accepted, confirm the exact entity set, company/filter context, and bounded row count; then use the entity-set name, not the X++ class or metadata file name:
+After compiling and deploying the model, ask which data-entity checks the user wants. Confirm the exact entity set from source or approved discovery, company/filter context, and bounded row count.
+
+If entity discovery is selected:
 
 ```bash
 dataverse data describe --target erp --table <EntitySet> \
   --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
+```
+
+If query execution is separately selected:
+
+```bash
 dataverse data query --target erp --table <EntitySet> \
   --top <confirmed-row-limit> --filter "<confirmed-filter>" \
   --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"
 ```
 
-Omit `--filter` only when the user explicitly confirms an unfiltered bounded query. Add `--cross-company` only when cross-company access is explicitly requested and confirmed; otherwise the query uses the caller's default company. `describe` proves the public entity is exposed and shows its exact properties and keys. A successful `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.
+Omit `--filter` only when the user explicitly confirms an unfiltered bounded query. Add `--cross-company` only when cross-company access is explicitly requested and confirmed; otherwise the query uses the caller's default company. A selected `describe` proves the public entity is exposed and shows its exact properties and keys. A selected `query` proves the deployed entity can be reached through ERP OData; an empty result is valid and should not be reported as a deployment failure.

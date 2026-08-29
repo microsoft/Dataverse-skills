@@ -14,7 +14,7 @@ description: Finance and Operations X++ development lifecycle — scaffold model
 > 5. **Do not overwrite existing models or source files.** Inspect `.erp/xpp.json`, descriptors, and target metadata paths before scaffolding or editing.
 > 6. **Pin every runtime surface before ERP verification.** PAC and the Dataverse CLI have separate active profiles. Before any `dataverse ... --target erp` check, require `dataverse auth who` and `dataverse org who --json` to match the confirmed Dataverse and linked ERP URLs. Validate ERP MCP according to its transport: direct HTTP must target `<erp-url>/mcp`; an stdio proxy must receive the base `<erp-url>` and route effectively to `/mcp`. Profile selection does not retarget an existing MCP connection.
 > 7. **Treat runtime verification as possible data mutation.** After the separate post-deployment opt-in, inspect the X++ implementation, disclose exact test inputs and expected mutations, and obtain confirmation for those inputs and effects. Do not apply a generic test matrix to non-idempotent operations.
-> 8. **Runtime validation is always a separate opt-in after deployment.** After PAC reports terminal deployment success, ask whether the user wants the agent to run the deployed artifact. If yes, ask for or explicitly confirm the exact inputs from the user's prompt and the custom artifact's contract. Never invent test values or execute unrelated ERP operations.
+> 8. **All additional validation after an ERP X++ package deployment is opt-in.** After `pac package deploy --package-type erp`, capture PAC's terminal result, then ask whether the user wants any further validation and which checks to run. Do not query the async operation, execute an X++ artifact, query its ERP entity, or test its security unless selected. For runtime validation, confirm exact inputs, success criteria, and failure criteria; never invent values or execute an unapproved failure path. This rule is scoped to ERP X++ package deployment, not Dataverse solution ALM.
 
 PAC CLI is the managed surface for the X++ lifecycle. Do not replace these commands with raw Dataverse APIs, direct calls to the ERP sidecar, LCS upload automation, or hand-written compiler invocations.
 
@@ -72,7 +72,7 @@ Require the selected CLI profile's environment URL and returned `erpUrl` to matc
 
 For ERP MCP verification, inspect the active server configuration. Require direct HTTP to use the confirmed `<erp-url>/mcp`, or require an stdio proxy such as `dataverse mcp` to receive the confirmed base `<erp-url>` and use its effective `/mcp` endpoint. If it differs, stop and reconnect or reinitialize the matching ERP MCP server before discovery or invocation.
 
-For security acceptance, establish a fresh transport-specific MCP session as the intended test user and verify the caller through an MCP-originated identity/current-session check before invoking the custom action. `dataverse auth who` proves only the CLI identity. If the MCP surface cannot prove its caller, do not claim security acceptance through that session; use a verification surface that can.
+Before every MCP runtime invocation, establish a fresh transport-specific session and verify its caller through an MCP-originated identity/current-session check. `dataverse auth who` proves only the CLI identity. If MCP cannot prove its caller, do not invoke through that session. For security acceptance, the proven caller must be the intended non-administrator test user.
 
 6. Before a first SDK install, explain that it downloads roughly 4 GB and expands to roughly 16 GB under `%LOCALAPPDATA%\Microsoft\Dynamics365\<version>\PackagesLocalDirectory`.
 
@@ -158,16 +158,16 @@ For “make this X++ change and deploy it”:
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
 8. Deploy with explicit build/release/DB-sync modes.
-9. Apply the deployment success criteria in [`references/validation.md`](references/validation.md).
-10. After deployment succeeds, ask whether the user wants post-deployment runtime validation. Do not execute the artifact until the user explicitly agrees, even when verification was mentioned earlier.
-11. If validation is declined, report deployment success and state that runtime behavior was not validated. If accepted, inspect only the deployed custom artifact and its contract, then ask for each required input. When the prompt already contains exact values, repeat those values and obtain confirmation; never invent additional inputs.
-12. Pin the Dataverse CLI profile and transport-specific ERP MCP target to the confirmed environment, then verify only the approved artifact through its actual surface:
+9. Capture PAC's exit code, async operation ID, terminal state, and DB-sync result as part of the deployment command. Do not run additional validation automatically.
+10. Ask whether the user wants post-deployment validation and which checks they authorize: async-operation re-query, API/action discovery, runtime behavior, data-entity query, multiple-case testing, and/or security acceptance. Earlier deployment approval and selection of one check do not authorize another.
+11. If all validation is declined, report the PAC deployment result and state that no additional validation was performed. If runtime validation is selected, inspect only the deployed custom artifact and its contract, then ask for each required input plus the expected success and failure criteria. Repeat exact values or criteria already in the prompt for confirmation; never invent or broaden them.
+12. For selected runtime checks, pin the Dataverse CLI profile and transport-specific ERP MCP target to the confirmed environment, then verify only the approved artifact:
    - Runnable class: open `https://<erp-host>/?mi=SysClassRunner&cls=<ClassName>`.
    - Custom service: inspect the X++ implementation for side effects before invoking `erp:<ServiceGroup>/<Service>/<Operation>` with `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"`; use `list`/`describe` only for discovery.
-   - `ICustomAPI` action: use ERP MCP `api_find_actions` to validate its action menu item and contract, then invoke only approved inputs and compare every returned property and expected mutation with the observed result.
-   - Public OData data entity: inspect and query it with `dataverse data describe|query --target erp`, adding `--context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to each command.
-   - Security acceptance: invoke an `ICustomAPI` as a non-administrator test user assigned the intended custom role. Administrator execution is diagnostic only and does not validate the privilege/duty/role chain.
-13. Report the package path, environment, async operation ID, terminal status, DB-sync mode, whether runtime validation was accepted or declined, and any observed artifact-specific result. Never claim runtime behavior that was not actually observed.
+   - `ICustomAPI` action: if discovery was selected, use ERP MCP `api_find_actions` to validate its action menu item and contract. If execution was selected, invoke only approved inputs using the confirmed source contract or approved discovery result, then compare every returned property and expected mutation with the observed result.
+   - Public OData data entity: if discovery was selected, inspect it with `dataverse data describe --target erp`. If query execution was selected, query the confirmed entity set with `dataverse data query --target erp`. Add `--context "app=dataverse-skills/<ver>;skill=erp-xpp;agent=<agent>"` to each command that runs.
+   - Security acceptance: only when runtime execution and security acceptance were both selected, invoke the approved case as a non-administrator test user assigned the intended custom role. Administrator execution is diagnostic only and does not validate the privilege/duty/role chain.
+13. Report the package path, environment, async operation ID, terminal status, DB-sync mode, the validation checks accepted or declined, and results only for checks actually performed.
 
 ## Common mistakes — do not use these
 
