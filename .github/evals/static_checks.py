@@ -105,6 +105,7 @@ CAT-13 Live Eval Contract Accuracy
     schema constraints.
     EVAL-LIVE-01  dv-connect organization identity check uses supported fields
     EVAL-LIVE-02  dv-metadata teaches Memo for multiline verification contracts
+    EVAL-LIVE-03  dv-solution teaches exact-name idempotent publisher/solution creation
 """
 
 import argparse
@@ -1011,6 +1012,80 @@ def check_live_eval_contracts(repo_root):
         failures.append(
             "EVAL-LIVE-02 metadata_001 expects exma_description as Memo, so dv-metadata "
             "must distinguish SDK memo/multiline from single-line text and preserve solution scoping"
+        )
+
+    solution_path = repo_root / "evals" / "tests" / "live" / "dv_solution.biceval.json"
+    solution_skill_path = (
+        repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-solution" / "SKILL.md"
+    )
+    try:
+        solution_document = json.loads(solution_path.read_text(encoding="utf-8"))
+        create_test = next(
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_001_create_publisher_solution"
+        )
+        solution_skill = solution_skill_path.read_text(encoding="utf-8")
+    except (OSError, KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"EVAL-LIVE-03 cannot parse dv-solution contract or skill: {exc}")
+        return failures
+
+    teaches_exact_reuse = all(
+        marker in solution_skill
+        for marker in (
+            'filter="uniquename eq \'<publisheruniquename>\'"',
+            'publisher = publishers.first()',
+            'filter="uniquename eq \'<UniqueName>\'"',
+            'solution = solutions.first()',
+            'Reusing solution:',
+        )
+    )
+    create_assertion_values = create_test.get("assertions", [])
+    if not isinstance(create_assertion_values, list) or not all(
+        isinstance(assertion, str) for assertion in create_assertion_values
+    ):
+        failures.append("EVAL-LIVE-03 solution_001 assertions must be an array of strings")
+        return failures
+    create_assertions = " ".join(create_assertion_values)
+    export_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_003_export_unpack"
+        ),
+        {},
+    )
+    export_assertions = export_test.get("assertions", [])
+    managed_export_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_004_managed_export"
+        ),
+        {},
+    )
+    managed_export_assertions = managed_export_test.get("assertions", [])
+    if not all(
+        isinstance(assertions, list)
+        and all(isinstance(assertion, str) for assertion in assertions)
+        for assertions in (export_assertions, managed_export_assertions)
+    ):
+        failures.append("EVAL-LIVE-03 dv-solution assertions must be arrays of strings")
+        return failures
+    if (
+        "existing rows by unique name" not in create_assertions
+        or not teaches_exact_reuse
+        or "PRIORITY_1: CONTAINS: pac solution export" not in export_assertions
+        or "PRIORITY_1: CONTAINS: pac solution unpack" not in export_assertions
+        or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in export_assertions
+        or "PRIORITY_1: CONTAINS: pac solution export" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: --managed true" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: --managed false" not in managed_export_assertions
+        or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in managed_export_assertions
+    ):
+        failures.append(
+            "EVAL-LIVE-03 dv-solution requires exact unique-name discovery before "
+            "publisher/solution creation and literal PAC export/unpack assertions"
         )
     return failures
 

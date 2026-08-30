@@ -46,6 +46,8 @@
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: EvalComponentMembership exists and contains account and contact table components.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before adding components.",
         "PRIORITY_1: The agent resolves real metadata/component IDs and does not invent GUIDs.",
         "PRIORITY_1: Component addition uses PAC CLI or a documented managed solution-membership path, not hand-edited solution XML.",
         "PRIORITY_2: SKILL_LOADED: dv-solution"
@@ -69,8 +71,12 @@
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: An unmanaged EvalExportRoundTrip zip was exported and unpacked into solutions/EvalExportRoundTrip with real solution files.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
         "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before export.",
         "PRIORITY_1: It uses pac solution export and pac solution unpack and checks their actual results, not just exit-code-free narration.",
+        "PRIORITY_1: CONTAINS: pac solution export",
+        "PRIORITY_1: CONTAINS: pac solution unpack",
+        "PRIORITY_1: NOT_CONTAINS: ExportSolution",
         "PRIORITY_2: SKILL_LOADED: dv-solution"
       ],
       "verify": {
@@ -92,6 +98,12 @@
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: Both unmanaged and managed EvalManagedPackage zip files were produced and are non-empty.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before export.",
+        "PRIORITY_1: CONTAINS: pac solution export",
+        "PRIORITY_1: CONTAINS: --managed true",
+        "PRIORITY_1: CONTAINS: --managed false",
+        "PRIORITY_1: NOT_CONTAINS: ExportSolution",
         "PRIORITY_1: The agent does not import to the current or any other environment because the prompt explicitly withholds import authorization.",
         "PRIORITY_1: Package names/paths make managed versus unmanaged unambiguous.",
         "PRIORITY_2: SKILL_LOADED: dv-solution"

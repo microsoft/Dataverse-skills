@@ -7,7 +7,7 @@ description: Dataverse solution lifecycle — create, export, import, promote ac
 
 Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
-> **Headless / restricted-egress hosts**: use the raw Web API (`ExportSolution` / `ImportSolution`) for the online steps. `pac solution pack`/`unpack` are local file operations (no auth) but need a host that can run PAC -- do them on a capable machine or CI runner. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
+> **Headless / restricted-egress hosts**: solution export/import workflows require PAC CLI. Raw `ExportSolution` / `ImportSolution` Web API calls do not satisfy this workflow because they bypass PAC's package contract and local pack/unpack validation. Run the workflow on a capable machine or CI runner that can execute PAC. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
 ## Skill boundaries
 
@@ -42,25 +42,23 @@ from auth import get_client
 # telemetry (app/skill/agent). Never include secrets or PII.
 client = get_client("dv-solution")
 
-# 1. Query for existing non-Microsoft publishers
+# Query the exact requested unique name before creating. A broad top-N list is
+# not an idempotency check because the target may exist outside that page.
 publishers = client.records.list(
     "publisher",
-    filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation' and uniquename ne 'Microsoftdynamic'",
+    filter="uniquename eq '<publisheruniquename>'",
     select=["publisherid", "uniquename", "friendlyname", "customizationprefix"],
-    top=10,
+    top=1,
 )
+publisher = publishers.first()
 
-if publishers:
-    # Show existing publishers and ask user which to use
-    print("Existing publishers in this environment:")
-    for p in publishers:
-        print(f"  {p['uniquename']} (prefix: {p['customizationprefix']}_)")
-    # ASK THE USER: "Which publisher should this solution use?"
-    # Or: "Should I reuse '<name>' (prefix: <prefix>_)?"
-    publisher_id = publishers[0]["publisherid"]  # after user confirms
+if publisher is not None:
+    if publisher["customizationprefix"] != "<prefix>":
+        raise ValueError("Existing publisher has a different permanent prefix")
+    publisher_id = publisher["publisherid"]
+    print(f"Reusing publisher: {publisher_id}")
 else:
-    # No custom publisher exists — ASK THE USER for prefix
-    # "What publisher prefix should I use? (e.g., 'contoso', 'sa', 'lit' — 2-8 lowercase chars)"
+    # The user must confirm the permanent prefix before this branch runs.
     publisher_id = client.records.create("publisher", {
         "uniquename": "<publisheruniquename>",
         "friendlyname": "<Publisher Display Name>",
@@ -88,14 +86,32 @@ from auth import get_client
 # telemetry (app/skill/agent). Never include secrets or PII.
 client = get_client("dv-solution")
 
-# Create the solution record
-solution_id = client.records.create("solution", {
-    "uniquename": "<UniqueName>",
-    "friendlyname": "<Display Name>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": "/publishers(<publisher_guid>)",
-})
-print(f"Created solution: {solution_id}")
+# Query the exact unique name first so retries reuse the same unmanaged solution.
+solutions = client.records.list(
+    "solution",
+    filter="uniquename eq '<UniqueName>'",
+    select=["solutionid", "version", "ismanaged", "_publisherid_value"],
+    top=1,
+)
+solution = solutions.first()
+
+if solution is not None:
+    if (
+        solution["ismanaged"]
+        or solution["_publisherid_value"] != "<publisher_guid>"
+        or solution["version"] != "1.0.0.0"
+    ):
+        raise ValueError("Existing solution does not match the requested publisher/type/version")
+    solution_id = solution["solutionid"]
+    print(f"Reusing solution: {solution_id}")
+else:
+    solution_id = client.records.create("solution", {
+        "uniquename": "<UniqueName>",
+        "friendlyname": "<Display Name>",
+        "version": "1.0.0.0",
+        "publisherid@odata.bind": "/publishers(<publisher_guid>)",
+    })
+    print(f"Created solution: {solution_id}")
 ```
 
 The required fields:
