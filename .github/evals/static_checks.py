@@ -16,6 +16,7 @@ Exit code 0 = all checks passed. Exit code 1 = one or more failures.
 CAT-1  Python Code Block Validity
        Checks that every python-fenced block is runnable as written.
        EVAL-PY-01  sys.path.insert present and ordered before 'from auth import'
+    EVAL-PY-02  Every Python-fenced block parses as Python
        EVAL-PY-04  No all-comment stub blocks
        EVAL-PY-05  get_token() not used in DataverseClient blocks
        EVAL-PY-06  load_env() called before os.environ access
@@ -103,9 +104,11 @@ CAT-13 Live Eval Contract Accuracy
     Checks deterministic live-eval contracts against known Dataverse Web API
     schema constraints.
     EVAL-LIVE-01  dv-connect organization identity check uses supported fields
+    EVAL-LIVE-02  dv-metadata teaches Memo for multiline verification contracts
 """
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -209,6 +212,20 @@ def check_python_blocks(name, text):
                     f"EVAL-PY-06 [{label}] os.environ accessed without calling load_env() first"
                 )
 
+    return failures
+
+
+def check_python_syntax(name, text):
+    """EVAL-PY-02: every Python-fenced example must parse as Python."""
+    failures = []
+    for i, block in extract_fenced_blocks(text, "python"):
+        try:
+            ast.parse(block)
+        except SyntaxError as exc:
+            failures.append(
+                f"EVAL-PY-02 [{name} python-block-{i}] invalid Python at "
+                f"line {exc.lineno}: {exc.msg}"
+            )
     return failures
 
 
@@ -926,34 +943,74 @@ def check_cli_attribution(name, text):
 # ---------------------------------------------------------------------------
 
 def check_live_eval_contracts(repo_root):
-    """EVAL-LIVE-01: keep deterministic live checks on supported Web API fields."""
+    """Keep live contracts and the skill guidance needed to satisfy them aligned."""
     failures = []
     path = repo_root / "evals" / "tests" / "live" / "dv_connect.biceval.json"
     if not path.exists():
         failures.append(f"EVAL-LIVE-01 required live-eval contract is missing: {path}")
-        return failures
+    else:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            identity = next(
+                test
+                for test in document["tests"]
+                if test["test_id"] == "connect_002_environment_identity"
+            )
+            check = identity["verify"]["checks"][0]
+        except (KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+            failures.append(f"EVAL-LIVE-01 cannot parse {path.name}: {exc}")
+        else:
+            if (
+                identity.get("verify", {}).get("entity") != "organization"
+                or check.get("expect") != "record_exists"
+                or check.get("filter") != "organizationid ne null"
+                or check.get("fields") != ORGANIZATION_VERIFY_FIELDS
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 connect_002_environment_identity must query the organization "
+                    "entity for an existing row and validate organizationid/name with exact matchers"
+                )
 
+    metadata_path = repo_root / "evals" / "tests" / "live" / "dv_metadata.biceval.json"
+    metadata_skill_path = (
+        repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-metadata" / "SKILL.md"
+    )
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-        identity = next(
+        metadata_document = json.loads(metadata_path.read_text(encoding="utf-8"))
+        table_test = next(
             test
-            for test in document["tests"]
-            if test["test_id"] == "connect_002_environment_identity"
+            for test in metadata_document["tests"]
+            if test["test_id"] == "metadata_001_table_and_simple_columns"
         )
-        check = identity["verify"]["checks"][0]
-    except (KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
-        failures.append(f"EVAL-LIVE-01 cannot parse {path.name}: {exc}")
+        description_check = next(
+            check
+            for check in table_test["verify"]["checks"]
+            if check.get("column") == "exma_description"
+        )
+        metadata_skill = metadata_skill_path.read_text(encoding="utf-8")
+    except (OSError, KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"EVAL-LIVE-02 cannot parse dv-metadata contract or skill: {exc}")
         return failures
 
+    teaches_memo = all(
+        marker in metadata_skill
+        for marker in (
+            '"memo"` / `"multiline"',
+            '`"text"` creates a single-line `String` column',
+            '`add_columns(...)` does not accept `solution=`',
+            '`"MSCRM.SolutionUniqueName": "<UniqueName>"` as a raw Web API request header',
+            'verify every changed component ID and type',
+        )
+    )
     if (
-        identity.get("verify", {}).get("entity") != "organization"
-        or check.get("expect") != "record_exists"
-        or check.get("filter") != "organizationid ne null"
-        or check.get("fields") != ORGANIZATION_VERIFY_FIELDS
+        table_test.get("verify", {}).get("entity") != "exma_ticket"
+        or description_check.get("expect") != "column_exists"
+        or description_check.get("column_type") != "Memo"
+        or not teaches_memo
     ):
         failures.append(
-            "EVAL-LIVE-01 connect_002_environment_identity must query the organization "
-            "entity for an existing row and validate organizationid/name with exact matchers"
+            "EVAL-LIVE-02 metadata_001 expects exma_description as Memo, so dv-metadata "
+            "must distinguish SDK memo/multiline from single-line text and preserve solution scoping"
         )
     return failures
 
@@ -991,6 +1048,7 @@ def main():
         python_block_count += len(re.findall(r"```python\n", text))
 
         all_failures.extend(check_python_blocks(name, text))
+        all_failures.extend(check_python_syntax(name, text))
         all_failures.extend(check_auth_patterns(name, text))
         all_failures.extend(check_pac_cli(name, text))
         all_failures.extend(check_connect_step0(name, text))
@@ -1005,6 +1063,7 @@ def main():
     for rf in sorted(skills_dir.glob("*/references/*.md")):
         rtext = rf.read_text(encoding="utf-8")
         rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
+        all_failures.extend(check_python_syntax(rlabel, rtext))
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
