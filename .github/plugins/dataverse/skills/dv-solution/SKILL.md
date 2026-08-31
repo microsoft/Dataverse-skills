@@ -189,6 +189,10 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 > **Confirm the target environment before exporting or importing.** Run `pac auth list` + `pac org who`, show the output to the user, and confirm it matches the intended environment. Developers work across multiple environments — do not assume.
 
+> **Execution contract.** Treat every requested cleanup, PAC operation, and file check as a required tool call, not optional narration. Pass exactly one command to each shell tool call: do not prefix it with `cd`, append status checks, or combine it with setup, redirects, pipes, or another command. Before returning, compare the successful shell-call ledger with the requested sequence and execute any missing step. A partial sequence is a failed operation even when the PAC commands that did run succeeded.
+
+Dataverse serializes some solution and metadata operations. If create, component-add, export, or unpack reports that another operation is in progress, wait briefly and retry the same standalone command up to three times. Do not abandon the remaining sequence after the first transient conflict. Stop after three failures and report the exact blocker without claiming the package or solution was produced.
+
 Remove the stale export target in its own shell call:
 ```
 rm -f ./solutions/<UniqueName>.zip
