@@ -1043,9 +1043,14 @@ def check_live_eval_contracts(repo_root):
     teaches_verifiable_pac_execution = all(
         marker in solution_skill
         for marker in (
-            "use one shell tool call per command block below",
-            "Do not append `echo $?`, `2>&1`, any other redirect, pipe, or chained command",
+            "action requests mean perform the requested operations now, not just present commands or a plan",
+            "Obtain explicit confirmation for the environment and any permanent publisher prefix before the first write",
+            "Use one shell tool call per command block below",
+            "never combine cleanup, PAC, or file-check commands with `cd`, `echo $?`, redirects, pipes, or other commands",
             "Treat cleanup as a blocking precondition",
+            "confirmation already supplied in the current request or earlier in the session counts, so do not ask twice",
+            "Without explicit confirmation, show the environment URL and ask before the first operation",
+            "Requests explicitly limited to instructions, examples, or a plan are guidance-only",
             "compare the successful shell-call ledger with the requested sequence",
             "reproduce the exact successful commands under a **Successful command ledger** heading",
             "an output-path-only summary is a failed operation",
@@ -1069,14 +1074,29 @@ def check_live_eval_contracts(repo_root):
         solution_skill,
         flags=re.DOTALL,
     )
+    action_pattern = re.compile(r"^\s*(?:pac\s+solution\b|rm\s+-|test\s+-[fs]\b)")
+    action_blocks = [
+        block for block in shell_blocks if any(action_pattern.match(line) for line in block.splitlines())
+    ]
     pac_commands_are_standalone = all(
-        sum(
-            1
-            for line in block.splitlines()
-            if re.match(r"^\s*(?:pac\s+solution\b|rm\s+-|test\s+-[fs]\b)", line)
+        sum(1 for line in block.splitlines() if action_pattern.match(line)) == 1
+        and not re.search(r"(?:^|\s)cd\s|&&|\|\||(?:^|\s)\|(?!\|)|2>&1|(?:^|\s)(?:1|2)?>>?\s", block)
+        for block in action_blocks
+    )
+    ordered_examples = all(
+        solution_skill.find(cleanup) < solution_skill.find(operation) < solution_skill.find(check)
+        for cleanup, operation, check in (
+            (
+                "rm -f ./solutions/<UniqueName>_unmanaged.zip",
+                "--path ./solutions/<UniqueName>_unmanaged.zip",
+                "test -s ./solutions/<UniqueName>_unmanaged.zip",
+            ),
+            (
+                "rm -f ./solutions/<UniqueName>_managed.zip",
+                "--path ./solutions/<UniqueName>_managed.zip",
+                "test -s ./solutions/<UniqueName>_managed.zip",
+            ),
         )
-        <= 1
-        for block in shell_blocks
     )
     create_assertion_values = create_test.get("assertions", [])
     if not isinstance(create_assertion_values, list) or not all(
@@ -1127,6 +1147,7 @@ def check_live_eval_contracts(repo_root):
         or not teaches_exact_reuse
         or not teaches_verifiable_pac_execution
         or not pac_commands_are_standalone
+        or not ordered_examples
         or "as separate standalone commands without pipes" not in export_prompt
         or "rm -f solutions/EvalExportRoundTrip.zip" not in export_prompt
         or "rm -rf solutions/EvalExportRoundTrip" not in export_prompt
@@ -1137,6 +1158,8 @@ def check_live_eval_contracts(repo_root):
         or "standalone rm -f for each exact ZIP target" not in managed_export_prompt
         or "standalone test -s on each exact exported ZIP path" not in managed_export_prompt
         or "distinct paths" not in managed_export_prompt
+        or "I confirm the permanent prefix and source environment" not in managed_export_prompt
+        or "I confirm the publisher prefix and export from this environment" not in export_prompt
         or "stop and report the blocker" not in managed_export_prompt
         or "PRIORITY_1: CONTAINS: pac solution export" not in export_assertions
         or "PRIORITY_1: CONTAINS: pac solution unpack" not in export_assertions

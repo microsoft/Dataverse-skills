@@ -9,7 +9,7 @@ Create, export, unpack, pack, import, and validate Dataverse solutions via PAC C
 
 > **Headless / restricted-egress hosts**: solution export/import workflows require PAC CLI. Raw `ExportSolution` / `ImportSolution` Web API calls do not satisfy this workflow because they bypass PAC's package contract and local pack/unpack validation. Run the workflow on a capable machine or CI runner that can execute PAC. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
-> **Execution proof**: use one shell tool call per command block below. Run each cleanup, `pac solution export`, `pack`, `unpack`, `import`, and file check as a standalone command and let the shell tool's own result report its exit status. Do not append `echo $?`, `2>&1`, any other redirect, pipe, or chained command; those wrappers make the trajectory ambiguous and can make a failed command look successful. Treat cleanup as a blocking precondition: do not run an export until the exact target's cleanup command has succeeded. Before returning, include a **Successful command ledger** that repeats every successful standalone cleanup, PAC operation, and file check exactly as executed; an output-path summary alone is not execution proof. If PAC authentication is unavailable, stop and report that blocker. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP.
+> **Execution contract**: action requests mean perform the requested operations now, not just present commands or a plan. Obtain explicit confirmation for the environment and any permanent publisher prefix before the first write; confirmation already supplied in the current request or earlier in the session counts, so do not ask twice. Verify the active PAC environment and stop if it differs. Use one shell tool call per command block below; never combine cleanup, PAC, or file-check commands with `cd`, `echo $?`, redirects, pipes, or other commands. Treat cleanup as a blocking precondition. Before returning, compare the successful shell-call ledger with the requested sequence and reproduce the exact successful commands under a **Successful command ledger** heading; an output-path-only summary is a failed operation. Stop on unavailable PAC authentication. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP. Requests explicitly limited to instructions, examples, or a plan are guidance-only.
 
 ## Skill boundaries
 
@@ -70,7 +70,7 @@ else:
 ```
 
 **Rules:**
-- **Always ask the user** before creating a new publisher or choosing a prefix. Never hardcode a prefix.
+- **Always obtain explicit user confirmation** before creating a new publisher or choosing a prefix. Confirmation already supplied in the current request or earlier in the session counts; do not ask twice. Never hardcode a prefix.
 - The prefix must match any tables already created in the solution — you cannot mix prefixes.
 - One publisher can own many solutions. Reuse an existing publisher when possible.
 
@@ -187,9 +187,7 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 ## Pull: Export + Unpack
 
-> **Confirm the target environment before exporting or importing.** Run `pac auth list` + `pac org who`, show the output to the user, and confirm it matches the intended environment. Developers work across multiple environments — do not assume.
-
-> **Execution contract.** Treat every requested cleanup, PAC operation, and file check as a required tool call, not optional narration. Pass exactly one command to each shell tool call: do not prefix it with `cd`, append status checks, or combine it with setup, redirects, pipes, or another command. Before each export, confirm the immediately preceding successful command ledger contains `rm -f <that exact export path>`; if not, run the missing cleanup before exporting. Before returning, compare the successful shell-call ledger with the requested sequence, execute any missing step, and reproduce the exact successful commands under a **Successful command ledger** heading. A partial sequence or an output-path-only summary is a failed operation even when the PAC commands that did run succeeded.
+> **Verify the target before exporting or importing.** Run standalone `pac auth list` and `pac org who`. Explicit prior confirmation of the current source or target counts; proceed without asking twice. Without explicit confirmation, show the environment URL and ask before the first operation. Stop when the target is missing, ambiguous, or different from PAC. Before each export, the immediately preceding successful command must be `rm -f <that exact export path>`. Before returning, execute every missing requested step.
 
 Dataverse serializes some solution and metadata operations. If create, component-add, export, or unpack reports that another operation is in progress, wait briefly and retry the same standalone command up to three times. Do not abandon the remaining sequence after the first transient conflict. Stop after three failures and report the exact blocker without claiming the package or solution was produced.
 
