@@ -1040,6 +1040,25 @@ def check_live_eval_contracts(repo_root):
             'Reusing solution:',
         )
     )
+    teaches_verifiable_pac_execution = all(
+        marker in solution_skill
+        for marker in (
+            "as a standalone command and inspect its exit status",
+            "Do not pipe PAC output through",
+            "Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP",
+            'solution["version"] != "<requested_version>"',
+            '"version": "<requested_version>"',
+            "--path ./solutions/<UniqueName>_unmanaged.zip",
+            "--path ./solutions/<UniqueName>_managed.zip",
+            "--managed true",
+            "rm -f ./solutions/<UniqueName>.zip",
+            "rm -rf ./solutions/<UniqueName>",
+            "test -s <exact-zip-path>",
+            "test -f <exact-folder>/Other/Solution.xml",
+            "raise RuntimeError(\"Table '<logical_name>' not found after import\")",
+            "--environment <test-or-production-url>",
+        )
+    )
     create_assertion_values = create_test.get("assertions", [])
     if not isinstance(create_assertion_values, list) or not all(
         isinstance(assertion, str) for assertion in create_assertion_values
@@ -1065,6 +1084,18 @@ def check_live_eval_contracts(repo_root):
         {},
     )
     managed_export_assertions = managed_export_test.get("assertions", [])
+    component_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_002_add_components"
+        ),
+        {},
+    )
+    create_checks = create_test.get("verify", {}).get("checks", [])
+    component_checks = component_test.get("verify", {}).get("checks", [])
+    export_prompt = export_test.get("prompt", "")
+    managed_export_prompt = managed_export_test.get("prompt", "")
     if not all(
         isinstance(assertions, list)
         and all(isinstance(assertion, str) for assertion in assertions)
@@ -1075,17 +1106,50 @@ def check_live_eval_contracts(repo_root):
     if (
         "existing rows by unique name" not in create_assertions
         or not teaches_exact_reuse
+        or not teaches_verifiable_pac_execution
+        or "as separate standalone commands without pipes" not in export_prompt
+        or "rm -f solutions/EvalExportRoundTrip.zip" not in export_prompt
+        or "rm -rf solutions/EvalExportRoundTrip" not in export_prompt
+        or "standalone test -s" not in export_prompt
+        or "standalone test -f" not in export_prompt
+        or "stop and report the blocker" not in export_prompt
+        or "as a separate standalone command without pipes" not in managed_export_prompt
+        or "standalone rm -f for each exact ZIP target" not in managed_export_prompt
+        or "standalone test -s on each exact exported ZIP path" not in managed_export_prompt
+        or "distinct paths" not in managed_export_prompt
+        or "stop and report the blocker" not in managed_export_prompt
         or "PRIORITY_1: CONTAINS: pac solution export" not in export_assertions
         or "PRIORITY_1: CONTAINS: pac solution unpack" not in export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalExportRoundTrip.zip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: rm -rf solutions/EvalExportRoundTrip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalExportRoundTrip.zip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: test -f solutions/EvalExportRoundTrip/Other/Solution.xml" not in export_assertions
         or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in export_assertions
         or "PRIORITY_1: CONTAINS: pac solution export" not in managed_export_assertions
         or "PRIORITY_1: CONTAINS: --managed true" not in managed_export_assertions
         or "PRIORITY_1: CONTAINS: --managed false" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_unmanaged.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_managed.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_unmanaged.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_managed.zip" not in managed_export_assertions
         or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in managed_export_assertions
+        or not any(
+            check.get("expect") == "record_exists"
+            and "publisherid/uniquename eq 'evalexhaustivepublisher'" in check.get("filter", "")
+            and check.get("fields", {}).get("version") == "1.0.0.0"
+            for check in create_checks
+        )
+        or not any(
+            check.get("expect") == "solution_contains_tables"
+            and check.get("solution_unique_name") == "EvalComponentMembership"
+            and check.get("tables") == ["account", "contact"]
+            for check in component_checks
+        )
     ):
         failures.append(
             "EVAL-LIVE-03 dv-solution requires exact unique-name discovery before "
-            "publisher/solution creation and literal PAC export/unpack assertions"
+            "publisher/solution creation, standalone PAC execution with no raw fallback, "
+            "literal PAC export/unpack assertions, publisher linkage, and exact table membership"
         )
     return failures
 

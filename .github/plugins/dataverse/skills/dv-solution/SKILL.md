@@ -9,6 +9,8 @@ Create, export, unpack, pack, import, and validate Dataverse solutions via PAC C
 
 > **Headless / restricted-egress hosts**: solution export/import workflows require PAC CLI. Raw `ExportSolution` / `ImportSolution` Web API calls do not satisfy this workflow because they bypass PAC's package contract and local pack/unpack validation. Run the workflow on a capable machine or CI runner that can execute PAC. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
+> **Execution proof**: run each `pac solution export`, `pack`, `unpack`, or `import` as a standalone command and inspect its exit status before continuing. Do not pipe PAC output through `tail`, `head`, `grep`, or another command, and do not place PAC after `&&`; those wrappers can report the other process's status and make a failed PAC command look successful. If PAC authentication is unavailable, stop and report that blocker. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP.
+
 ## Skill boundaries
 
 | Need | Use instead |
@@ -99,7 +101,7 @@ if solution is not None:
     if (
         solution["ismanaged"]
         or solution["_publisherid_value"] != "<publisher_guid>"
-        or solution["version"] != "1.0.0.0"
+        or solution["version"] != "<requested_version>"
     ):
         raise ValueError("Existing solution does not match the requested publisher/type/version")
     solution_id = solution["solutionid"]
@@ -108,7 +110,7 @@ else:
     solution_id = client.records.create("solution", {
         "uniquename": "<UniqueName>",
         "friendlyname": "<Display Name>",
-        "version": "1.0.0.0",
+        "version": "<requested_version>",
         "publisherid@odata.bind": "/publishers(<publisher_guid>)",
     })
     print(f"Created solution: {solution_id}")
@@ -189,6 +191,7 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 Export the solution as unmanaged (source of truth):
 ```
+rm -f ./solutions/<UniqueName>.zip
 pac solution export \
   --name <UniqueName> \
   --path ./solutions/<UniqueName>.zip \
@@ -196,8 +199,28 @@ pac solution export \
   --environment <url>
 ```
 
+When both package modes are requested, run two standalone exports with distinct paths:
+```
+rm -f ./solutions/<UniqueName>_unmanaged.zip
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_unmanaged.zip \
+    --managed false \
+    --environment <url>
+
+rm -f ./solutions/<UniqueName>_managed.zip
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --managed true \
+    --environment <url>
+```
+
+After each export, run `test -s <exact-zip-path>` as a separate command. After unpacking, run `test -f <exact-folder>/Other/Solution.xml` separately. These checks prove that PAC produced non-empty packages and real unpacked solution files without masking PAC's exit status.
+
 Unpack into editable source files:
 ```
+rm -rf ./solutions/<UniqueName>
 pac solution unpack \
   --zipfile ./solutions/<UniqueName>.zip \
   --folder ./solutions/<UniqueName> \
@@ -220,8 +243,9 @@ git push
 
 ## Push: Pack + Import
 
-Pack the source files back into a zip:
+For development environments, pack the unmanaged source files back into a zip:
 ```
+rm -f ./solutions/<UniqueName>.zip
 pac solution pack \
   --zipfile ./solutions/<UniqueName>.zip \
   --folder ./solutions/<UniqueName> \
@@ -235,6 +259,24 @@ pac solution import \
   --environment <url> \
   --async \
   --activate-plugins
+```
+
+For downstream test or production environments, deploy a managed package. A managed pack requires source previously unpacked with `--packagetype Both`; do not relabel an unmanaged-only unpack. The simplest safe path is a fresh managed export from the confirmed source environment, followed by import to the separately confirmed downstream environment:
+```
+rm -f ./solutions/<UniqueName>_managed.zip
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --managed true \
+    --environment <source-url>
+
+test -s ./solutions/<UniqueName>_managed.zip
+
+pac solution import \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --environment <test-or-production-url> \
+    --async \
+    --activate-plugins
 ```
 
 ## Poll Import Status
@@ -252,33 +294,36 @@ After importing a solution, verify that components are live. Use the Python SDK 
 
 ```python
 info = client.tables.get("<logical_name>")
-if info:
-    print(f"[PASS] Table '{info.logical_name}' exists")
-else:
-    print(f"[FAIL] Table '<logical_name>' not found")
+if not info:
+    raise RuntimeError("Table '<logical_name>' not found after import")
+print(f"[PASS] Table '{info.logical_name}' exists")
 ```
 
 ### Check a form is published
 
 ```python
-forms = client.records.list(
+forms = list(client.records.list(
     "systemform",
     filter="objecttypecode eq '<entity>' and type eq <form_type_code>",
     select=["name", "formid"],
     top=5,
-)
+))
+if not forms:
+    raise RuntimeError("Expected published form was not found after import")
 # Form type codes: 2 = main, 7 = quick create
 ```
 
 ### Check a view exists
 
 ```python
-views = client.records.list(
+views = list(client.records.list(
     "savedquery",
     filter="returnedtypecode eq '<entity>'",
     select=["name", "savedqueryid", "statuscode"],
     top=10,
-)
+))
+if not views:
+    raise RuntimeError("Expected view was not found after import")
 ```
 
 ### Check a user's role assignment (N:N `$expand`)
@@ -294,6 +339,8 @@ users = list(client.records.list(
     top=1,
 ))
 roles = [r["name"] for r in users[0].get("systemuserroles_association", [])] if users else []
+if not roles:
+    raise RuntimeError("Expected user role assignment was not found after import")
 ```
 
 Alternatively, the managed **Dataverse CLI** escape hatch (`dataverse api request` — not `urllib`), or FetchXML with a link-entity:

@@ -30,7 +30,7 @@
       "verify": {
         "checks": [
           { "expect": "record_exists", "entity": "publisher", "filter": "uniquename eq 'evalexhaustivepublisher'", "fields": { "customizationprefix": "exs" } },
-          { "expect": "record_exists", "entity": "solution", "filter": "uniquename eq 'EvalExhaustiveCore'", "fields": { "version": "1.0.0.0", "ismanaged": false } }
+          { "expect": "record_exists", "entity": "solution", "filter": "uniquename eq 'EvalExhaustiveCore' and publisherid/uniquename eq 'evalexhaustivepublisher'", "fields": { "version": "1.0.0.0", "ismanaged": false } }
         ]
       }
     },
@@ -55,13 +55,14 @@
       "verify": {
         "entity": "solution",
         "checks": [
-          { "expect": "record_exists", "filter": "uniquename eq 'EvalComponentMembership'", "fields": { "ismanaged": false } }
+          { "expect": "record_exists", "filter": "uniquename eq 'EvalComponentMembership'", "fields": { "version": "1.0.0.0", "ismanaged": false } },
+          { "expect": "solution_contains_tables", "solution_unique_name": "EvalComponentMembership", "tables": ["account", "contact"] }
         ]
       }
     },
     {
       "test_id": "solution_003_export_unpack",
-      "prompt": "Use the current disposable test environment. Create or reuse publisher evalexportpublisher with prefix exe and solution EvalExportRoundTrip version 1.0.0.0, add the account table, then export it unmanaged and unpack it into solutions/EvalExportRoundTrip in the workspace. I confirm the publisher prefix and export from this environment.",
+      "prompt": "Use the current disposable test environment. Load dv-solution first. Create or reuse publisher evalexportpublisher with prefix exe and solution EvalExportRoundTrip version 1.0.0.0, add the account table, then export it unmanaged to solutions/EvalExportRoundTrip.zip and unpack it into solutions/EvalExportRoundTrip in the workspace. First run standalone rm -f solutions/EvalExportRoundTrip.zip and rm -rf solutions/EvalExportRoundTrip so stale artifacts cannot satisfy verification. Run pac solution export and pac solution unpack as separate standalone commands without pipes, redirects, command chaining, or raw ExportSolution API calls, and verify each command succeeds. Run standalone test -s on the exact exported ZIP path after export and standalone test -f on solutions/EvalExportRoundTrip/Other/Solution.xml after unpack. If PAC authentication is unavailable, stop and report the blocker instead of building a ZIP another way. I confirm the publisher prefix and export from this environment.",
       "expected_response": "The agent validates the PAC auth target, creates/reuses and populates the solution, runs pac solution export then unpack, checks command exit status and expected files, and reports the output paths.",
       "category": "solution",
       "priority": 1,
@@ -76,6 +77,10 @@
         "PRIORITY_1: It uses pac solution export and pac solution unpack and checks their actual results, not just exit-code-free narration.",
         "PRIORITY_1: CONTAINS: pac solution export",
         "PRIORITY_1: CONTAINS: pac solution unpack",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalExportRoundTrip.zip",
+        "PRIORITY_1: CONTAINS: rm -rf solutions/EvalExportRoundTrip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalExportRoundTrip.zip",
+        "PRIORITY_1: CONTAINS: test -f solutions/EvalExportRoundTrip/Other/Solution.xml",
         "PRIORITY_1: NOT_CONTAINS: ExportSolution",
         "PRIORITY_2: SKILL_LOADED: dv-solution"
       ],
@@ -88,7 +93,7 @@
     },
     {
       "test_id": "solution_004_managed_export",
-      "prompt": "In the current disposable test environment, create or reuse publisher evalmanagedpublisher with prefix exg and solution EvalManagedPackage version 1.2.0.0, add account, and export both unmanaged and managed zip packages. Do not import either package anywhere. I confirm the permanent prefix and source environment.",
+      "prompt": "In the current disposable test environment, load dv-solution first. Create or reuse publisher evalmanagedpublisher with prefix exg and solution EvalManagedPackage version 1.2.0.0, add account, and export unmanaged and managed packages to the distinct paths solutions/EvalManagedPackage_unmanaged.zip and solutions/EvalManagedPackage_managed.zip. First run standalone rm -f for each exact ZIP target so stale artifacts cannot satisfy verification. Run each pac solution export as a separate standalone command without pipes, redirects, command chaining, raw ExportSolution API calls, or hand-built ZIPs, and verify each command succeeds. Run standalone test -s on each exact exported ZIP path after its export. If PAC authentication is unavailable, stop and report the blocker. Do not import either package anywhere. I confirm the permanent prefix and source environment.",
       "expected_response": "The agent creates/reuses the source solution, exports both package modes with distinct paths, validates non-empty artifacts, and stops before any import because no target environment was authorized.",
       "category": "solution",
       "priority": 1,
@@ -103,6 +108,10 @@
         "PRIORITY_1: CONTAINS: pac solution export",
         "PRIORITY_1: CONTAINS: --managed true",
         "PRIORITY_1: CONTAINS: --managed false",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_unmanaged.zip",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_managed.zip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_unmanaged.zip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_managed.zip",
         "PRIORITY_1: NOT_CONTAINS: ExportSolution",
         "PRIORITY_1: The agent does not import to the current or any other environment because the prompt explicitly withholds import authorization.",
         "PRIORITY_1: Package names/paths make managed versus unmanaged unambiguous.",
