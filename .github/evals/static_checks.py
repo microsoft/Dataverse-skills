@@ -1135,6 +1135,20 @@ def check_live_eval_contracts(repo_root):
     component_checks = component_test.get("verify", {}).get("checks", [])
     export_prompt = export_test.get("prompt", "")
     managed_export_prompt = managed_export_test.get("prompt", "")
+    managed_prompt_sequence = (
+        "rm -f solutions/EvalManagedPackage_unmanaged.zip",
+        "pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_unmanaged.zip --managed false",
+        "test -s solutions/EvalManagedPackage_unmanaged.zip",
+        "rm -f solutions/EvalManagedPackage_managed.zip",
+        "pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_managed.zip --managed true",
+        "test -s solutions/EvalManagedPackage_managed.zip",
+    )
+    managed_prompt_positions = [
+        managed_export_prompt.find(command) for command in managed_prompt_sequence
+    ]
+    managed_prompt_is_interleaved = all(
+        position >= 0 for position in managed_prompt_positions
+    ) and managed_prompt_positions == sorted(managed_prompt_positions)
     if not all(
         isinstance(assertions, list)
         and all(isinstance(assertion, str) for assertion in assertions)
@@ -1154,9 +1168,11 @@ def check_live_eval_contracts(repo_root):
         or "standalone test -s" not in export_prompt
         or "standalone test -f" not in export_prompt
         or "stop and report the blocker" not in export_prompt
-        or "as a separate standalone command without pipes" not in managed_export_prompt
-        or "standalone rm -f for each exact ZIP target" not in managed_export_prompt
-        or "standalone test -s on each exact exported ZIP path" not in managed_export_prompt
+        or "with each numbered line as a separate standalone shell command" not in managed_export_prompt
+        or not managed_prompt_is_interleaved
+        or "Do not remove both ZIP targets up front" not in managed_export_prompt
+        or "each cleanup must immediately precede its matching export" not in managed_export_prompt
+        or "each file check must immediately follow that export" not in managed_export_prompt
         or "distinct paths" not in managed_export_prompt
         or "Resolve ${DATAVERSE_URL} from this test container and display its resulting literal URL" not in managed_export_prompt
         or "I explicitly confirm that resolved literal URL as the source environment, provided pac org who reports the same literal URL" not in managed_export_prompt
