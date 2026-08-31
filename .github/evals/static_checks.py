@@ -1158,7 +1158,10 @@ def check_live_eval_contracts(repo_root):
         or "standalone rm -f for each exact ZIP target" not in managed_export_prompt
         or "standalone test -s on each exact exported ZIP path" not in managed_export_prompt
         or "distinct paths" not in managed_export_prompt
-        or "I confirm the permanent prefix and source environment" not in managed_export_prompt
+        or "Resolve ${DATAVERSE_URL} from this test container and display its resulting literal URL" not in managed_export_prompt
+        or "I explicitly confirm that resolved literal URL as the source environment, provided pac org who reports the same literal URL" not in managed_export_prompt
+        or "do not ask me to confirm it again" not in managed_export_prompt
+        or "I also confirm the permanent publisher prefix exg" not in managed_export_prompt
         or "I confirm the publisher prefix and export from this environment" not in export_prompt
         or "stop and report the blocker" not in managed_export_prompt
         or "PRIORITY_1: CONTAINS: pac solution export" not in export_assertions
