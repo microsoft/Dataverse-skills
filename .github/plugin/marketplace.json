@@ -2,7 +2,7 @@
   "name": "dataverse-skills",
   "metadata": {
     "description": "Official Dataverse plugin marketplace for agent-guided development",
-    "version": "1.12.0"
+    "version": "1.12.1"
   },
   "owner": {
     "name": "Microsoft",
@@ -13,7 +13,7 @@
       "name": "dataverse",
       "description": "Microsoft Dataverse plugin for coding agents, covering record CRUD, bulk data operations, advanced queries, schema and metadata, administration, security, environment management, and solution lifecycle through MCP, CLI, and SDK workflows.",
       "source": "./.github/plugins/dataverse",
-      "version": "1.12.0",
+      "version": "1.12.1",
       "homepage": "https://github.com/microsoft/Dataverse-skills"
     }
   ]

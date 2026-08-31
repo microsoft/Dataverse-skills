@@ -59,7 +59,7 @@ pip install --upgrade azure-identity requests PowerPlatform-Dataverse-Client pan
 
 ### Corporate-managed / restricted devices: package registry
 
-On corporate-managed devices, direct access to the public npm registry (and sometimes PyPI) may be blocked by device policy. Symptom: repeated **"This content is blocked by your IT admin"** / npm-URL-block popups during `npm install` or `npx` — which `dv-connect` (`npm install -g @microsoft/dataverse`) and the MCP proxy (`npx @microsoft/dataverse mcp`) invoke, so they fire on every connect/auth.
+On corporate-managed devices, direct access to the public npm registry (and sometimes PyPI) may be blocked by device policy. Symptom: repeated **"This content is blocked by your IT admin"** / npm-URL-block popups during `npm install` or `npx` -- which `dv-connect` (`npm install -g @microsoft/dataverse`) and the MCP proxy (`npx @microsoft/dataverse mcp`) invoke. The install runs once at connect; the MCP proxy's `npx @latest` runs when the stdio server launches (about once per session, not per tool call).
 
 The plugin never overrides your registry — it honors your `.npmrc`. The fix is device-level: point npm at your organization's approved internal feed.
 
@@ -74,7 +74,7 @@ The plugin never overrides your registry — it honors your `.npmrc`. The fix is
    Also remove any explicit `registry=https://registry.npmjs.org/` line from `~/.npmrc` that shadows the managed default.
 3. `npx` follows npm's registry config; if it still resolves stale, clear its cache (`npm-cache/_npx`) and retry.
 
-Install the Dataverse CLI **once** (when missing) and upgrade **explicitly** when you want a newer version -- do NOT re-fetch `@latest` on every connect. Each `@latest` resolution hits the npm registry, which managed-device policy blocks with a security prompt; point npm at your org's approved feed (steps above) for the one-time install/upgrade to succeed. (Note: the Dataverse CLI also runs its own npm version check on every command -- a separate CLI-level source of the same prompt, tracked in issue #115.)
+Install the Dataverse CLI **once** (when missing) and upgrade **explicitly** when you want a newer version. Each `npm install` / `npx @latest` resolution hits the npm registry, which managed-device policy blocks with a security prompt; point npm at your org's approved feed (steps above) so the one-time install/upgrade and the MCP proxy's per-session `npx @latest` both resolve silently. (The Dataverse CLI no longer runs a per-command npm version check -- that separate per-command popup source, tracked in issue #115, was removed. The only remaining registry touches are this install/upgrade and the once-per-session MCP proxy launch.)
 
 ---
 
