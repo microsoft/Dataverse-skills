@@ -1045,7 +1045,10 @@ def check_live_eval_contracts(repo_root):
         for marker in (
             "use one shell tool call per command block below",
             "Do not append `echo $?`, `2>&1`, any other redirect, pipe, or chained command",
+            "Treat cleanup as a blocking precondition",
             "compare the successful shell-call ledger with the requested sequence",
+            "reproduce the exact successful commands under a **Successful command ledger** heading",
+            "an output-path-only summary is a failed operation",
             "retry the same standalone command up to three times",
             "Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP",
             'solution["version"] != "<requested_version>"',
