@@ -272,9 +272,13 @@ git push
 
 ## Push: Pack + Import
 
-For development environments, pack the unmanaged source files back into a zip:
+For development environments, remove any stale unmanaged package in its own shell call:
 ```
 rm -f ./solutions/<UniqueName>.zip
+```
+
+Pack the unmanaged source files back into a zip in a separate shell call:
+```
 pac solution pack \
   --zipfile ./solutions/<UniqueName>.zip \
   --folder ./solutions/<UniqueName> \
@@ -293,14 +297,24 @@ pac solution import \
 For downstream test or production environments, deploy a managed package. A managed pack requires source previously unpacked with `--packagetype Both`; do not relabel an unmanaged-only unpack. The simplest safe path is a fresh managed export from the confirmed source environment, followed by import to the separately confirmed downstream environment:
 ```
 rm -f ./solutions/<UniqueName>_managed.zip
+```
+
+Export the managed package in a separate shell call:
+```
 pac solution export \
     --name <UniqueName> \
     --path ./solutions/<UniqueName>_managed.zip \
     --managed true \
     --environment <source-url>
+```
 
+Verify the exported package in a separate shell call:
+```
 test -s ./solutions/<UniqueName>_managed.zip
+```
 
+Import the verified package in a separate shell call:
+```
 pac solution import \
     --path ./solutions/<UniqueName>_managed.zip \
     --environment <test-or-production-url> \

@@ -1059,6 +1059,20 @@ def check_live_eval_contracts(repo_root):
             "--environment <test-or-production-url>",
         )
     )
+    shell_blocks = re.findall(
+        r"```(?:bash|sh|shell|powershell|pwsh)?\n(.*?)```",
+        solution_skill,
+        flags=re.DOTALL,
+    )
+    pac_commands_are_standalone = all(
+        sum(
+            1
+            for line in block.splitlines()
+            if re.match(r"^\s*(?:pac\s+solution\b|rm\s+-|test\s+-[fs]\b)", line)
+        )
+        <= 1
+        for block in shell_blocks
+    )
     create_assertion_values = create_test.get("assertions", [])
     if not isinstance(create_assertion_values, list) or not all(
         isinstance(assertion, str) for assertion in create_assertion_values
@@ -1107,6 +1121,7 @@ def check_live_eval_contracts(repo_root):
         "existing rows by unique name" not in create_assertions
         or not teaches_exact_reuse
         or not teaches_verifiable_pac_execution
+        or not pac_commands_are_standalone
         or "as separate standalone commands without pipes" not in export_prompt
         or "rm -f solutions/EvalExportRoundTrip.zip" not in export_prompt
         or "rm -rf solutions/EvalExportRoundTrip" not in export_prompt
