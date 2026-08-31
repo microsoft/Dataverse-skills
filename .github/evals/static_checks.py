@@ -1043,8 +1043,8 @@ def check_live_eval_contracts(repo_root):
     teaches_verifiable_pac_execution = all(
         marker in solution_skill
         for marker in (
-            "as a standalone command and inspect its exit status",
-            "Do not pipe PAC output through",
+            "use one shell tool call per command block below",
+            "Do not append `echo $?`, `2>&1`, any other redirect, pipe, or chained command",
             "Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP",
             'solution["version"] != "<requested_version>"',
             '"version": "<requested_version>"',

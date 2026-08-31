@@ -9,7 +9,7 @@ Create, export, unpack, pack, import, and validate Dataverse solutions via PAC C
 
 > **Headless / restricted-egress hosts**: solution export/import workflows require PAC CLI. Raw `ExportSolution` / `ImportSolution` Web API calls do not satisfy this workflow because they bypass PAC's package contract and local pack/unpack validation. Run the workflow on a capable machine or CI runner that can execute PAC. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
 
-> **Execution proof**: run each `pac solution export`, `pack`, `unpack`, or `import` as a standalone command and inspect its exit status before continuing. Do not pipe PAC output through `tail`, `head`, `grep`, or another command, and do not place PAC after `&&`; those wrappers can report the other process's status and make a failed PAC command look successful. If PAC authentication is unavailable, stop and report that blocker. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP.
+> **Execution proof**: use one shell tool call per command block below. Run each cleanup, `pac solution export`, `pack`, `unpack`, `import`, and file check as a standalone command and let the shell tool's own result report its exit status. Do not append `echo $?`, `2>&1`, any other redirect, pipe, or chained command; those wrappers make the trajectory ambiguous and can make a failed command look successful. If PAC authentication is unavailable, stop and report that blocker. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP.
 
 ## Skill boundaries
 
@@ -189,9 +189,13 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 > **Confirm the target environment before exporting or importing.** Run `pac auth list` + `pac org who`, show the output to the user, and confirm it matches the intended environment. Developers work across multiple environments — do not assume.
 
-Export the solution as unmanaged (source of truth):
+Remove the stale export target in its own shell call:
 ```
 rm -f ./solutions/<UniqueName>.zip
+```
+
+Export the solution as unmanaged (source of truth) in the next shell call:
+```
 pac solution export \
   --name <UniqueName> \
   --path ./solutions/<UniqueName>.zip \
@@ -199,32 +203,57 @@ pac solution export \
   --environment <url>
 ```
 
+Verify the exact export target in a third shell call:
+```
+test -s ./solutions/<UniqueName>.zip
+```
+
 When both package modes are requested, run two standalone exports with distinct paths:
 ```
 rm -f ./solutions/<UniqueName>_unmanaged.zip
+```
+```
 pac solution export \
     --name <UniqueName> \
     --path ./solutions/<UniqueName>_unmanaged.zip \
     --managed false \
     --environment <url>
-
+```
+```
+test -s ./solutions/<UniqueName>_unmanaged.zip
+```
+```
 rm -f ./solutions/<UniqueName>_managed.zip
+```
+```
 pac solution export \
     --name <UniqueName> \
     --path ./solutions/<UniqueName>_managed.zip \
     --managed true \
     --environment <url>
 ```
+```
+test -s ./solutions/<UniqueName>_managed.zip
+```
 
 After each export, run `test -s <exact-zip-path>` as a separate command. After unpacking, run `test -f <exact-folder>/Other/Solution.xml` separately. These checks prove that PAC produced non-empty packages and real unpacked solution files without masking PAC's exit status.
 
-Unpack into editable source files:
+Remove the stale unpack target in its own shell call:
 ```
 rm -rf ./solutions/<UniqueName>
+```
+
+Unpack into editable source files in the next shell call:
+```
 pac solution unpack \
   --zipfile ./solutions/<UniqueName>.zip \
   --folder ./solutions/<UniqueName> \
   --packagetype Unmanaged
+```
+
+Verify the unpacked solution in a third shell call:
+```
+test -f ./solutions/<UniqueName>/Other/Solution.xml
 ```
 
 > **Windows file-lock race.** Run export and unpack as **separate** commands (as above); chaining them immediately can hit a transient ZIP file-lock right after export. If `unpack` fails with a lock / "in use" error, retry after a moment, and verify the unpacked folder has the expected components before deleting the zip.
