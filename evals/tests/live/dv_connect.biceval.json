@@ -35,8 +35,8 @@
     },
     {
       "test_id": "connect_002_environment_identity",
-      "prompt": "Verify that the configured DATAVERSE_URL points to the same live environment returned by Dataverse metadata. Show the configured host, organization unique name, organization ID, and version. Do not authenticate again and do not modify configuration.",
-      "expected_response": "The agent reads the configured URL without exposing secrets, queries organization metadata live, compares identities, and reports an explicit match/mismatch rather than assuming configuration is correct.",
+      "prompt": "Verify that the DATAVERSE_URL already exported in the process environment points to the same live environment returned by Dataverse metadata. Read the process environment before looking for a workspace .env; a missing .env is not missing configuration in this CI runtime. Reuse the injected auth helper to query organization metadata live. Show the configured host, organization unique name, organization ID, and version, then give an explicit match or mismatch verdict. Do not authenticate again and do not modify configuration.",
+      "expected_response": "The agent reads DATAVERSE_URL from the process environment without exposing secrets, does not stop because .env is absent, queries organization metadata through the injected managed auth helper, compares identities, and reports an explicit match/mismatch verdict.",
       "category": "connect",
       "priority": 1,
       "mode": "live",
@@ -45,6 +45,7 @@
       "pr_file_filter": ["**/skills/dv-connect/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: The response compares configured host to live organization metadata and gives an explicit match or mismatch verdict.",
+        "PRIORITY_1: The agent reads DATAVERSE_URL from the process environment first and does not treat a missing workspace .env as missing CI configuration.",
         "PRIORITY_1: Organization unique name, ID, and version come from a managed live read, not just .env echoing.",
         "PRIORITY_1: The agent does not rewrite .env or start reauthentication when the identities match.",
         "PRIORITY_2: SKILL_LOADED: dv-connect"

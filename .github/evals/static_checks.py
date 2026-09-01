@@ -971,6 +971,32 @@ def check_live_eval_contracts(repo_root):
                     "EVAL-LIVE-01 connect_002_environment_identity must query the organization "
                     "entity for an existing row and validate organizationid/name with exact matchers"
                 )
+            identity_contract = " ".join(
+                [identity.get("prompt", ""), identity.get("expected_response", "")]
+            ).lower()
+            if (
+                "process environment" not in identity_contract
+                or "missing .env" not in identity_contract
+                or "injected auth helper" not in identity_contract
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 connect_002_environment_identity must require process-environment "
+                    "configuration and managed live auth even when workspace .env is absent"
+                )
+
+            connect_skill_path = (
+                repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-connect" / "SKILL.md"
+            )
+            connect_skill = connect_skill_path.read_text(encoding="utf-8").lower()
+            if (
+                "read-only validation fast path" not in connect_skill
+                or "process environment" not in connect_skill
+                or "a missing `.env` does not mean configuration is missing" not in connect_skill
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 dv-connect guidance must preserve process-environment configuration "
+                    "for read-only CI validation when workspace .env is absent"
+                )
 
     metadata_path = repo_root / "evals" / "tests" / "live" / "dv_metadata.biceval.json"
     metadata_skill_path = (
