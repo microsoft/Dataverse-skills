@@ -1161,6 +1161,18 @@ def check_live_eval_contracts(repo_root):
     component_checks = component_test.get("verify", {}).get("checks", [])
     export_prompt = export_test.get("prompt", "")
     managed_export_prompt = managed_export_test.get("prompt", "")
+    export_prompt_sequence = (
+        "rm -f solutions/EvalExportRoundTrip.zip",
+        "rm -rf solutions/EvalExportRoundTrip",
+        "pac solution export --name EvalExportRoundTrip --path solutions/EvalExportRoundTrip.zip --managed false",
+        "test -s solutions/EvalExportRoundTrip.zip",
+        "pac solution unpack --zipfile solutions/EvalExportRoundTrip.zip --folder solutions/EvalExportRoundTrip --packagetype Unmanaged",
+        "test -f solutions/EvalExportRoundTrip/Other/Solution.xml",
+    )
+    export_prompt_positions = [export_prompt.find(command) for command in export_prompt_sequence]
+    export_prompt_is_ordered = all(
+        position >= 0 for position in export_prompt_positions
+    ) and export_prompt_positions == sorted(export_prompt_positions)
     managed_prompt_sequence = (
         "rm -f solutions/EvalManagedPackage_unmanaged.zip",
         "pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_unmanaged.zip --managed false",
@@ -1188,11 +1200,11 @@ def check_live_eval_contracts(repo_root):
         or not teaches_verifiable_pac_execution
         or not pac_commands_are_standalone
         or not ordered_examples
-        or "as separate standalone commands without pipes" not in export_prompt
-        or "rm -f solutions/EvalExportRoundTrip.zip" not in export_prompt
-        or "rm -rf solutions/EvalExportRoundTrip" not in export_prompt
-        or "standalone test -s" not in export_prompt
-        or "standalone test -f" not in export_prompt
+        or "with each numbered line as a separate standalone shell command" not in export_prompt
+        or not export_prompt_is_ordered
+        or "Do not combine these lines or add `./` to any listed path" not in export_prompt
+        or "PAC is pre-authenticated by the test harness" not in export_prompt
+        or "do not run pac auth create or reconstruct authentication" not in export_prompt
         or "stop and report the blocker" not in export_prompt
         or "with each numbered line as a separate standalone shell command" not in managed_export_prompt
         or not managed_prompt_is_interleaved
