@@ -946,6 +946,94 @@ def check_cli_attribution(name, text):
 def check_live_eval_contracts(repo_root):
     """Keep live contracts and the skill guidance needed to satisfy them aligned."""
     failures = []
+    live_dir = repo_root / "evals" / "tests" / "live"
+    route_values = {"MCP", "SDK", "DATAVERSE_CLI", "PAC_CLI", "WebAPI", "MIXED", "NONE"}
+    execution_modes = {"execute", "guidance", "refusal"}
+    route_fields = {
+        "expected_route",
+        "acceptable_routes",
+        "execution_mode",
+        "task_shape",
+        "routing_reason",
+    }
+    required_evaluators = {
+        "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty",
+        "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty",
+    }
+    live_files = sorted(live_dir.glob("dv_*.biceval.json"))
+    scenario_count = 0
+    for live_path in live_files:
+        try:
+            live_document = json.loads(live_path.read_text(encoding="utf-8"))
+            evaluators = {
+                evaluator["name"] for evaluator in live_document["enabled_evaluators"]
+            }
+            tests = live_document["tests"]
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            failures.append(f"EVAL-LIVE-04 cannot parse {live_path.name}: {exc}")
+            continue
+
+        missing_evaluators = required_evaluators - evaluators
+        if missing_evaluators:
+            failures.append(
+                f"EVAL-LIVE-04 {live_path.name} must enable routing evaluators: "
+                f"{', '.join(sorted(missing_evaluators))}"
+            )
+
+        scenario_count += len(tests)
+        for test in tests:
+            test_id = test.get("test_id", "<missing test_id>")
+            metadata = test.get("custom_metadata", {})
+            missing_fields = route_fields - metadata.keys()
+            if missing_fields:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} missing routing metadata: "
+                    f"{', '.join(sorted(missing_fields))}"
+                )
+                continue
+
+            expected_route = metadata["expected_route"]
+            acceptable_routes = metadata["acceptable_routes"]
+            execution_mode = metadata["execution_mode"]
+            if expected_route not in route_values:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} has unknown expected_route "
+                    f"'{expected_route}'"
+                )
+            if (
+                not isinstance(acceptable_routes, list)
+                or not acceptable_routes
+                or any(route not in route_values for route in acceptable_routes)
+            ):
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} acceptable_routes must be a "
+                    "non-empty array of canonical route values"
+                )
+            elif expected_route not in acceptable_routes:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} expected_route must also appear "
+                    "in acceptable_routes"
+                )
+            if execution_mode not in execution_modes:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} has unknown execution_mode "
+                    f"'{execution_mode}'"
+                )
+            if not isinstance(metadata["task_shape"], str) or not metadata["task_shape"].strip():
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} task_shape must be non-empty"
+                )
+            if not isinstance(metadata["routing_reason"], str) or not metadata["routing_reason"].strip():
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} routing_reason must be non-empty"
+                )
+
+    if len(live_files) < 8 or scenario_count < 50:
+        failures.append(
+            "EVAL-LIVE-04 exhaustive routing coverage must contain at least 8 live suites "
+            f"and 50 scenarios; found {len(live_files)} suites and {scenario_count} scenarios"
+        )
+
     path = repo_root / "evals" / "tests" / "live" / "dv_connect.biceval.json"
     if not path.exists():
         failures.append(f"EVAL-LIVE-01 required live-eval contract is missing: {path}")

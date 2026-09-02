@@ -19,7 +19,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "create" },
-      "custom_metadata": { "skill": "dv-solution", "spec_scenarios": "S02,S08", "spec_criteria": "3.4,6.1,6.4" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "publisher-solution-create", "routing_reason": "SDK record operations support exact discovery, creation, and ID capture.", "spec_scenarios": "S02,S08", "spec_criteria": "3.4,6.1,6.4" },
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: The exact publisher and EvalExhaustiveCore solution exist in the live org and the solution references that publisher.",
@@ -42,7 +42,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "components" },
-      "custom_metadata": { "skill": "dv-solution", "spec_scenarios": "S02,S04,S08", "spec_criteria": "6.1" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED", "SDK", "PAC_CLI"], "execution_mode": "execute", "task_shape": "solution-component-membership", "routing_reason": "Managed SDK and PAC paths can create the solution and add existing components.", "spec_scenarios": "S02,S04,S08", "spec_criteria": "6.1" },
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: EvalComponentMembership exists and contains account and contact table components.",
@@ -68,7 +68,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "export-unpack" },
-      "custom_metadata": { "skill": "dv-solution", "spec_scenarios": "S04,S08", "spec_criteria": "6.1" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED"], "execution_mode": "execute", "task_shape": "solution-export-unpack", "routing_reason": "SDK prepares solution state and PAC performs deterministic export and unpack.", "spec_scenarios": "S04,S08", "spec_criteria": "6.1" },
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: An unmanaged EvalExportRoundTrip zip was exported and unpacked into solutions/EvalExportRoundTrip with real solution files.",
@@ -99,7 +99,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "managed-export" },
-      "custom_metadata": { "skill": "dv-solution", "spec_scenarios": "S08", "spec_criteria": "6.1,6.4" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED"], "execution_mode": "execute", "task_shape": "dual-package-export", "routing_reason": "SDK prepares solution state and PAC exports both package modes.", "spec_scenarios": "S08", "spec_criteria": "6.1,6.4" },
       "pr_file_filter": ["**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: Both unmanaged and managed EvalManagedPackage zip files were produced and are non-empty.",

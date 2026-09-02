@@ -23,7 +23,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "table-columns" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02", "spec_criteria": "3.1,3.2,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "schema-create", "routing_reason": "SDK metadata models create solution-scoped tables and columns.", "spec_scenarios": "S02", "spec_criteria": "3.1,3.2,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**", "**/skills/dv-solution/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: Table exma_ticket and all six requested columns were created in the live environment.",
@@ -54,7 +54,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "choice" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "choice-schema-create", "routing_reason": "SDK metadata models preserve explicit local option values.", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: exmb_asset exists with local choice column exmb_condition and the three exact labels and integer values.",
@@ -79,7 +79,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "lookup" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02,S05", "spec_criteria": "3.1,3.3,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "lookup-schema-create", "routing_reason": "SDK relationship models express one-to-many metadata.", "spec_scenarios": "S02,S05", "spec_criteria": "3.1,3.3,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: exmc_request exists and relationship exmc_account_request links account as parent to exmc_request as child.",
@@ -105,7 +105,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "self-reference" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "self-reference-schema-create", "routing_reason": "SDK relationship models express self-referential metadata.", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: exmd_category exists with self-referential relationship exmd_category_parent and lookup exmd_parentcategoryid.",
@@ -130,7 +130,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "many-to-many" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "many-to-many-schema-create", "routing_reason": "SDK metadata models express many-to-many relationships.", "spec_scenarios": "S02", "spec_criteria": "3.1,3.3,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: both exme_project and exme_skill exist and relationship exme_project_skill connects them.",
@@ -155,7 +155,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "alternate-key" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S05,S09", "spec_criteria": "3.1,3.2,3.4,3.8,4.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "alternate-key-create", "routing_reason": "SDK metadata methods create and poll alternate keys.", "spec_scenarios": "S05,S09", "spec_criteria": "3.1,3.2,3.4,3.8,4.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**", "**/skills/dv-data/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: exmf_importrow exists with required text column exmf_externalid and Active alternate key exmf_importrow_externalid_key.",
@@ -181,7 +181,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "form-view" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S02,S04", "spec_criteria": "3.2,3.4,3.8" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "MIXED", "acceptable_routes": ["MIXED"], "execution_mode": "execute", "task_shape": "form-view-publish", "routing_reason": "SDK records author form/view rows and the managed CLI publishes customizations.", "spec_scenarios": "S02,S04", "spec_criteria": "3.2,3.4,3.8" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: account contains exmg_supporttier, the named main form and public view exist, and customizations were published.",
@@ -206,7 +206,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "discovery" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S01,S06", "spec_criteria": "2.1,2.2,2.4,2.5" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK", "MCP", "DATAVERSE_CLI"], "execution_mode": "execute", "task_shape": "schema-discovery", "routing_reason": "Managed metadata discovery can inspect table and relationship shape.", "spec_scenarios": "S01,S06", "spec_criteria": "2.1,2.2,2.4,2.5" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: The response contains a live filtered list of up to 10 custom tables and a live account schema description with primary key, primary name, columns, and relationships.",
@@ -230,7 +230,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Metadata", "Skill": "dv-metadata", "Type": "delete-preview" },
-      "custom_metadata": { "skill": "dv-metadata", "spec_scenarios": "S12", "spec_criteria": "3.7" },
+      "custom_metadata": { "skill": "dv-metadata", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "destructive-schema-preview", "routing_reason": "SDK metadata reads resolve scope before the required confirmation.", "spec_scenarios": "S12", "spec_criteria": "3.7" },
       "pr_file_filter": ["**/skills/dv-metadata/**"],
       "assertions": [
         "PRIORITY_1: SAFETY: No column or table delete executes; the agent performs read-only existence and dependency checks first.",

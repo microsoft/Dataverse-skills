@@ -57,6 +57,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "MCP",
+        "acceptable_routes": ["MCP", "DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "small-organization-read",
+        "routing_reason": "Any managed read surface can retrieve one organization row.",
         "spec_scenarios": "S01,S06",
         "spec_criteria": "1.1,4.2,4.6"
       },
@@ -101,6 +106,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK", "MCP", "DATAVERSE_CLI"],
+        "execution_mode": "execute",
+        "task_shape": "formatted-filtered-read",
+        "routing_reason": "Managed query surfaces can filter users and request formatted values.",
         "spec_scenarios": "S06,S07",
         "spec_criteria": "4.2,4.6,4.10"
       },
@@ -138,6 +148,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "server-side-aggregate",
+        "routing_reason": "SDK SQL or FetchXML performs aggregation server-side.",
         "spec_scenarios": "S05,S06",
         "spec_criteria": "4.2,4.6"
       },
@@ -175,6 +190,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "server-side-join",
+        "routing_reason": "SDK SQL or FetchXML performs the bounded join server-side.",
         "spec_scenarios": "S05,S06",
         "spec_criteria": "4.2,4.6"
       },
@@ -212,6 +232,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "dataframe-query-export",
+        "routing_reason": "The SDK QueryBuilder returns a DataFrame for CSV export.",
         "spec_scenarios": "S05,S06",
         "spec_criteria": "4.6"
       },
@@ -250,6 +275,11 @@
       },
       "custom_metadata": {
         "skill": "dv-query",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "paged-stream-read",
+        "routing_reason": "SDK page iterators avoid loading the full result set.",
         "spec_scenarios": "S06",
         "spec_criteria": "4.2,4.6"
       },
@@ -280,7 +310,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Query", "Skill": "dv-query", "Type": "cross-table-search" },
-      "custom_metadata": { "skill": "dv-query", "spec_scenarios": "S06", "spec_criteria": "4.5,4.6" },
+      "custom_metadata": { "skill": "dv-query", "expected_route": "SDK", "acceptable_routes": ["SDK", "MCP", "DATAVERSE_CLI"], "execution_mode": "execute", "task_shape": "multi-table-text-read", "routing_reason": "Managed query surfaces can issue bounded searches per table.", "spec_scenarios": "S06", "spec_criteria": "4.5,4.6" },
       "pr_file_filter": ["**/skills/dv-query/**"],
       "assertions": [
         "PRIORITY_1: OUTCOME: The agent executed read-only searches against account, contact, and phone call and reported a result or explicit zero count for each table.",
@@ -298,7 +328,7 @@
       "priority": 1,
       "mode": "live",
       "tags": { "Suite": "ExhaustiveLive", "Domain": "Query", "Skill": "dv-query", "Type": "notebook-snippet" },
-      "custom_metadata": { "skill": "dv-query", "spec_scenarios": "S06", "spec_criteria": "4.9" },
+      "custom_metadata": { "skill": "dv-query", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "guidance", "task_shape": "notebook-sdk-plan", "routing_reason": "The requested deliverable is a non-secret SDK notebook snippet, not execution.", "spec_scenarios": "S06", "spec_criteria": "4.9" },
       "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-connect/**"],
       "assertions": [
         "PRIORITY_1: The response contains one runnable Python notebook cell using the supported Dataverse SDK and a credential chain or existing auth helper, with no embedded secret or token.",

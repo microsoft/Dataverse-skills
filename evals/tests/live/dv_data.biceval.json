@@ -57,6 +57,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "MCP",
+        "acceptable_routes": ["MCP", "DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "small-record-create",
+        "routing_reason": "All managed create surfaces are peers for three records.",
         "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)",
         "spec_scenarios": "S02,S07",
         "spec_criteria": "4.1,4.6"
@@ -111,6 +116,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-create",
+        "routing_reason": "CreateMultiple is required beyond the 25-record MCP limit.",
         "tool_routing": "SDK CreateMultiple (bulk >25; MCP caps 25, CLI is single-record)",
         "trap": "per-record loop antipattern or MCP for a 500-record bulk",
         "spec_scenarios": "S05",
@@ -162,6 +172,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-create-update",
+        "routing_reason": "CreateMultiple and UpdateMultiple avoid per-record loops.",
         "tool_routing": "SDK CreateMultiple to seed, then SDK UpdateMultiple for the bulk update (query-for-IDs via any managed read)",
         "trap": "one-by-one update loop or create/upsert on the existing seeded records",
         "spec_scenarios": "S05",
@@ -216,6 +231,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK", "MIXED"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-seed-delete",
+        "routing_reason": "The SDK seeds in bulk, then uses supported query-and-delete operations.",
         "tool_routing": "SDK CreateMultiple to seed, then query-then-per-ID-delete via SDK client.records.delete or CLI data delete (no DeleteMultiple)",
         "nist_rmf": "Safe",
         "trap": "invented bulk_delete/purge method or delete without confirmation",
@@ -263,6 +283,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "MCP",
+        "acceptable_routes": ["MCP", "DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "small-related-record-create",
+        "routing_reason": "Managed surfaces are peers for this small relationship-aware write.",
         "tool_routing": "MCP or Dataverse CLI or SDK (small multi-table write with FK resolution)",
         "scenario": "S02 Support Ticket -- seed related data across tables",
         "spec_scenarios": "S02,S07",
@@ -325,6 +350,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "csv-bulk-import",
+        "routing_reason": "The Python SDK parses CSV and calls CreateMultiple.",
         "tool_routing": "Python SDK CreateMultiple from parsed CSV",
         "spec_scenarios": "S05",
         "spec_criteria": "4.7"
@@ -372,6 +402,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "dataframe-bulk-write",
+        "routing_reason": "The SDK DataFrame API owns create and update write-back.",
         "tool_routing": "SDK client.dataframe create/update",
         "spec_scenarios": "S05,S06",
         "spec_criteria": "4.7"
@@ -415,6 +450,11 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "DATAVERSE_CLI",
+        "acceptable_routes": ["DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "record-association",
+        "routing_reason": "The Dataverse CLI associate command or SDK lookup update is managed and ID-aware.",
         "tool_routing": "Dataverse CLI associate or SDK lookup update",
         "spec_scenarios": "S02,S07",
         "spec_criteria": "4.1,4.3,4.10"
