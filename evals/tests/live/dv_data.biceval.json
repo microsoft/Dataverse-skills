@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Data",
-  "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple (MCP caps at 25, the CLI is single-record); the SDK has no DeleteMultiple, so bulk delete is query-then-per-ID-delete (SDK or CLI). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
+  "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple/BulkDelete paths (MCP caps at 25, the CLI is single-record). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
   "enabled_evaluators": [
     {
       "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
@@ -57,7 +57,14 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
-        "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)"
+        "expected_route": "MCP",
+        "acceptable_routes": ["MCP", "DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "small-record-create",
+        "routing_reason": "All managed create surfaces are peers for three records.",
+        "tool_routing": "MCP or Dataverse CLI or SDK (small write <=25, capability-based peers)",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.6"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -109,8 +116,15 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-create",
+        "routing_reason": "CreateMultiple is required beyond the 25-record MCP limit.",
         "tool_routing": "SDK CreateMultiple (bulk >25; MCP caps 25, CLI is single-record)",
-        "trap": "per-record loop antipattern or MCP for a 500-record bulk"
+        "trap": "per-record loop antipattern or MCP for a 500-record bulk",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.1,4.7"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -158,8 +172,15 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-create-update",
+        "routing_reason": "CreateMultiple and UpdateMultiple avoid per-record loops.",
         "tool_routing": "SDK CreateMultiple to seed, then SDK UpdateMultiple for the bulk update (query-for-IDs via any managed read)",
-        "trap": "one-by-one update loop or create/upsert on the existing seeded records"
+        "trap": "one-by-one update loop or create/upsert on the existing seeded records",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.1,4.3"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**",
@@ -197,9 +218,9 @@
     {
       "test_id": "data_004_bulk_delete",
       "prompt": "In my Dataverse org, create 50 accounts named 'EvalDel Account 1' through 'EvalDel Account 50', then clean them up -- go ahead and delete every account whose name starts with 'EvalDel'.",
-      "expected_response": "Self-contained: first bulk-create the 50 EvalDel seed accounts (SDK CreateMultiple), then safe bulk delete. Delete is two steps with real managed methods only: query accounts where name starts with 'EvalDel' to collect their IDs (any managed read), then delete each by ID -- the SDK has NO DeleteMultiple, so per-ID deletes via client.records.delete('account', id) in a loop or the Dataverse CLI (dataverse data delete) per ID. The customer has explicitly authorized the deletion in the prompt, so the agent proceeds without pausing for confirmation. Do NOT invent methods like bulk_delete(), delete_where(), or purge(), and do NOT pass a list of IDs to a single delete. The test seeds its own data.",
+      "expected_response": "Self-contained: first bulk-create the 50 EvalDel seed accounts (SDK CreateMultiple), then safely query accounts whose names start with 'EvalDel' to collect their real IDs. Pass that list to client.records.delete('account', ids), which uses Dataverse BulkDelete by default and returns an asynchronous job ID. The sequential fallback client.records.delete('account', ids, use_bulk_delete=False) is also supported, but a one-by-one loop is less efficient. The customer explicitly authorized this scoped deletion in the prompt, so the agent proceeds without another confirmation. Do NOT invent methods like bulk_delete(), delete_where(), or purge(). The final org-state verifier, rather than an immediate read after asynchronous submission, determines completion.",
       "category": "data",
-      "description": "Natural cleanup request: the test seeds its own 50 'EvalDel' accounts, then query-then-per-ID-delete (no DeleteMultiple; no invented helpers), with explicit customer authorization to delete. Outcome asserted from the delete tool-call results. No dependency on any other test.",
+      "description": "Natural cleanup request: the test seeds its own 50 'EvalDel' accounts, then queries for real IDs and submits the supported SDK BulkDelete path, with explicit customer authorization. The final org-state verifier confirms asynchronous completion. No dependency on any other test.",
       "priority": 1,
       "mode": "live",
       "tags": {
@@ -210,23 +231,30 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
-        "tool_routing": "SDK CreateMultiple to seed, then query-then-per-ID-delete via SDK client.records.delete or CLI data delete (no DeleteMultiple)",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK", "MIXED"],
+        "execution_mode": "execute",
+        "task_shape": "bulk-seed-delete",
+        "routing_reason": "The SDK seeds in bulk, queries the scoped IDs, then submits Dataverse BulkDelete.",
+        "tool_routing": "SDK CreateMultiple to seed, then query IDs and pass the list to client.records.delete for BulkDelete",
         "nist_rmf": "Safe",
-        "trap": "invented bulk_delete/purge method or delete without confirmation"
+        "trap": "invented bulk_delete/purge method, hardcoded IDs, or treating an immediate asynchronous read as definitive failure",
+        "spec_scenarios": "S05,S12",
+        "spec_criteria": "4.1,4.4"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**",
         "**/skills/dv-query/**"
       ],
       "assertions": [
-        "PRIORITY_1: OUTCOME (customer's job done): the 50 EvalDel accounts were seeded and then deleted from the live org. Judge from the captured tool-call RESULTS -- the deletes executed and succeeded for the matched EvalDel accounts -- NOT from the agent's narration or a self-initiated count.",
-        "PRIORITY_1: SAFE method: the agent queries first (any managed read) to collect the matching IDs, then deletes each record by ID (SDK client.records.delete('account', id) in a loop, or the Dataverse CLI dataverse data delete per ID) because the SDK has no DeleteMultiple. Inventing methods like bulk_delete(), delete_where(), or purge(), or passing a list of IDs to a single delete, MUST fail this assertion.",
+        "PRIORITY_1: OUTCOME (customer's job done): the 50 EvalDel accounts were seeded and the final org-state verifier confirms they were deleted. For the asynchronous SDK path, a returned BulkDelete job ID proves successful submission; an immediate stale read does not disprove eventual completion.",
+        "PRIORITY_1: SAFE and efficient method: the agent queries first (any managed read) to collect matching IDs, then passes the ID list to SDK client.records.delete('account', ids), which uses BulkDelete by default. The supported use_bulk_delete=False sequential fallback is acceptable, but an explicit one-by-one loop is inefficient. Invented methods like bulk_delete(), delete_where(), or purge() MUST fail this assertion.",
         "PRIORITY_1: Agent filters accounts by name starting with 'EvalDel' to select what to delete -- it does not assume or hardcode IDs.",
         "PRIORITY_1: CONTAINS: account",
         "PRIORITY_2: CONTAINS: EvalDel",
         "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
         "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: The agent's response follows the dv-data skill's documented delete patterns -- query-then-per-ID-delete, no invented bulk_delete/purge (it loaded and used the dv-data skill)."
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented delete pattern -- query for scoped IDs, submit supported BulkDelete, and recognize that completion is asynchronous (it loaded and used the dv-data skill)."
       ],
       "verify": {
         "entity": "account",
@@ -255,8 +283,15 @@
       },
       "custom_metadata": {
         "skill": "dv-data",
+        "expected_route": "MCP",
+        "acceptable_routes": ["MCP", "DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "small-related-record-create",
+        "routing_reason": "Managed surfaces are peers for this small relationship-aware write.",
         "tool_routing": "MCP or Dataverse CLI or SDK (small multi-table write with FK resolution)",
-        "scenario": "S02 Support Ticket -- seed related data across tables"
+        "scenario": "S02 Support Ticket -- seed related data across tables",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.10,4.11"
       },
       "pr_file_filter": [
         "**/skills/dv-data/**"
@@ -295,6 +330,154 @@
             "filter": "activitytypecode eq 'phonecall' and startswith(regardingobjectid_account/name,'EvalSys ')",
             "at_least": 3,
             "description": "at least 3 phone calls logged against an EvalSys company (read via activitypointer: the phonecalls entity set returns HTTP 500 when a filter walks regardingobjectid_account to a non-key attribute)"
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_006_csv_bulk_import",
+      "prompt": "Create a CSV file in the workspace with 40 companies named 'EvalCsv Company 001' through 'EvalCsv Company 040', each with accountnumber 'ECSV-001' through 'ECSV-040' and city alternating between Seattle and Redmond. Import all 40 into the live Dataverse account table efficiently, and report the created count.",
+      "expected_response": "The agent writes a valid CSV, parses it with Python, maps name/accountnumber/address1_city, and sends the records through one SDK bulk create list so Dataverse uses CreateMultiple. It does not issue 40 individual calls or use raw HTTP.",
+      "category": "data",
+      "description": "S05 CSV bulk import with type/column mapping.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "csv-import"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "csv-bulk-import",
+        "routing_reason": "The Python SDK parses CSV and calls CreateMultiple.",
+        "tool_routing": "Python SDK CreateMultiple from parsed CSV",
+        "spec_scenarios": "S05",
+        "spec_criteria": "4.7"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: All 40 CSV rows were created as live account records with exact name, accountnumber, and alternating city values.",
+        "PRIORITY_1: The agent uses Python CSV parsing and one SDK list passed to client.records.create so the SDK uses CreateMultiple.",
+        "PRIORITY_1: A per-record create loop, MCP for all 40, or raw urllib/requests is not acceptable.",
+        "PRIORITY_1: NOT_CONTAINS: import requests",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "account",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(accountnumber,'ECSV-')",
+            "equals": 40
+          },
+          {
+            "expect": "field_values",
+            "filter": "accountnumber eq 'ECSV-001'",
+            "fields": {
+              "name": "EvalCsv Company 001",
+              "address1_city": "Seattle"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_007_dataframe_writeback",
+      "prompt": "Use pandas to create 30 Dataverse contacts with last name 'EvalDf 001' through 'EvalDf 030' and email 'evaldf001@example.test' through 'evaldf030@example.test'. Write the DataFrame in bulk, then update all 30 through the DataFrame API so job title becomes 'DataFrame Pilot'.",
+      "expected_response": "The agent constructs a DataFrame, uses client.dataframe.create for bulk creation and client.dataframe.update for write-back, preserves returned IDs for update, and does not call deprecated dataframe.get or use per-record HTTP.",
+      "category": "data",
+      "description": "S05/S06 DataFrame create and update workflow.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "dataframe-writeback"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "expected_route": "SDK",
+        "acceptable_routes": ["SDK"],
+        "execution_mode": "execute",
+        "task_shape": "dataframe-bulk-write",
+        "routing_reason": "The SDK DataFrame API owns create and update write-back.",
+        "tool_routing": "SDK client.dataframe create/update",
+        "spec_scenarios": "S05,S06",
+        "spec_criteria": "4.7"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: 30 contacts exist and all have jobtitle 'DataFrame Pilot'.",
+        "PRIORITY_1: The agent uses client.dataframe.create and client.dataframe.update with real created IDs.",
+        "PRIORITY_1: It does not use deprecated client.dataframe.get or a one-request-per-row loop.",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "contact",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "startswith(emailaddress1,'evaldf') and endswith(emailaddress1,'@example.test')",
+            "equals": 30
+          },
+          {
+            "expect": "row_count",
+            "filter": "startswith(emailaddress1,'evaldf') and endswith(emailaddress1,'@example.test') and jobtitle eq 'DataFrame Pilot'",
+            "equals": 30
+          }
+        ]
+      }
+    },
+    {
+      "test_id": "data_008_associate_contact",
+      "prompt": "In the live Dataverse org, create account 'EvalAssoc Contoso' and contact Avery Stone (avery.stone.evalassoc@example.test), then associate Avery as a contact of that account using the account/contact relationship. Use the real IDs returned by creation.",
+      "expected_response": "The agent performs two managed creates, captures IDs, then uses the Dataverse CLI associate command or SDK-supported lookup update with the correct relationship/navigation property. It does not invent GUIDs or raw HTTP.",
+      "category": "data",
+      "description": "S02/S07 single-record association using returned IDs.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {
+        "Suite": "ExhaustiveLive",
+        "Domain": "Data",
+        "Skill": "dv-data",
+        "Type": "associate"
+      },
+      "custom_metadata": {
+        "skill": "dv-data",
+        "expected_route": "DATAVERSE_CLI",
+        "acceptable_routes": ["DATAVERSE_CLI", "SDK"],
+        "execution_mode": "execute",
+        "task_shape": "record-association",
+        "routing_reason": "The Dataverse CLI associate command or SDK lookup update is managed and ID-aware.",
+        "tool_routing": "Dataverse CLI associate or SDK lookup update",
+        "spec_scenarios": "S02,S07",
+        "spec_criteria": "4.1,4.3,4.10"
+      },
+      "pr_file_filter": ["**/skills/dv-data/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: Avery Stone and EvalAssoc Contoso were created and the contact is linked to that exact account.",
+        "PRIORITY_1: The relationship uses the real IDs returned by create calls; no GUID is fabricated or hardcoded.",
+        "PRIORITY_1: The agent uses a managed associate/lookup surface and not raw urllib/requests.",
+        "PRIORITY_2: SKILL_LOADED: dv-data"
+      ],
+      "verify": {
+        "entity": "contact",
+        "checks": [
+          {
+            "expect": "row_count",
+            "filter": "emailaddress1 eq 'avery.stone.evalassoc@example.test' and parentcustomerid_account/name eq 'EvalAssoc Contoso'",
+            "equals": 1
+          },
+          {
+            "expect": "lookup_resolves",
+            "filter": "emailaddress1 eq 'avery.stone.evalassoc@example.test'",
+            "lookup": "parentcustomerid"
           }
         ]
       }

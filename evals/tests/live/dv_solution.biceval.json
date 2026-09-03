@@ -1,0 +1,128 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "Solution",
+  "description": "Live ALM coverage for dv-solution on a disposable test environment: publisher and solution creation, component membership, export/unpack, and managed package production without importing into another environment.",
+  "enabled_evaluators": [
+    { "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": { "supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED" } },
+    { "name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1 },
+    { "name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1 },
+    { "name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1 },
+    { "name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1 },
+    { "name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1 }
+  ],
+  "tests": [
+    {
+      "test_id": "solution_001_create_publisher_solution",
+      "prompt": "The current disposable test environment is the correct target. Create publisher 'Eval Exhaustive Publisher' with unique name evalexhaustivepublisher and permanent prefix exs, then create solution 'Eval Exhaustive Core' with unique name EvalExhaustiveCore and version 1.0.0.0. I confirm the permanent prefix and solution creation.",
+      "expected_response": "The agent discovers before creating, creates or reuses the exact publisher and unmanaged solution through SDK record operations, links solution to publisher, and returns their IDs.",
+      "category": "solution",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "create" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "SDK", "acceptable_routes": ["SDK"], "execution_mode": "execute", "task_shape": "publisher-solution-create", "routing_reason": "SDK record operations support exact discovery, creation, and ID capture.", "spec_scenarios": "S02,S08", "spec_criteria": "3.4,6.1,6.4" },
+      "pr_file_filter": ["**/skills/dv-solution/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: The exact publisher and EvalExhaustiveCore solution exist in the live org and the solution references that publisher.",
+        "PRIORITY_1: The agent first checks for existing rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: It uses SDK client.records operations rather than raw HTTP.",
+        "PRIORITY_2: SKILL_LOADED: dv-solution"
+      ],
+      "verify": {
+        "checks": [
+          { "expect": "record_exists", "entity": "publisher", "filter": "uniquename eq 'evalexhaustivepublisher'", "fields": { "customizationprefix": "exs" } },
+          { "expect": "record_exists", "entity": "solution", "filter": "uniquename eq 'EvalExhaustiveCore' and publisherid/uniquename eq 'evalexhaustivepublisher'", "fields": { "version": "1.0.0.0", "ismanaged": false } }
+        ]
+      }
+    },
+    {
+      "test_id": "solution_002_add_components",
+      "prompt": "In the current disposable test environment, create or reuse publisher evalcomponentpublisher with prefix exc and solution EvalComponentMembership version 1.0.0.0. Add the existing account and contact tables to that solution, including their metadata dependencies, and verify component membership. I confirm the prefix and target solution.",
+      "expected_response": "The agent creates/reuses the solution, resolves account/contact metadata IDs, adds the components through PAC solution add-solution-component or the documented solution header path, includes dependencies, and verifies solutioncomponent membership.",
+      "category": "solution",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "components" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED", "SDK", "PAC_CLI"], "execution_mode": "execute", "task_shape": "solution-component-membership", "routing_reason": "Managed SDK and PAC paths can create the solution and add existing components.", "spec_scenarios": "S02,S04,S08", "spec_criteria": "6.1" },
+      "pr_file_filter": ["**/skills/dv-solution/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: EvalComponentMembership exists and contains account and contact table components.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before adding components.",
+        "PRIORITY_1: The agent resolves real metadata/component IDs and does not invent GUIDs.",
+        "PRIORITY_1: Component addition uses PAC CLI or a documented managed solution-membership path, not hand-edited solution XML.",
+        "PRIORITY_2: SKILL_LOADED: dv-solution"
+      ],
+      "verify": {
+        "entity": "solution",
+        "checks": [
+          { "expect": "record_exists", "filter": "uniquename eq 'EvalComponentMembership'", "fields": { "version": "1.0.0.0", "ismanaged": false } },
+          { "expect": "solution_contains_tables", "solution_unique_name": "EvalComponentMembership", "tables": ["account", "contact"] }
+        ]
+      }
+    },
+    {
+      "test_id": "solution_003_export_unpack",
+      "prompt": "Use the current disposable test environment and load dv-solution first. Resolve ${DATAVERSE_URL} from this test container and display its resulting literal URL. I explicitly confirm that resolved literal URL as the source environment, provided pac org who reports the same literal URL; do not ask me to confirm it again. I confirm the permanent publisher prefix exe and export from this environment. Create or reuse publisher evalexportpublisher and solution EvalExportRoundTrip version 1.0.0.0, then add the account table. Execute the export/unpack phase in this exact order, with each numbered line as a separate standalone shell command and the resolved literal URL substituted for <source-url>:\n1. rm -f solutions/EvalExportRoundTrip.zip\n2. rm -rf solutions/EvalExportRoundTrip\n3. pac solution export --name EvalExportRoundTrip --path solutions/EvalExportRoundTrip.zip --managed false --environment <source-url>\n4. test -s solutions/EvalExportRoundTrip.zip\n5. pac solution unpack --zipfile solutions/EvalExportRoundTrip.zip --folder solutions/EvalExportRoundTrip --packagetype Unmanaged\n6. test -f solutions/EvalExportRoundTrip/Other/Solution.xml\nDo not combine these lines or add `./` to any listed path. Do not use pipes, redirects, command chaining, raw ExportSolution API calls, or hand-built ZIPs. Verify each command succeeds. PAC is pre-authenticated by the test harness: run pac org who once, then use the profile directly; do not run pac auth create or reconstruct authentication. If pac org who is unavailable or does not match the resolved ${DATAVERSE_URL}, stop and report the blocker. I confirm the publisher prefix and export from this environment.",
+      "expected_response": "The agent validates the PAC auth target, creates/reuses and populates the solution, runs pac solution export then unpack, checks command exit status and expected files, and reports the output paths.",
+      "category": "solution",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "export-unpack" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED"], "execution_mode": "execute", "task_shape": "solution-export-unpack", "routing_reason": "SDK prepares solution state and PAC performs deterministic export and unpack.", "spec_scenarios": "S04,S08", "spec_criteria": "6.1" },
+      "pr_file_filter": ["**/skills/dv-solution/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: An unmanaged EvalExportRoundTrip zip was exported and unpacked into solutions/EvalExportRoundTrip with real solution files.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before export.",
+        "PRIORITY_1: It uses pac solution export and pac solution unpack and checks their actual results, not just exit-code-free narration.",
+        "PRIORITY_1: CONTAINS: pac solution export",
+        "PRIORITY_1: CONTAINS: pac solution unpack",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalExportRoundTrip.zip",
+        "PRIORITY_1: CONTAINS: rm -rf solutions/EvalExportRoundTrip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalExportRoundTrip.zip",
+        "PRIORITY_1: CONTAINS: test -f solutions/EvalExportRoundTrip/Other/Solution.xml",
+        "PRIORITY_1: NOT_CONTAINS: ExportSolution",
+        "PRIORITY_2: SKILL_LOADED: dv-solution"
+      ],
+      "verify": {
+        "entity": "solution",
+        "checks": [
+          { "expect": "record_exists", "filter": "uniquename eq 'EvalExportRoundTrip'", "fields": { "version": "1.0.0.0" } }
+        ]
+      }
+    },
+    {
+      "test_id": "solution_004_managed_export",
+      "prompt": "In the current disposable test environment, load dv-solution first. Resolve ${DATAVERSE_URL} from this test container and display its resulting literal URL. I explicitly confirm that resolved literal URL as the source environment, provided pac org who reports the same literal URL; do not ask me to confirm it again. I also confirm the permanent publisher prefix exg. Create or reuse publisher evalmanagedpublisher and solution EvalManagedPackage version 1.2.0.0, add account, and export unmanaged and managed packages to distinct paths. Execute the package phase in this exact order, with each numbered line as a separate standalone shell command and the resolved literal URL substituted for <source-url>:\n1. rm -f solutions/EvalManagedPackage_unmanaged.zip\n2. pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_unmanaged.zip --managed false --environment <source-url>\n3. test -s solutions/EvalManagedPackage_unmanaged.zip\n4. rm -f solutions/EvalManagedPackage_managed.zip\n5. pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_managed.zip --managed true --environment <source-url>\n6. test -s solutions/EvalManagedPackage_managed.zip\nDo not combine these lines. Do not remove both ZIP targets up front: each cleanup must immediately precede its matching export, and each file check must immediately follow that export. Do not use pipes, redirects, command chaining, raw ExportSolution API calls, or hand-built ZIPs. Verify each command succeeds. If PAC authentication is unavailable or pac org who does not match the resolved ${DATAVERSE_URL}, stop and report the blocker. Do not import either package anywhere.",
+      "expected_response": "The agent creates/reuses the source solution, exports both package modes with distinct paths, validates non-empty artifacts, and stops before any import because no target environment was authorized.",
+      "category": "solution",
+      "priority": 1,
+      "mode": "live",
+      "tags": { "Suite": "ExhaustiveLive", "Domain": "ALM", "Skill": "dv-solution", "Type": "managed-export" },
+      "custom_metadata": { "skill": "dv-solution", "expected_route": "MIXED", "acceptable_routes": ["MIXED"], "execution_mode": "execute", "task_shape": "dual-package-export", "routing_reason": "SDK prepares solution state and PAC exports both package modes.", "spec_scenarios": "S08", "spec_criteria": "6.1,6.4" },
+      "pr_file_filter": ["**/skills/dv-solution/**"],
+      "assertions": [
+        "PRIORITY_1: OUTCOME: Both unmanaged and managed EvalManagedPackage zip files were produced and are non-empty.",
+        "PRIORITY_1: The agent first checks for the exact publisher and solution rows by unique name so retrying is idempotent.",
+        "PRIORITY_1: The agent verifies PAC targets the same DATAVERSE_URL before export.",
+        "PRIORITY_1: CONTAINS: pac solution export",
+        "PRIORITY_1: CONTAINS: --managed true",
+        "PRIORITY_1: CONTAINS: --managed false",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_unmanaged.zip",
+        "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_managed.zip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_unmanaged.zip",
+        "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_managed.zip",
+        "PRIORITY_1: NOT_CONTAINS: ExportSolution",
+        "PRIORITY_1: The agent does not import to the current or any other environment because the prompt explicitly withholds import authorization.",
+        "PRIORITY_1: Package names/paths make managed versus unmanaged unambiguous.",
+        "PRIORITY_2: SKILL_LOADED: dv-solution"
+      ],
+      "verify": {
+        "entity": "solution",
+        "checks": [
+          { "expect": "record_exists", "filter": "uniquename eq 'EvalManagedPackage'", "fields": { "version": "1.2.0.0", "ismanaged": false } }
+        ]
+      }
+    }
+  ]
+}

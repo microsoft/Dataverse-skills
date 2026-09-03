@@ -54,7 +54,7 @@ import requests                        # WRONG for SDK-supported ops
 - Record writes: create, update, delete
 - Record reads within write workflows (e.g., lookup resolution) — for standalone queries see **dv-query**
 - Upsert (with alternate key support)
-- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
+- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`, `BulkDelete`
 - File column uploads (chunked for files >128MB)
 - Context manager with HTTP connection pooling
 
@@ -65,7 +65,7 @@ Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modi
 - N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
-- DeleteMultiple, general OData batching
+- General OData batching
 
 ### Dataverse CLI data examples (copy-paste ready)
 
@@ -188,6 +188,29 @@ client.records.update("new_ticket", "<record-guid>",
 ```python
 client.records.delete("new_ticket", "<record-guid>")
 ```
+
+## Bulk Delete (SDK uses BulkDelete internally)
+
+Query first so the deletion scope is explicit, then pass the matched IDs as a
+list. The default list behavior submits Dataverse's asynchronous `BulkDelete`
+action and returns its job ID.
+
+```python
+matches = client.records.list(
+    "new_ticket",
+    filter="startswith(new_name,'EvalDel')",
+    select=["new_ticketid"],
+)
+ids = [record["new_ticketid"] for record in matches]
+job_id = client.records.delete("new_ticket", ids)
+print(f"BulkDelete job: {job_id}")
+```
+
+`BulkDelete` is asynchronous: records may still appear immediately after the
+call succeeds. Treat the returned job ID as submission evidence and verify the
+requested records are gone after the job completes. If immediate, synchronous
+per-record completion is required, use
+`client.records.delete("new_ticket", ids, use_bulk_delete=False)`.
 
 ---
 

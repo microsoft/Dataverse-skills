@@ -40,7 +40,7 @@ solution_id = client.records.create("solution", {
 
 Never create tables or columns outside a solution.
 
-3. Pass `solution="<UniqueName>"` in every SDK call, or include `"MSCRM.SolutionName": "<UniqueName>"` on every raw Web API call.
+3. Pass `solution="<UniqueName>"` when the SDK method accepts it. Otherwise include `"MSCRM.SolutionUniqueName": "<UniqueName>"` as a raw Web API request header, or add the returned component ID to the solution explicitly. Never drop solution scoping after an SDK `TypeError`.
 
 ## Skill boundaries
 
@@ -144,52 +144,24 @@ entity = {
 
 ## Adding Columns
 
-**SDK approach (preferred):**
+For a new table, create its standard columns in the same solution-scoped SDK call:
 
 ```python
-created = client.tables.add_columns(
+info = client.tables.create(
     "new_ProjectBudget",
-    {"new_Description": "string", "new_Amount": "decimal", "new_Active": "bool"},
+    {"new_Description": "memo", "new_Amount": "decimal", "new_Active": "bool"},
+    solution="MySolution",
+    primary_column="new_Name",
+    display_name="Project Budget",
 )
-print(created)  # ['new_Description', 'new_Amount', 'new_Active']
+print(info)
 ```
 
-Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
+Supported type strings: `"string"` / `"text"`, `"memo"` / `"multiline"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets). Both `"decimal"` and the SDK's `"money"` alias create `DecimalAttributeMetadata`; actual Dataverse currency requires the solution-scoped `MoneyAttributeMetadata` pattern in [Column types](references/column-types.md).
 
-**Choice (picklist) column via SDK:**
+`"text"` creates a single-line `String` column; use `"memo"` for multiline text. Verify the live `AttributeType` with `list_columns(...)` before reporting completion.
 
-```python
-from enum import IntEnum
-
-class BudgetStatus(IntEnum):
-    DRAFT = 100000000
-    APPROVED = 100000001
-    REJECTED = 100000002
-
-created = client.tables.add_columns(
-    "new_ProjectBudget",
-    {"new_Status": BudgetStatus},
-)
-```
-
-**Web API approach (needed for column types the SDK doesn't support — e.g., currency with precision, memo with custom max length):**
-
-```python
-# Currency column
-attribute = {
-    "@odata.type": "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
-    "SchemaName": "new_amount",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                          "Label": "Amount", "LanguageCode": 1033}]},
-    "RequiredLevel": {"Value": "None"},
-    "MinValue": 0,
-    "MaxValue": 1000000000,
-    "Precision": 2,
-    "PrecisionSource": 2
-}
-# POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
-```
+`add_columns(...)` does not accept `solution=`, so do not use it for a solution-owned change and then silently omit solution scoping. For existing tables, local choices, currency, custom precision or length, and the solution-aware Web API pattern, read [Column types](references/column-types.md).
 
 ---
 
@@ -318,6 +290,7 @@ body = {
 - **Modify form:** `records.list("systemform", filter=...)` for a template → mutate `formxml` → `records.update("systemform", id, {...})` → publish.
 - **Publish:** `dataverse api request` POST `PublishXml` — required for changes to take effect.
 - **Create view:** `client.records.create("savedquery", {...fetchxml..., ...layoutxml...})` (`0`=standard, `1`=advanced find, `2`=associated, `4`=quick find).
+- **Solution ownership:** record CRUD has no `solution=` parameter. Add each returned form ID (component type `60`) and view ID (`26`) to the confirmed solution with `pac solution add-solution-component` or `AddSolutionComponent`, then verify membership before publishing.
 
 Full code, the template recipe, the `classid` table, and publish: [`references/forms-and-views.md`](references/forms-and-views.md).
 
@@ -427,16 +400,7 @@ For SQL-queryable column discovery (virtual/computed columns excluded), `dv-quer
 
 **After every metadata session, perform the pull-to-repo sequence** — see dv-overview "After Any Change: Pull to Repo" for the full export/unpack/commit commands.
 
-If you used the `MSCRM.SolutionName` header during creation, verify components were added before exporting:
-```python
-sol = client.records.list("solution",
-    filter="uniquename eq '<SOLUTION_NAME>'", select=["solutionid"], top=1).first()
-if sol is not None:
-    components = client.records.list("solutioncomponent",
-        filter=f"_solutionid_value eq {sol['solutionid']}",
-        select=["componenttype", "objectid"])
-    print(f"{len(components)} components in the solution")
-```
+After every metadata mutation session, regardless of SDK, Web API, CLI, or MCP path, verify every changed component ID and type before exporting. A total component count is not verification. Use the exact-ID algorithm and component type map in [Solution membership](references/solution-membership.md).
 
 ---
 
@@ -464,6 +428,7 @@ def ensure_table(client, schema_name, columns, solution, primary_column="prefix_
 
 **Quick reference:**
 - SDK call: `client.tables.create_alternate_key(table, key_name, [columns], display_name=...)`. Composite keys: pass multiple columns.
+- `create_alternate_key(...)` has no `solution=` parameter. Add the returned key metadata ID to the confirmed solution as component type `14`, then verify membership.
 - Use a check-first pattern with `client.tables.get_alternate_keys(table)` to skip keys that already exist — see `references/alternate-keys.md` for the `ensure_alternate_key` helper.
 - Index creation is **async** — for large tables, poll `client.tables.get_alternate_keys(table)` until `status == "Active"` before using.
 - Constraints: max 16 columns / 900 bytes / 10 keys per table; valid types are Integer / Decimal / String / DateTime / Lookup / OptionSet.
@@ -479,12 +444,12 @@ GET /api/data/v9.2/EntityDefinitions?$filter=startswith(LogicalName,'new_')  # B
 ```
 
 To retrieve metadata for multiple custom tables, query each table individually:
-```python
+```http
 GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName,EntitySetName
 ```
 
 Or query all and filter client-side:
-```python
+```http
 GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
 ```
 
@@ -495,5 +460,6 @@ GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
 When using MCP `create_table` or `update_table`:
 
 - **Column types.** MCP handles most types (text, numeric, boolean, datetime, choice/multiselect, lookup/customer, file/image); global option sets, N:N, alternate keys, forms, views need SDK/Web API.
+- **Solution ownership.** Use a confirmed-solution argument when the MCP tool exposes one. If it does not, use a solution-aware SDK/Web API path or add every returned component ID to the solution explicitly. Do not continue until membership is verified.
 - **Timeouts / cache delays.** Creation may report a timeout or stale cache; always `describe('tables/{name}')` before retrying or a follow-up `update_table` (if the table exists, skip creation).
 - **Self-referential lookups** (Parent → same table) are added via `update_table` after creation.

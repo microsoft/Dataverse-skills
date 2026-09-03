@@ -7,7 +7,9 @@ description: Dataverse solution lifecycle — create, export, import, promote ac
 
 Create, export, unpack, pack, import, and validate Dataverse solutions via PAC CLI. Includes post-import validation using the Python SDK.
 
-> **Headless / restricted-egress hosts**: use the raw Web API (`ExportSolution` / `ImportSolution`) for the online steps. `pac solution pack`/`unpack` are local file operations (no auth) but need a host that can run PAC -- do them on a capable machine or CI runner. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
+> **Headless / restricted-egress hosts**: solution export/import workflows require PAC CLI. Raw `ExportSolution` / `ImportSolution` Web API calls do not satisfy this workflow because they bypass PAC's package contract and local pack/unpack validation. Run the workflow on a capable machine or CI runner that can execute PAC. Verify egress with `python scripts/auth.py --check`. See `dv-connect/references/headless-hosts.md`.
+
+> **Execution contract**: action requests mean perform the requested operations now, not just present commands or a plan. Obtain explicit confirmation for the environment and any permanent publisher prefix before the first write; confirmation already supplied in the current request or earlier in the session counts, so do not ask twice. Verify the active PAC environment and stop if it differs. Use one shell tool call per command block below; never combine cleanup, PAC, or file-check commands with `cd`, `echo $?`, redirects, pipes, or other commands. Treat cleanup as a blocking precondition. Before returning, compare the successful shell-call ledger with the requested sequence and reproduce the exact successful commands under a **Successful command ledger** heading; an output-path-only summary is a failed operation. Stop on unavailable PAC authentication. Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP. Requests explicitly limited to instructions, examples, or a plan are guidance-only.
 
 ## Skill boundaries
 
@@ -42,25 +44,23 @@ from auth import get_client
 # telemetry (app/skill/agent). Never include secrets or PII.
 client = get_client("dv-solution")
 
-# 1. Query for existing non-Microsoft publishers
+# Query the exact requested unique name before creating. A broad top-N list is
+# not an idempotency check because the target may exist outside that page.
 publishers = client.records.list(
     "publisher",
-    filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation' and uniquename ne 'Microsoftdynamic'",
+    filter="uniquename eq '<publisheruniquename>'",
     select=["publisherid", "uniquename", "friendlyname", "customizationprefix"],
-    top=10,
+    top=1,
 )
+publisher = publishers.first()
 
-if publishers:
-    # Show existing publishers and ask user which to use
-    print("Existing publishers in this environment:")
-    for p in publishers:
-        print(f"  {p['uniquename']} (prefix: {p['customizationprefix']}_)")
-    # ASK THE USER: "Which publisher should this solution use?"
-    # Or: "Should I reuse '<name>' (prefix: <prefix>_)?"
-    publisher_id = publishers[0]["publisherid"]  # after user confirms
+if publisher is not None:
+    if publisher["customizationprefix"] != "<prefix>":
+        raise ValueError("Existing publisher has a different permanent prefix")
+    publisher_id = publisher["publisherid"]
+    print(f"Reusing publisher: {publisher_id}")
 else:
-    # No custom publisher exists — ASK THE USER for prefix
-    # "What publisher prefix should I use? (e.g., 'contoso', 'sa', 'lit' — 2-8 lowercase chars)"
+    # The user must confirm the permanent prefix before this branch runs.
     publisher_id = client.records.create("publisher", {
         "uniquename": "<publisheruniquename>",
         "friendlyname": "<Publisher Display Name>",
@@ -70,7 +70,7 @@ else:
 ```
 
 **Rules:**
-- **Always ask the user** before creating a new publisher or choosing a prefix. Never hardcode a prefix.
+- **Always obtain explicit user confirmation** before creating a new publisher or choosing a prefix. Confirmation already supplied in the current request or earlier in the session counts; do not ask twice. Never hardcode a prefix.
 - The prefix must match any tables already created in the solution — you cannot mix prefixes.
 - One publisher can own many solutions. Reuse an existing publisher when possible.
 
@@ -88,14 +88,32 @@ from auth import get_client
 # telemetry (app/skill/agent). Never include secrets or PII.
 client = get_client("dv-solution")
 
-# Create the solution record
-solution_id = client.records.create("solution", {
-    "uniquename": "<UniqueName>",
-    "friendlyname": "<Display Name>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": "/publishers(<publisher_guid>)",
-})
-print(f"Created solution: {solution_id}")
+# Query the exact unique name first so retries reuse the same unmanaged solution.
+solutions = client.records.list(
+    "solution",
+    filter="uniquename eq '<UniqueName>'",
+    select=["solutionid", "version", "ismanaged", "_publisherid_value"],
+    top=1,
+)
+solution = solutions.first()
+
+if solution is not None:
+    if (
+        solution["ismanaged"]
+        or solution["_publisherid_value"] != "<publisher_guid>"
+        or solution["version"] != "<requested_version>"
+    ):
+        raise ValueError("Existing solution does not match the requested publisher/type/version")
+    solution_id = solution["solutionid"]
+    print(f"Reusing solution: {solution_id}")
+else:
+    solution_id = client.records.create("solution", {
+        "uniquename": "<UniqueName>",
+        "friendlyname": "<Display Name>",
+        "version": "<requested_version>",
+        "publisherid@odata.bind": "/publishers(<publisher_guid>)",
+    })
+    print(f"Created solution: {solution_id}")
 ```
 
 The required fields:
@@ -169,9 +187,16 @@ The `UniqueName` column is what you pass to other commands. Display names have s
 
 ## Pull: Export + Unpack
 
-> **Confirm the target environment before exporting or importing.** Run `pac auth list` + `pac org who`, show the output to the user, and confirm it matches the intended environment. Developers work across multiple environments — do not assume.
+> **Verify the target before exporting or importing.** Run standalone `pac auth list` and `pac org who`. Explicit prior confirmation of the current source or target counts; proceed without asking twice. Without explicit confirmation, show the environment URL and ask before the first operation. Stop when the target is missing, ambiguous, or different from PAC. Before each export, the immediately preceding successful command must be `rm -f <that exact export path>`. Before returning, execute every missing requested step.
 
-Export the solution as unmanaged (source of truth):
+Dataverse serializes some solution and metadata operations. If create, component-add, export, or unpack reports that another operation is in progress, wait briefly and retry the same standalone command up to three times. Do not abandon the remaining sequence after the first transient conflict. Stop after three failures and report the exact blocker without claiming the package or solution was produced.
+
+Remove the stale export target in its own shell call:
+```
+rm -f ./solutions/<UniqueName>.zip
+```
+
+Export the solution as unmanaged (source of truth) in the next shell call:
 ```
 pac solution export \
   --name <UniqueName> \
@@ -180,12 +205,57 @@ pac solution export \
   --environment <url>
 ```
 
-Unpack into editable source files:
+Verify the exact export target in a third shell call:
+```
+test -s ./solutions/<UniqueName>.zip
+```
+
+When both package modes are requested, run two standalone exports with distinct paths:
+```
+rm -f ./solutions/<UniqueName>_unmanaged.zip
+```
+```
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_unmanaged.zip \
+    --managed false \
+    --environment <url>
+```
+```
+test -s ./solutions/<UniqueName>_unmanaged.zip
+```
+```
+rm -f ./solutions/<UniqueName>_managed.zip
+```
+```
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --managed true \
+    --environment <url>
+```
+```
+test -s ./solutions/<UniqueName>_managed.zip
+```
+
+After each export, run `test -s <exact-zip-path>` as a separate command. After unpacking, run `test -f <exact-folder>/Other/Solution.xml` separately. These checks prove that PAC produced non-empty packages and real unpacked solution files without masking PAC's exit status.
+
+Remove the stale unpack target in its own shell call:
+```
+rm -rf ./solutions/<UniqueName>
+```
+
+Unpack into editable source files in the next shell call:
 ```
 pac solution unpack \
   --zipfile ./solutions/<UniqueName>.zip \
   --folder ./solutions/<UniqueName> \
   --packagetype Unmanaged
+```
+
+Verify the unpacked solution in a third shell call:
+```
+test -f ./solutions/<UniqueName>/Other/Solution.xml
 ```
 
 > **Windows file-lock race.** Run export and unpack as **separate** commands (as above); chaining them immediately can hit a transient ZIP file-lock right after export. If `unpack` fails with a lock / "in use" error, retry after a moment, and verify the unpacked folder has the expected components before deleting the zip.
@@ -204,7 +274,12 @@ git push
 
 ## Push: Pack + Import
 
-Pack the source files back into a zip:
+For development environments, remove any stale unmanaged package in its own shell call:
+```
+rm -f ./solutions/<UniqueName>.zip
+```
+
+Pack the unmanaged source files back into a zip in a separate shell call:
 ```
 pac solution pack \
   --zipfile ./solutions/<UniqueName>.zip \
@@ -219,6 +294,34 @@ pac solution import \
   --environment <url> \
   --async \
   --activate-plugins
+```
+
+For downstream test or production environments, deploy a managed package. A managed pack requires source previously unpacked with `--packagetype Both`; do not relabel an unmanaged-only unpack. The simplest safe path is a fresh managed export from the confirmed source environment, followed by import to the separately confirmed downstream environment:
+```
+rm -f ./solutions/<UniqueName>_managed.zip
+```
+
+Export the managed package in a separate shell call:
+```
+pac solution export \
+    --name <UniqueName> \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --managed true \
+    --environment <source-url>
+```
+
+Verify the exported package in a separate shell call:
+```
+test -s ./solutions/<UniqueName>_managed.zip
+```
+
+Import the verified package in a separate shell call:
+```
+pac solution import \
+    --path ./solutions/<UniqueName>_managed.zip \
+    --environment <test-or-production-url> \
+    --async \
+    --activate-plugins
 ```
 
 ## Poll Import Status
@@ -236,33 +339,36 @@ After importing a solution, verify that components are live. Use the Python SDK 
 
 ```python
 info = client.tables.get("<logical_name>")
-if info:
-    print(f"[PASS] Table '{info.logical_name}' exists")
-else:
-    print(f"[FAIL] Table '<logical_name>' not found")
+if not info:
+    raise RuntimeError("Table '<logical_name>' not found after import")
+print(f"[PASS] Table '{info.logical_name}' exists")
 ```
 
 ### Check a form is published
 
 ```python
-forms = client.records.list(
+forms = list(client.records.list(
     "systemform",
     filter="objecttypecode eq '<entity>' and type eq <form_type_code>",
     select=["name", "formid"],
     top=5,
-)
+))
+if not forms:
+    raise RuntimeError("Expected published form was not found after import")
 # Form type codes: 2 = main, 7 = quick create
 ```
 
 ### Check a view exists
 
 ```python
-views = client.records.list(
+views = list(client.records.list(
     "savedquery",
     filter="returnedtypecode eq '<entity>'",
     select=["name", "savedqueryid", "statuscode"],
     top=10,
-)
+))
+if not views:
+    raise RuntimeError("Expected view was not found after import")
 ```
 
 ### Check a user's role assignment (N:N `$expand`)
@@ -278,6 +384,8 @@ users = list(client.records.list(
     top=1,
 ))
 roles = [r["name"] for r in users[0].get("systemuserroles_association", [])] if users else []
+if not roles:
+    raise RuntimeError("Expected user role assignment was not found after import")
 ```
 
 Alternatively, the managed **Dataverse CLI** escape hatch (`dataverse api request` — not `urllib`), or FetchXML with a link-entity:

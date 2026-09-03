@@ -16,6 +16,7 @@ Exit code 0 = all checks passed. Exit code 1 = one or more failures.
 CAT-1  Python Code Block Validity
        Checks that every python-fenced block is runnable as written.
        EVAL-PY-01  sys.path.insert present and ordered before 'from auth import'
+    EVAL-PY-02  Every Python-fenced block parses as Python
        EVAL-PY-04  No all-comment stub blocks
        EVAL-PY-05  get_token() not used in DataverseClient blocks
        EVAL-PY-06  load_env() called before os.environ access
@@ -98,9 +99,17 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-13 Live Eval Contract Accuracy
+    Checks deterministic live-eval contracts against known Dataverse Web API
+    schema constraints.
+    EVAL-LIVE-01  dv-connect organization identity check uses supported fields
+    EVAL-LIVE-02  dv-metadata teaches Memo for multiline verification contracts
+    EVAL-LIVE-03  dv-solution teaches exact-name idempotent publisher/solution creation
 """
 
 import argparse
+import ast
 import json
 import re
 import sys
@@ -136,6 +145,13 @@ NO_REFERENCES_NUDGE_EXEMPT = {"dv-overview"}
 
 # Anthropic's Skills spec hard limit on the description field (per docs.claude.com).
 DESCRIPTION_CHAR_LIMIT = 1024
+
+# The organization Web API type exposes these fields in the live environments
+# used by the eval pipeline. `uniquename` is not part of that OData type.
+ORGANIZATION_VERIFY_FIELDS = {
+    "organizationid": {"type": "guid"},
+    "name": {"not_null": True},
+}
 
 
 def extract_fenced_blocks(text, lang="python"):
@@ -197,6 +213,20 @@ def check_python_blocks(name, text):
                     f"EVAL-PY-06 [{label}] os.environ accessed without calling load_env() first"
                 )
 
+    return failures
+
+
+def check_python_syntax(name, text):
+    """EVAL-PY-02: every Python-fenced example must parse as Python."""
+    failures = []
+    for i, block in extract_fenced_blocks(text, "python"):
+        try:
+            ast.parse(block)
+        except SyntaxError as exc:
+            failures.append(
+                f"EVAL-PY-02 [{name} python-block-{i}] invalid Python at "
+                f"line {exc.lineno}: {exc.msg}"
+            )
     return failures
 
 
@@ -910,6 +940,409 @@ def check_cli_attribution(name, text):
 
 
 # ---------------------------------------------------------------------------
+# CAT-13  Live Eval Contract Accuracy
+# ---------------------------------------------------------------------------
+
+def check_live_eval_contracts(repo_root):
+    """Keep live contracts and the skill guidance needed to satisfy them aligned."""
+    failures = []
+    live_dir = repo_root / "evals" / "tests" / "live"
+    route_values = {"MCP", "SDK", "DATAVERSE_CLI", "PAC_CLI", "WebAPI", "MIXED", "NONE"}
+    execution_modes = {"execute", "guidance", "refusal"}
+    route_fields = {
+        "expected_route",
+        "acceptable_routes",
+        "execution_mode",
+        "task_shape",
+        "routing_reason",
+    }
+    required_evaluators = {
+        "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty",
+        "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty",
+    }
+    live_files = sorted(live_dir.glob("dv_*.biceval.json"))
+    scenario_count = 0
+    for live_path in live_files:
+        try:
+            live_document = json.loads(live_path.read_text(encoding="utf-8"))
+            evaluators = {
+                evaluator["name"] for evaluator in live_document["enabled_evaluators"]
+            }
+            tests = live_document["tests"]
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            failures.append(f"EVAL-LIVE-04 cannot parse {live_path.name}: {exc}")
+            continue
+
+        missing_evaluators = required_evaluators - evaluators
+        if missing_evaluators:
+            failures.append(
+                f"EVAL-LIVE-04 {live_path.name} must enable routing evaluators: "
+                f"{', '.join(sorted(missing_evaluators))}"
+            )
+
+        scenario_count += len(tests)
+        for test in tests:
+            test_id = test.get("test_id", "<missing test_id>")
+            metadata = test.get("custom_metadata", {})
+            missing_fields = route_fields - metadata.keys()
+            if missing_fields:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} missing routing metadata: "
+                    f"{', '.join(sorted(missing_fields))}"
+                )
+                continue
+
+            expected_route = metadata["expected_route"]
+            acceptable_routes = metadata["acceptable_routes"]
+            execution_mode = metadata["execution_mode"]
+            if expected_route not in route_values:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} has unknown expected_route "
+                    f"'{expected_route}'"
+                )
+            if (
+                not isinstance(acceptable_routes, list)
+                or not acceptable_routes
+                or any(route not in route_values for route in acceptable_routes)
+            ):
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} acceptable_routes must be a "
+                    "non-empty array of canonical route values"
+                )
+            elif expected_route not in acceptable_routes:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} expected_route must also appear "
+                    "in acceptable_routes"
+                )
+            if execution_mode not in execution_modes:
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} has unknown execution_mode "
+                    f"'{execution_mode}'"
+                )
+            if not isinstance(metadata["task_shape"], str) or not metadata["task_shape"].strip():
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} task_shape must be non-empty"
+                )
+            if not isinstance(metadata["routing_reason"], str) or not metadata["routing_reason"].strip():
+                failures.append(
+                    f"EVAL-LIVE-04 {live_path.name}:{test_id} routing_reason must be non-empty"
+                )
+
+    if len(live_files) < 8 or scenario_count < 50:
+        failures.append(
+            "EVAL-LIVE-04 exhaustive routing coverage must contain at least 8 live suites "
+            f"and 50 scenarios; found {len(live_files)} suites and {scenario_count} scenarios"
+        )
+
+    path = repo_root / "evals" / "tests" / "live" / "dv_connect.biceval.json"
+    if not path.exists():
+        failures.append(f"EVAL-LIVE-01 required live-eval contract is missing: {path}")
+    else:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            identity = next(
+                test
+                for test in document["tests"]
+                if test["test_id"] == "connect_002_environment_identity"
+            )
+            check = identity["verify"]["checks"][0]
+        except (KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+            failures.append(f"EVAL-LIVE-01 cannot parse {path.name}: {exc}")
+        else:
+            if (
+                identity.get("verify", {}).get("entity") != "organization"
+                or check.get("expect") != "record_exists"
+                or check.get("filter") != "organizationid ne null"
+                or check.get("fields") != ORGANIZATION_VERIFY_FIELDS
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 connect_002_environment_identity must query the organization "
+                    "entity for an existing row and validate organizationid/name with exact matchers"
+                )
+            identity_contract = " ".join(
+                [identity.get("prompt", ""), identity.get("expected_response", "")]
+            ).lower()
+            if (
+                "process environment" not in identity_contract
+                or "missing .env" not in identity_contract
+                or "injected auth helper" not in identity_contract
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 connect_002_environment_identity must require process-environment "
+                    "configuration and managed live auth even when workspace .env is absent"
+                )
+
+            connect_skill_path = (
+                repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-connect" / "SKILL.md"
+            )
+            connect_skill = connect_skill_path.read_text(encoding="utf-8").lower()
+            if (
+                "read-only validation fast path" not in connect_skill
+                or "process environment" not in connect_skill
+                or "a missing `.env` does not mean configuration is missing" not in connect_skill
+            ):
+                failures.append(
+                    "EVAL-LIVE-01 dv-connect guidance must preserve process-environment configuration "
+                    "for read-only CI validation when workspace .env is absent"
+                )
+
+    metadata_path = repo_root / "evals" / "tests" / "live" / "dv_metadata.biceval.json"
+    metadata_skill_path = (
+        repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-metadata" / "SKILL.md"
+    )
+    try:
+        metadata_document = json.loads(metadata_path.read_text(encoding="utf-8"))
+        table_test = next(
+            test
+            for test in metadata_document["tests"]
+            if test["test_id"] == "metadata_001_table_and_simple_columns"
+        )
+        description_check = next(
+            check
+            for check in table_test["verify"]["checks"]
+            if check.get("column") == "exma_description"
+        )
+        metadata_skill = metadata_skill_path.read_text(encoding="utf-8")
+    except (OSError, KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"EVAL-LIVE-02 cannot parse dv-metadata contract or skill: {exc}")
+        return failures
+
+    teaches_memo = all(
+        marker in metadata_skill
+        for marker in (
+            '"memo"` / `"multiline"',
+            '`"text"` creates a single-line `String` column',
+            '`add_columns(...)` does not accept `solution=`',
+            '`"MSCRM.SolutionUniqueName": "<UniqueName>"` as a raw Web API request header',
+            'verify every changed component ID and type',
+        )
+    )
+    if (
+        table_test.get("verify", {}).get("entity") != "exma_ticket"
+        or description_check.get("expect") != "column_exists"
+        or description_check.get("column_type") != "Memo"
+        or not teaches_memo
+    ):
+        failures.append(
+            "EVAL-LIVE-02 metadata_001 expects exma_description as Memo, so dv-metadata "
+            "must distinguish SDK memo/multiline from single-line text and preserve solution scoping"
+        )
+
+    solution_path = repo_root / "evals" / "tests" / "live" / "dv_solution.biceval.json"
+    solution_skill_path = (
+        repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-solution" / "SKILL.md"
+    )
+    try:
+        solution_document = json.loads(solution_path.read_text(encoding="utf-8"))
+        create_test = next(
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_001_create_publisher_solution"
+        )
+        solution_skill = solution_skill_path.read_text(encoding="utf-8")
+    except (OSError, KeyError, StopIteration, TypeError, json.JSONDecodeError) as exc:
+        failures.append(f"EVAL-LIVE-03 cannot parse dv-solution contract or skill: {exc}")
+        return failures
+
+    teaches_exact_reuse = all(
+        marker in solution_skill
+        for marker in (
+            'filter="uniquename eq \'<publisheruniquename>\'"',
+            'publisher = publishers.first()',
+            'filter="uniquename eq \'<UniqueName>\'"',
+            'solution = solutions.first()',
+            'Reusing solution:',
+        )
+    )
+    teaches_verifiable_pac_execution = all(
+        marker in solution_skill
+        for marker in (
+            "action requests mean perform the requested operations now, not just present commands or a plan",
+            "Obtain explicit confirmation for the environment and any permanent publisher prefix before the first write",
+            "Use one shell tool call per command block below",
+            "never combine cleanup, PAC, or file-check commands with `cd`, `echo $?`, redirects, pipes, or other commands",
+            "Treat cleanup as a blocking precondition",
+            "confirmation already supplied in the current request or earlier in the session counts, so do not ask twice",
+            "Without explicit confirmation, show the environment URL and ask before the first operation",
+            "Requests explicitly limited to instructions, examples, or a plan are guidance-only",
+            "compare the successful shell-call ledger with the requested sequence",
+            "reproduce the exact successful commands under a **Successful command ledger** heading",
+            "an output-path-only summary is a failed operation",
+            "retry the same standalone command up to three times",
+            "Never substitute raw `ExportSolution` / `ImportSolution` calls or a hand-built ZIP",
+            'solution["version"] != "<requested_version>"',
+            '"version": "<requested_version>"',
+            "--path ./solutions/<UniqueName>_unmanaged.zip",
+            "--path ./solutions/<UniqueName>_managed.zip",
+            "--managed true",
+            "rm -f ./solutions/<UniqueName>.zip",
+            "rm -rf ./solutions/<UniqueName>",
+            "test -s <exact-zip-path>",
+            "test -f <exact-folder>/Other/Solution.xml",
+            "raise RuntimeError(\"Table '<logical_name>' not found after import\")",
+            "--environment <test-or-production-url>",
+        )
+    )
+    shell_blocks = re.findall(
+        r"```(?:bash|sh|shell|powershell|pwsh)?\n(.*?)```",
+        solution_skill,
+        flags=re.DOTALL,
+    )
+    action_pattern = re.compile(r"^\s*(?:pac\s+solution\b|rm\s+-|test\s+-[fs]\b)")
+    action_blocks = [
+        block for block in shell_blocks if any(action_pattern.match(line) for line in block.splitlines())
+    ]
+    pac_commands_are_standalone = all(
+        sum(1 for line in block.splitlines() if action_pattern.match(line)) == 1
+        and not re.search(r"(?:^|\s)cd\s|&&|\|\||(?:^|\s)\|(?!\|)|2>&1|(?:^|\s)(?:1|2)?>>?\s", block)
+        for block in action_blocks
+    )
+    ordered_examples = all(
+        solution_skill.find(cleanup) < solution_skill.find(operation) < solution_skill.find(check)
+        for cleanup, operation, check in (
+            (
+                "rm -f ./solutions/<UniqueName>_unmanaged.zip",
+                "--path ./solutions/<UniqueName>_unmanaged.zip",
+                "test -s ./solutions/<UniqueName>_unmanaged.zip",
+            ),
+            (
+                "rm -f ./solutions/<UniqueName>_managed.zip",
+                "--path ./solutions/<UniqueName>_managed.zip",
+                "test -s ./solutions/<UniqueName>_managed.zip",
+            ),
+        )
+    )
+    create_assertion_values = create_test.get("assertions", [])
+    if not isinstance(create_assertion_values, list) or not all(
+        isinstance(assertion, str) for assertion in create_assertion_values
+    ):
+        failures.append("EVAL-LIVE-03 solution_001 assertions must be an array of strings")
+        return failures
+    create_assertions = " ".join(create_assertion_values)
+    export_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_003_export_unpack"
+        ),
+        {},
+    )
+    export_assertions = export_test.get("assertions", [])
+    managed_export_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_004_managed_export"
+        ),
+        {},
+    )
+    managed_export_assertions = managed_export_test.get("assertions", [])
+    component_test = next(
+        (
+            test
+            for test in solution_document["tests"]
+            if test["test_id"] == "solution_002_add_components"
+        ),
+        {},
+    )
+    create_checks = create_test.get("verify", {}).get("checks", [])
+    component_checks = component_test.get("verify", {}).get("checks", [])
+    export_prompt = export_test.get("prompt", "")
+    managed_export_prompt = managed_export_test.get("prompt", "")
+    export_prompt_sequence = (
+        "rm -f solutions/EvalExportRoundTrip.zip",
+        "rm -rf solutions/EvalExportRoundTrip",
+        "pac solution export --name EvalExportRoundTrip --path solutions/EvalExportRoundTrip.zip --managed false",
+        "test -s solutions/EvalExportRoundTrip.zip",
+        "pac solution unpack --zipfile solutions/EvalExportRoundTrip.zip --folder solutions/EvalExportRoundTrip --packagetype Unmanaged",
+        "test -f solutions/EvalExportRoundTrip/Other/Solution.xml",
+    )
+    export_prompt_positions = [export_prompt.find(command) for command in export_prompt_sequence]
+    export_prompt_is_ordered = all(
+        position >= 0 for position in export_prompt_positions
+    ) and export_prompt_positions == sorted(export_prompt_positions)
+    managed_prompt_sequence = (
+        "rm -f solutions/EvalManagedPackage_unmanaged.zip",
+        "pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_unmanaged.zip --managed false",
+        "test -s solutions/EvalManagedPackage_unmanaged.zip",
+        "rm -f solutions/EvalManagedPackage_managed.zip",
+        "pac solution export --name EvalManagedPackage --path solutions/EvalManagedPackage_managed.zip --managed true",
+        "test -s solutions/EvalManagedPackage_managed.zip",
+    )
+    managed_prompt_positions = [
+        managed_export_prompt.find(command) for command in managed_prompt_sequence
+    ]
+    managed_prompt_is_interleaved = all(
+        position >= 0 for position in managed_prompt_positions
+    ) and managed_prompt_positions == sorted(managed_prompt_positions)
+    if not all(
+        isinstance(assertions, list)
+        and all(isinstance(assertion, str) for assertion in assertions)
+        for assertions in (export_assertions, managed_export_assertions)
+    ):
+        failures.append("EVAL-LIVE-03 dv-solution assertions must be arrays of strings")
+        return failures
+    if (
+        "existing rows by unique name" not in create_assertions
+        or not teaches_exact_reuse
+        or not teaches_verifiable_pac_execution
+        or not pac_commands_are_standalone
+        or not ordered_examples
+        or "with each numbered line as a separate standalone shell command" not in export_prompt
+        or not export_prompt_is_ordered
+        or "Do not combine these lines or add `./` to any listed path" not in export_prompt
+        or "PAC is pre-authenticated by the test harness" not in export_prompt
+        or "do not run pac auth create or reconstruct authentication" not in export_prompt
+        or "stop and report the blocker" not in export_prompt
+        or "with each numbered line as a separate standalone shell command" not in managed_export_prompt
+        or not managed_prompt_is_interleaved
+        or "Do not remove both ZIP targets up front" not in managed_export_prompt
+        or "each cleanup must immediately precede its matching export" not in managed_export_prompt
+        or "each file check must immediately follow that export" not in managed_export_prompt
+        or "distinct paths" not in managed_export_prompt
+        or "Resolve ${DATAVERSE_URL} from this test container and display its resulting literal URL" not in managed_export_prompt
+        or "I explicitly confirm that resolved literal URL as the source environment, provided pac org who reports the same literal URL" not in managed_export_prompt
+        or "do not ask me to confirm it again" not in managed_export_prompt
+        or "I also confirm the permanent publisher prefix exg" not in managed_export_prompt
+        or "I confirm the publisher prefix and export from this environment" not in export_prompt
+        or "stop and report the blocker" not in managed_export_prompt
+        or "PRIORITY_1: CONTAINS: pac solution export" not in export_assertions
+        or "PRIORITY_1: CONTAINS: pac solution unpack" not in export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalExportRoundTrip.zip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: rm -rf solutions/EvalExportRoundTrip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalExportRoundTrip.zip" not in export_assertions
+        or "PRIORITY_1: CONTAINS: test -f solutions/EvalExportRoundTrip/Other/Solution.xml" not in export_assertions
+        or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in export_assertions
+        or "PRIORITY_1: CONTAINS: pac solution export" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: --managed true" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: --managed false" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_unmanaged.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: rm -f solutions/EvalManagedPackage_managed.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_unmanaged.zip" not in managed_export_assertions
+        or "PRIORITY_1: CONTAINS: test -s solutions/EvalManagedPackage_managed.zip" not in managed_export_assertions
+        or "PRIORITY_1: NOT_CONTAINS: ExportSolution" not in managed_export_assertions
+        or not any(
+            check.get("expect") == "record_exists"
+            and "publisherid/uniquename eq 'evalexhaustivepublisher'" in check.get("filter", "")
+            and check.get("fields", {}).get("version") == "1.0.0.0"
+            for check in create_checks
+        )
+        or not any(
+            check.get("expect") == "solution_contains_tables"
+            and check.get("solution_unique_name") == "EvalComponentMembership"
+            and check.get("tables") == ["account", "contact"]
+            for check in component_checks
+        )
+    ):
+        failures.append(
+            "EVAL-LIVE-03 dv-solution requires exact unique-name discovery before "
+            "publisher/solution creation, standalone PAC execution with no raw fallback, "
+            "literal PAC export/unpack assertions, publisher linkage, and exact table membership"
+        )
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -942,6 +1375,7 @@ def main():
         python_block_count += len(re.findall(r"```python\n", text))
 
         all_failures.extend(check_python_blocks(name, text))
+        all_failures.extend(check_python_syntax(name, text))
         all_failures.extend(check_auth_patterns(name, text))
         all_failures.extend(check_pac_cli(name, text))
         all_failures.extend(check_connect_step0(name, text))
@@ -956,6 +1390,7 @@ def main():
     for rf in sorted(skills_dir.glob("*/references/*.md")):
         rtext = rf.read_text(encoding="utf-8")
         rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
+        all_failures.extend(check_python_syntax(rlabel, rtext))
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
@@ -973,6 +1408,7 @@ def main():
 
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
+    all_failures.extend(check_live_eval_contracts(repo_root))
 
     if all_failures:
         # Group output by category prefix for readability
@@ -992,7 +1428,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"12 categories checked"
+            f"13 categories checked"
         )
 
 

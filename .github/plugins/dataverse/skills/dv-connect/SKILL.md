@@ -1,6 +1,6 @@
 ---
 name: dv-connect
-description: One-step setup for a Dataverse environment — installs tools, authenticates, registers the MCP server, and writes `.env`. Use when starting a new project, switching environments, fixing authentication, or troubleshooting an MCP connection that won't come up.
+description: One-step setup and connection validation for a Dataverse environment — installs tools, authenticates, registers the MCP server, writes `.env`, and verifies the configured URL matches the live environment identity. Use when starting a new project, switching environments, validating the current connection or environment, fixing authentication, or troubleshooting an MCP connection that won't come up.
 ---
 
 # Skill: Connect
@@ -17,16 +17,18 @@ One-step, idempotent Dataverse connection. Each step checks if it's already done
 
 ## Step 0: Detect existing setup (run this first)
 
-Before touching anything, check whether this workspace is already connected to a Dataverse environment. Repeating setup on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
+Check for an existing connection before changing setup; repeating setup can overwrite `.env` and authentication state.
 
-Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
+**Read-only validation fast path:** Read non-secret configuration from the **process environment** before `.env`. A missing `.env` does not mean configuration is missing when `DATAVERSE_URL` is exported, as in CI. Reuse the injected auth helper/profile, live-read organization identity, and report an explicit host match/mismatch. Do not run setup, write configuration, or authenticate.
 
-1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
-2. **MCP is registered** — `.mcp.json` (Claude Code) or the equivalent Copilot / Cursor config file has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
-3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
+Otherwise, run these checks in order. If **all four pass**, jump to Step 7.
+
+1. **Configuration is present and complete** — the process environment or workspace-root `.env` contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`; process values take precedence
+2. **MCP is registered** — the host's MCP config has a `dataverse-*` entry for `DATAVERSE_URL`
+3. **Both auth surfaces match** — `dataverse auth who` and `pac org who` succeed against profiles for `DATAVERSE_URL`. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** Refresh `DATAVERSE_PLUGIN_VERSION` in `.env` if it's stale, confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** Refresh a stale `DATAVERSE_PLUGIN_VERSION` in `.env`, confirm URL/profile/MCP, and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or reinstall packages.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
