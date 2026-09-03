@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "Data",
-  "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple (MCP caps at 25, the CLI is single-record); the SDK has no DeleteMultiple, so bulk delete is query-then-per-ID-delete (SDK or CLI). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
+  "description": "Live record CRUD for the dv-data skill against a real Dataverse org, driven by NATURAL customer prompts -- what a real user would type, not prompt-engineered instructions (no 'write a python script', no 'optimize for fewest HTTP calls', no 'read it back and confirm'). The customer states the JOB; the assertions verify the OUTCOME and whether the agent did it the right way, efficiently. Outcome is judged from the captured tool-call RESULTS in the trajectory (returned record IDs / affected counts) -- NOT from the agent's own summary claim, and NOT by asking the agent to self-verify. Every test is fully SELF-CONTAINED and runs in isolation: tests that need existing records seed their OWN with a unique name prefix (EvalSeed / EvalUpd / EvalDel) so they never collide. Routing is capability-based per the skills (overview Hard Rule 2): small writes (<=25) may use MCP create_record, the Dataverse CLI (dataverse data ...), or the SDK as peers; bulk writes beyond 25 use the SDK's CreateMultiple/UpdateMultiple/BulkDelete paths (MCP caps at 25, the CLI is single-record). Raw urllib/requests is rejected only where a managed surface covers the operation. Tests target out-of-box account/contact tables so runs are deterministic.",
   "enabled_evaluators": [
     {
       "name": "CortexConfigurations:Common/DeterministicAssertionEvaluator",
@@ -218,9 +218,9 @@
     {
       "test_id": "data_004_bulk_delete",
       "prompt": "In my Dataverse org, create 50 accounts named 'EvalDel Account 1' through 'EvalDel Account 50', then clean them up -- go ahead and delete every account whose name starts with 'EvalDel'.",
-      "expected_response": "Self-contained: first bulk-create the 50 EvalDel seed accounts (SDK CreateMultiple), then safe bulk delete. Delete is two steps with real managed methods only: query accounts where name starts with 'EvalDel' to collect their IDs (any managed read), then delete each by ID -- the SDK has NO DeleteMultiple, so per-ID deletes via client.records.delete('account', id) in a loop or the Dataverse CLI (dataverse data delete) per ID. The customer has explicitly authorized the deletion in the prompt, so the agent proceeds without pausing for confirmation. Do NOT invent methods like bulk_delete(), delete_where(), or purge(), and do NOT pass a list of IDs to a single delete. The test seeds its own data.",
+      "expected_response": "Self-contained: first bulk-create the 50 EvalDel seed accounts (SDK CreateMultiple), then safely query accounts whose names start with 'EvalDel' to collect their real IDs. Pass that list to client.records.delete('account', ids), which uses Dataverse BulkDelete by default and returns an asynchronous job ID. The sequential fallback client.records.delete('account', ids, use_bulk_delete=False) is also supported, but a one-by-one loop is less efficient. The customer explicitly authorized this scoped deletion in the prompt, so the agent proceeds without another confirmation. Do NOT invent methods like bulk_delete(), delete_where(), or purge(). The final org-state verifier, rather than an immediate read after asynchronous submission, determines completion.",
       "category": "data",
-      "description": "Natural cleanup request: the test seeds its own 50 'EvalDel' accounts, then query-then-per-ID-delete (no DeleteMultiple; no invented helpers), with explicit customer authorization to delete. Outcome asserted from the delete tool-call results. No dependency on any other test.",
+      "description": "Natural cleanup request: the test seeds its own 50 'EvalDel' accounts, then queries for real IDs and submits the supported SDK BulkDelete path, with explicit customer authorization. The final org-state verifier confirms asynchronous completion. No dependency on any other test.",
       "priority": 1,
       "mode": "live",
       "tags": {
@@ -235,10 +235,10 @@
         "acceptable_routes": ["SDK", "MIXED"],
         "execution_mode": "execute",
         "task_shape": "bulk-seed-delete",
-        "routing_reason": "The SDK seeds in bulk, then uses supported query-and-delete operations.",
-        "tool_routing": "SDK CreateMultiple to seed, then query-then-per-ID-delete via SDK client.records.delete or CLI data delete (no DeleteMultiple)",
+        "routing_reason": "The SDK seeds in bulk, queries the scoped IDs, then submits Dataverse BulkDelete.",
+        "tool_routing": "SDK CreateMultiple to seed, then query IDs and pass the list to client.records.delete for BulkDelete",
         "nist_rmf": "Safe",
-        "trap": "invented bulk_delete/purge method or delete without confirmation",
+        "trap": "invented bulk_delete/purge method, hardcoded IDs, or treating an immediate asynchronous read as definitive failure",
         "spec_scenarios": "S05,S12",
         "spec_criteria": "4.1,4.4"
       },
@@ -247,14 +247,14 @@
         "**/skills/dv-query/**"
       ],
       "assertions": [
-        "PRIORITY_1: OUTCOME (customer's job done): the 50 EvalDel accounts were seeded and then deleted from the live org. Judge from the captured tool-call RESULTS -- the deletes executed and succeeded for the matched EvalDel accounts -- NOT from the agent's narration or a self-initiated count.",
-        "PRIORITY_1: SAFE method: the agent queries first (any managed read) to collect the matching IDs, then deletes each record by ID (SDK client.records.delete('account', id) in a loop, or the Dataverse CLI dataverse data delete per ID) because the SDK has no DeleteMultiple. Inventing methods like bulk_delete(), delete_where(), or purge(), or passing a list of IDs to a single delete, MUST fail this assertion.",
+        "PRIORITY_1: OUTCOME (customer's job done): the 50 EvalDel accounts were seeded and the final org-state verifier confirms they were deleted. For the asynchronous SDK path, a returned BulkDelete job ID proves successful submission; an immediate stale read does not disprove eventual completion.",
+        "PRIORITY_1: SAFE and efficient method: the agent queries first (any managed read) to collect matching IDs, then passes the ID list to SDK client.records.delete('account', ids), which uses BulkDelete by default. The supported use_bulk_delete=False sequential fallback is acceptable, but an explicit one-by-one loop is inefficient. Invented methods like bulk_delete(), delete_where(), or purge() MUST fail this assertion.",
         "PRIORITY_1: Agent filters accounts by name starting with 'EvalDel' to select what to delete -- it does not assume or hardcode IDs.",
         "PRIORITY_1: CONTAINS: account",
         "PRIORITY_2: CONTAINS: EvalDel",
         "PRIORITY_2: Agent does not hand-roll raw urllib/requests for the delete -- it uses a managed surface (SDK or the dataverse CLI).",
         "PRIORITY_2: SKILL_LOADED: dv-data",
-        "PRIORITY_2: The agent's response follows the dv-data skill's documented delete patterns -- query-then-per-ID-delete, no invented bulk_delete/purge (it loaded and used the dv-data skill)."
+        "PRIORITY_2: The agent's response follows the dv-data skill's documented delete pattern -- query for scoped IDs, submit supported BulkDelete, and recognize that completion is asynchronous (it loaded and used the dv-data skill)."
       ],
       "verify": {
         "entity": "account",
