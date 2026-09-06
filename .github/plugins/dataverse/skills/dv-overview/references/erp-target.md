@@ -53,7 +53,7 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 ```bash
 # Small / interactive — ERP MCP if available, else CLI
 dataverse data query --target erp --table SalesOrderHeaders --top 10 \
-  --select "SalesOrderNumber,CustomerAccount,SalesOrderStatus"
+  --select "SalesOrderNumber,OrderingCustomerAccountNumber,SalesOrderStatus"
 
 # Cross-company — all legal entities the user can read
 dataverse data query --target erp --table CustomerGroups --cross-company \

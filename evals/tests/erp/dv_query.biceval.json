@@ -1,0 +1,154 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Query",
+  "description": "Finance and Operations read and API-discovery evals for dv-query. Tests cover ERP MCP and Dataverse CLI routing, composite keys, cross-company reads, local aggregation, entity/action discovery, and custom-service invocation.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillQualityEvaluator.prompty", "passing_score": 4, "priority": 1},
+    {"name": "CortexConfigurations:Common/SkillSecurityEvaluator", "passing_score": 3, "priority": 1},
+    {"name": "DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent used ERP MCP or the Dataverse CLI ERP target directly without trying Dataverse SDK, FetchXML, SQL, or unsupported ERP query features first.",
+    "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-query, and agent attribution."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_query_001_small_read",
+      "prompt": "Show me ten backordered sales orders in Finance and Operations with order number, ordering customer account, and status.",
+      "expected_response": "The agent uses available ERP MCP for the small interactive read or a bounded dataverse data query --target erp against SalesOrderHeaders. It uses PascalCase entity naming, selects only requested fields, filters Backorder, limits to ten, and reports live results.",
+      "category": "erp-query",
+      "description": "Run a bounded filtered ERP read through MCP or CLI.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "read"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP MCP or Dataverse CLI --target erp"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: The agent uses an available ERP MCP read tool or dataverse data query --target erp; it does not use the Python Dataverse SDK.",
+        "PRIORITY_1: The query targets SalesOrderHeaders with --top 10, selects SalesOrderNumber, OrderingCustomerAccountNumber, and SalesOrderStatus, and filters the ERP Backorder enum correctly.",
+        "PRIORITY_1: OUTCOME: the answer is grounded in returned ERP rows and does not fabricate orders when none are returned.",
+        "PRIORITY_1: The agent does not use FetchXML, SQL, or $apply against ERP.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_002_composite_key",
+      "prompt": "Get customer group 10 for legal entity USMF from Finance and Operations.",
+      "expected_response": "The agent uses ERP MCP if its get surface supports the composite key, otherwise dataverse data get --target erp --table CustomerGroups --key \"dataAreaId='usmf',CustomerGroupId='10'\". It does not treat the key as a GUID.",
+      "category": "erp-query",
+      "description": "Retrieve one ERP record by composite key.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "composite-key"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP MCP or Dataverse CLI data get"},
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: The read targets the PascalCase entity set CustomerGroups on the ERP target.",
+        "PRIORITY_1: It supplies the complete composite key containing dataAreaId='usmf' and CustomerGroupId='10', rather than a GUID or Dataverse-style id.",
+        "PRIORITY_1: OUTCOME: the response reflects the returned ERP record or accurately reports that it was not found.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_003_cross_company",
+      "prompt": "List up to 50 Finance and Operations customer groups across every legal entity I can access, including group ID, description, and company.",
+      "expected_response": "The agent runs an ERP query with --cross-company, --top 50, and a minimal select including CustomerGroupId, Description, and dataAreaId. It does not issue separate per-company loops or claim cross-company is a Dataverse concept.",
+      "category": "erp-query",
+      "description": "Read ERP records across legal entities.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "cross-company"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "Dataverse CLI query --target erp --cross-company"},
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: The trajectory uses dataverse data query --target erp --table CustomerGroups --cross-company --top 50.",
+        "PRIORITY_1: It selects CustomerGroupId, Description, and dataAreaId and does not fetch unnecessary columns.",
+        "PRIORITY_1: OUTCOME: the answer is grounded in returned rows and preserves each row's company context.",
+        "PRIORITY_1: The agent does not loop over guessed legal entities.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_004_local_aggregation",
+      "prompt": "For Finance and Operations, show the number of backordered sales orders by customer across all legal entities.",
+      "expected_response": "Because ERP does not support FetchXML, SQL, or $apply aggregation, the agent retrieves only the needed SalesOrderHeaders columns with --cross-company and an appropriate filter, then aggregates locally in Python/pandas. It does not use the Dataverse SDK for the ERP read.",
+      "category": "erp-query",
+      "description": "Aggregate ERP data locally after a narrow OData read.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "analytics"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP CLI read plus local Python aggregation", "trap": "ERP FetchXML/SQL/$apply"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: The agent reads SalesOrderHeaders from --target erp with --cross-company --all --json, selects only OrderingCustomerAccountNumber, dataAreaId, and SalesOrderStatus, and applies the Backorder filter server-side.",
+        "PRIORITY_1: The agent follows every page needed for the aggregate and enforces a disclosed max-records guard instead of silently counting only the first page.",
+        "PRIORITY_1: It aggregates the returned rows locally using Python or pandas, preserving company context where needed.",
+        "PRIORITY_1: It does not use ERP FetchXML, SQL, $apply, or the Python Dataverse SDK.",
+        "PRIORITY_1: OUTCOME: counts are calculated from captured live ERP results and are not fabricated.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_005_describe_entity",
+      "prompt": "I need to know the keys, fields, navigation properties, and callable actions exposed by the ExpMobileMasterData entity in Finance and Operations.",
+      "expected_response": "The agent uses dataverse data describe --target erp --table ExpMobileMasterData --json rather than downloading broad metadata or guessing action names. It treats Actions[] as the runtime-routable action surface.",
+      "category": "erp-query",
+      "description": "Discover an unfamiliar ERP entity and its bound actions.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "describe"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "Dataverse CLI data describe --target erp"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-metadata/**"],
+      "assertions": [
+        "PRIORITY_1: The trajectory uses dataverse data describe --target erp --table ExpMobileMasterData --json.",
+        "PRIORITY_1: The agent reports keys, properties, navigations, and bound Actions from the returned description rather than guessing.",
+        "PRIORITY_1: It understands that an empty Actions array means no bound actions are currently routable for that entity.",
+        "PRIORITY_1: It does not use Dataverse metadata SDK methods, a full ERP $metadata download, or X++ tooling for this runtime schema request.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_006_custom_service",
+      "prompt": "Call the deployed Finance and Operations custom service erp:ContosoReturnsServiceGroup/ContosoReturnsService/GetReturnStatus for return order RMA-1007 in USMF and show me the returned status.",
+      "expected_response": "The agent verifies the active ERP target, inspects the known service contract or describes it only if needed, then invokes the fully qualified service with dataverse api invoke --target erp using the exact confirmed parameters and attribution. It reports the real result and does not use raw HTTP or broad service discovery.",
+      "category": "erp-query",
+      "description": "Invoke a known ERP custom service operation.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "custom-service"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "Dataverse CLI api invoke --target erp"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: The agent verifies that the active Dataverse profile resolves to the intended linked ERP endpoint before invocation.",
+        "PRIORITY_1: It invokes exactly erp:ContosoReturnsServiceGroup/ContosoReturnsService/GetReturnStatus with --target erp and the source-confirmed parameter names for RMA-1007 and USMF.",
+        "PRIORITY_1: It uses the managed dataverse api invoke surface with dv-query attribution, not requests, urllib, a direct sidecar call, or PAC.",
+        "PRIORITY_1: It avoids broad api list discovery because the fully qualified name is known; describe is used only if the parameter contract is genuinely unknown.",
+        "PRIORITY_1: OUTCOME: the displayed status comes from the invocation result and failures are reported with their returned details.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_007_mcp_only_read",
+      "prompt": "Use the configured Finance and Operations MCP connection, not the CLI, to show a bounded sample of currencies and identify the MCP caller/session first.",
+      "expected_response": "The agent uses only the ERP MCP server. It establishes a fresh session, performs an MCP-originated identity/current-session check, verifies the ERP target, and executes a bounded currencies read. It does not silently fall back to dataverse data query.",
+      "category": "erp-query",
+      "description": "Exercise ERP MCP identity and bounded read without CLI fallback.",
+      "priority": 1,
+      "mode": "live",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "mcp-only"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP MCP only", "safety_tier": "read-only"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-connect/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: The agent uses the configured ERP MCP server and does not invoke dataverse data query or another CLI/API fallback.",
+        "PRIORITY_1: Before the data read, it establishes a fresh ERP MCP session and verifies the caller through an MCP-originated identity or current-session operation.",
+        "PRIORITY_1: It verifies that the MCP target is the linked ERP URL and performs a bounded Currencies read.",
+        "PRIORITY_1: OUTCOME: returned currency data is grounded in the ERP MCP tool result; if MCP cannot prove the caller, the agent stops and reports the check as unverified.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    }
+  ]
+}

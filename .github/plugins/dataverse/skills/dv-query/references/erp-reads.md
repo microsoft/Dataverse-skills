@@ -8,7 +8,7 @@ When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP read
 ```bash
 # Multi-record read
 dataverse data query --target erp --table SalesOrderHeaders --top 200 \
-  --select "SalesOrderNumber,CustomerAccount,SalesOrderStatus" \
+  --select "SalesOrderNumber,OrderingCustomerAccountNumber,SalesOrderStatus" \
   --filter "SalesOrderStatus eq Microsoft.Dynamics.DataEntities.SalesStatus'Backorder'" \
   --orderby "SalesOrderNumber"
 

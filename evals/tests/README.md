@@ -2,6 +2,8 @@
 
 Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` contains one or more tests that are consumed by LocalEvalRunner to grade AI agent responses when the plugin is loaded.
 
+Cross-skill ERP evals live under [`erp/`](erp/README.md), separated from the Dataverse-only suites.
+
 ## File Structure
 
 ```jsonc
@@ -61,6 +63,7 @@ dotnet run -- evals/tests/dv_data.biceval.json --copilotcliagent config.json
 ## Adding Tests
 
 - One `.biceval.json` per skill
+- Cross-skill domain suites may use a dedicated subfolder with one file per participating skill surface
 - At least one `PRIORITY_1` assertion per test
 - Keep prompts focused — one concrete task per test
 - Use `custom_metadata` for skill/scenario context
