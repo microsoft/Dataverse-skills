@@ -531,7 +531,7 @@ dataverse mcp allow 0c412cc3-0dd6-449b-987f-05b053db9457 --erp
 Then validate the ERP endpoint independently:
 
 ```
-npx -y @microsoft/dataverse@latest mcp {ERP_URL} --validate
+dataverse mcp {ERP_URL} --validate
 ```
 
 An allow result of `already enabled`, `created and allowed`, or `enabled` is success. F&O AOS may cache the allowed-app list for up to five minutes; if validation initially returns 401 or 403 after a successful allow, wait for that cache window and retry once. Do not report the ERP MCP server as ready until ERP validation exits successfully.
