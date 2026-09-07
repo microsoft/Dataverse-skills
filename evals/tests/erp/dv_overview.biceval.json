@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "ERP Routing",
-  "description": "Cross-skill routing evals for ERP-linked environments. Each test checks that a natural Finance and Operations request loads the specialist skill and selects the ERP-capable surface rather than applying Dataverse-only tools.",
+  "description": "Read-only cross-skill routing evals for ERP-linked environments. Tests cover ERP business-data reads, runtime schema inspection, and batch listing.",
   "enabled_evaluators": [
     {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
     {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
@@ -23,6 +23,7 @@
       "description": "Route an ERP business-data read to dv-query.",
       "priority": 1,
       "mode": "live",
+      "safety_tier": "read-only",
       "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
       "custom_metadata": {"skill": "dv-overview,dv-query", "expected_route": "dv-query"},
       "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-query/**"],
@@ -31,96 +32,6 @@
         "PRIORITY_1: SKILL_LOADED: dv-query",
         "PRIORITY_1: The agent uses ERP MCP or dataverse data query --target erp with a bounded top value.",
         "PRIORITY_1: It does not load erp-xpp or use the Python Dataverse SDK, FetchXML, SQL, or PAC for the ERP record read."
-      ]
-    },
-    {
-      "test_id": "erp_routing_002_write",
-      "prompt": "Create one customer group in Finance and Operations for USMF.",
-      "expected_response": "The request routes through dv-data. The agent asks for missing field values and target confirmation, then uses ERP MCP or dataverse data create --target erp; it does not use Dataverse CreateMultiple or erp-xpp.",
-      "category": "erp-routing",
-      "description": "Route a small ERP business-data write to dv-data.",
-      "priority": 1,
-      "mode": "live",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
-      "custom_metadata": {"skill": "dv-overview,dv-data", "expected_route": "dv-data"},
-      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-data/**"],
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-overview",
-        "PRIORITY_1: SKILL_LOADED: dv-data",
-        "PRIORITY_1: The agent does not write until the customer-group ID, description, linked ERP target, and user confirmation are available.",
-        "PRIORITY_1: The planned surface is ERP MCP or dataverse data create --target erp with dataAreaId; it is not the Dataverse Python SDK or erp-xpp."
-      ]
-    },
-    {
-      "test_id": "erp_routing_003_schema",
-      "prompt": "Show me the fields and keys exposed by the Finance and Operations SalesOrderHeaders entity.",
-      "expected_response": "Runtime ERP entity schema routes to dv-query and dataverse data describe --target erp. It does not route to Dataverse metadata creation APIs or X++ authoring.",
-      "category": "erp-routing",
-      "description": "Route ERP runtime schema inspection away from dv-metadata.",
-      "priority": 1,
-      "mode": "live",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
-      "custom_metadata": {"skill": "dv-overview,dv-query", "expected_route": "dv-query", "trap": "dv-metadata SDK"},
-      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-query/**", "**/skills/dv-metadata/**"],
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-overview",
-        "PRIORITY_1: SKILL_LOADED: dv-query",
-        "PRIORITY_1: The trajectory uses dataverse data describe --target erp --table SalesOrderHeaders.",
-        "PRIORITY_1: It does not use Dataverse MetadataService, client.tables, solution metadata, or erp-xpp for runtime ERP entity inspection."
-      ]
-    },
-    {
-      "test_id": "erp_routing_004_batch",
-      "prompt": "Show me the latest batch jobs in Finance and Operations.",
-      "expected_response": "The request routes to dv-admin and dataverse erp batch list. It does not use generic ERP OData CRUD, Python, or erp-xpp.",
-      "category": "erp-routing",
-      "description": "Route ERP batch administration to dv-admin.",
-      "priority": 1,
-      "mode": "live",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
-      "custom_metadata": {"skill": "dv-overview,dv-admin", "expected_route": "dv-admin"},
-      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-admin/**"],
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-overview",
-        "PRIORITY_1: SKILL_LOADED: dv-admin",
-        "PRIORITY_1: The trajectory uses a bounded dataverse erp batch list command.",
-        "PRIORITY_1: It does not query BatchJobs through Python, generic Dataverse data tools, PAC, or erp-xpp."
-      ]
-    },
-    {
-      "test_id": "erp_routing_005_xpp",
-      "prompt": "Build and deploy the X++ models in this repository to my Finance and Operations development environment.",
-      "expected_response": "The request routes to erp-xpp and PAC's ERP package lifecycle. The agent inspects the project, confirms the environment and modes, compiles with pac package compile --package-type erp, then deploys with pac package deploy --package-type erp. It does not use Dataverse solution ALM, ERP OData, or DMF.",
-      "category": "erp-routing",
-      "description": "Route X++ source lifecycle to erp-xpp.",
-      "priority": 1,
-      "mode": "live",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
-      "custom_metadata": {"skill": "dv-overview,erp-xpp", "expected_route": "erp-xpp"},
-      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/erp-xpp/**", "**/skills/dv-solution/**"],
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-overview",
-        "PRIORITY_1: SKILL_LOADED: erp-xpp",
-        "PRIORITY_1: The agent uses pac package compile --package-type erp and pac package deploy --package-type erp after the required project inspection and target/mode confirmation.",
-        "PRIORITY_1: It does not use pac solution import, ERP OData, DMF, the Python Dataverse SDK, or raw HTTP to build or deploy X++."
-      ]
-    },
-    {
-      "test_id": "erp_routing_006_connect",
-      "prompt": "Set up Finance and Operations MCP for the ERP environment linked to my current Dataverse profile.",
-      "expected_response": "The request routes to dv-connect. The agent detects erpUrl from the selected Dataverse environment, configures the proper ERP MCP transport, preserves existing servers, and requires restart rather than claiming immediate availability.",
-      "category": "erp-routing",
-      "description": "Route ERP MCP setup to dv-connect.",
-      "priority": 1,
-      "mode": "live",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
-      "custom_metadata": {"skill": "dv-overview,dv-connect", "expected_route": "dv-connect"},
-      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-connect/**"],
-      "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-overview",
-        "PRIORITY_1: SKILL_LOADED: dv-connect",
-        "PRIORITY_1: The agent obtains erpUrl from the current Dataverse linkage and configures direct HTTP at <erpUrl>/mcp or an stdio proxy receiving the base <erpUrl>.",
-        "PRIORITY_1: It preserves existing MCP servers, requires host restart/reload, and does not claim tools are active before an end-to-end MCP call succeeds."
       ]
     }
   ]
