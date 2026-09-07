@@ -9,7 +9,7 @@ ERP batch jobs are the async execution engine on ERP-linked envs — data import
 ## `list` (alias `ls`)
 
 ```
-dataverse erp batch list [--company <dataAreaId>] [--status <status>] [--caption <substring>] [--top <n>] [--json]
+dataverse erp batch list [--company <dataAreaId>] [--status <status>] [--caption <substring>] [--top <n>] [--json] --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"
 ```
 
 **Flags** (all optional):
@@ -25,9 +25,9 @@ dataverse erp batch list [--company <dataAreaId>] [--status <status>] [--caption
 **Formatted output columns**: `BatchJobRecId`, `JobDescription`, `Status`, `CompanyAccounts`, `StartDateTime`, `EndDateTime`, `ExecutingBy`. Dates render in the local timezone.
 
 **Common triage flows**:
-- "What's currently running?" → `dataverse erp batch list --status Executing`
-- "What failed overnight?" → `dataverse erp batch list --status Error --top 50`
-- "Show me posting jobs in the US legal entity" → `dataverse erp batch list --company USMF --caption posting`
+- "What's currently running?" → `dataverse erp batch list --status Executing --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`
+- "What failed overnight?" → `dataverse erp batch list --status Error --top 50 --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`
+- "Show me posting jobs in the US legal entity" → `dataverse erp batch list --company USMF --caption posting --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`
 - "Give me raw JSON for a script" → append `--json`
 
 If no rows match, the CLI writes `No batch jobs found.` to stderr and exits 0.
@@ -35,14 +35,14 @@ If no rows match, the CLI writes `No batch jobs found.` to stderr and exits 0.
 ## `cancel`
 
 ```
-dataverse erp batch cancel <BatchJobRecId>
+dataverse erp batch cancel <BatchJobRecId> --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"
 ```
 
 Takes exactly one positional argument: the `BatchJobRecId` — a **positive long integer** (RecId), not a GUID. Any other value is rejected with `Invalid batch job id 'x': must be a positive integer (RecId).`
 
 Under the hood: `PATCH /data/BatchJobs(<recId>)` with body `{ "Status": "Cancelling" }`. The ERP runtime transitions the batch through `Cancelling` → `Cancelled` at its next scheduling tick; the CLI does not poll. On success, prints `Batch job <id> set to Cancelling.` and exits 0.
 
-**Confirmation gate**: before executing, first `list` the target row (e.g. `dataverse erp batch list --top 1 --json` filtered by id, or scan a wider `list` for the specific `BatchJobRecId`) and echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` back to the user. Then require an explicit affirmative that names the id, e.g. `"yes, cancel <BatchJobRecId>"`. Bare `"yes"` is not sufficient.
+**Confirmation gate**: before executing, first `list` the target row (e.g. `dataverse erp batch list --top 1 --json --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"` filtered by id, or scan a wider attributed `list` for the specific `BatchJobRecId`) and echo `JobDescription`, `Status`, `StartDateTime`, `CompanyAccounts` back to the user. Then require an explicit affirmative that names the id, e.g. `"yes, cancel <BatchJobRecId>"`. Bare `"yes"` is not sufficient.
 
 **When cancellation is safe vs. risky**:
 - `Waiting` — safe. The batch is removed from the queue before it runs; no partial state.

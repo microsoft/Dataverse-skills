@@ -15,7 +15,7 @@ If the output surfaces an `erpUrl` field, capture it.
 If PAC does not surface it, fall back to the Dataverse CLI:
 
 ```
-dataverse org who --environment <DATAVERSE_URL> --json
+dataverse org who --environment <DATAVERSE_URL> --json --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 
 Pass `--environment` explicitly — the Dataverse CLI keeps its own active profile separate from PAC's, and without it `org who` may target a stale URL. Reuse the `DATAVERSE_URL` resolved earlier.
@@ -33,7 +33,7 @@ if erp_url:
 If `.env` has `ERP_URL`, also smoke-test the ERP linkage:
 
 ```
-dataverse data query --target erp --table Currencies --top 1
+dataverse data query --target erp --table Currencies --top 1 --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 
 A successful one-row response proves the active auth profile can reach the ERP OData endpoint. If this fails but the Dataverse-side checks pass, the user's account likely lacks ERP access — surface that explicitly rather than re-running Steps 1–4.

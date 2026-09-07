@@ -10,18 +10,22 @@ When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP read
 dataverse data query --target erp --table SalesOrderHeaders --top 200 \
   --select "SalesOrderNumber,OrderingCustomerAccountNumber,SalesOrderStatus" \
   --filter "SalesOrderStatus eq Microsoft.Dynamics.DataEntities.SalesStatus'Backorder'" \
-  --orderby "SalesOrderNumber"
+  --orderby "SalesOrderNumber" \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Single record by composite key (ERP keys are dataAreaId + business key)
 dataverse data get --target erp --table CustomerGroups \
-  --key "dataAreaId='usmf',CustomerGroupId='10'"
+  --key "dataAreaId='usmf',CustomerGroupId='10'" \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Cross-company — all legal entities the user can read
 dataverse data query --target erp --table CustomerGroups --cross-company \
-  --select "CustomerGroupId,Description,dataAreaId" --top 50
+  --select "CustomerGroupId,Description,dataAreaId" --top 50 \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Count
-dataverse data count --target erp --table Currencies --filter "CurrencyCode eq 'AED'"
+dataverse data count --target erp --table Currencies --filter "CurrencyCode eq 'AED'" \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 ```
 
 Add `--json` on read commands for script consumption. The ERP URL is auto-discovered from the active auth profile.
@@ -43,8 +47,10 @@ For ERP Custom Services (`/api/services/...`), use `dataverse api invoke --targe
 ## Discovering an unfamiliar ERP entity
 
 ```bash
-dataverse data describe --target erp --table ExpMobileMasterData
-dataverse data describe --target erp --table SalesOrderHeaders --json
+dataverse data describe --target erp --table ExpMobileMasterData \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
+dataverse data describe --target erp --table SalesOrderHeaders --json \
+  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 ```
 
 Returns schema, key fields, properties, navigations, and runtime-routable bound actions in one call. Use before guessing entity-set names or action names.
