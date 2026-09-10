@@ -45,6 +45,11 @@ parameters:
     type: number
     default: 1
 
+  - name: agentModel
+    displayName: 'Model for the agent under test'
+    type: string
+    default: 'claude-sonnet-5'
+
 resources:
   repositories:
   - repository: LocalEvalRunner
@@ -91,6 +96,7 @@ steps:
     testFilePath: 'evals/tests/${{ parameters.testFile }}'
     evaluatorRepoName: 'BIC-Evaluations-Service'
     pluginDir: '.github/plugins/dataverse'
+    agentModel: ${{ parameters.agentModel }}
 
 # Execute: run localevalrunner with CopilotCliAgent
 - template: .pipelines/templates/steps/BicEval-ExecuteTemplate.yml@LocalEvalRunner
