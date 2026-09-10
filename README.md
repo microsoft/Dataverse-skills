@@ -16,7 +16,25 @@ The project grows through new skills, improvements to existing guidance, bug rep
 Learn more about the Dataverse plugin for AI coding agents:
 
 - [Microsoft Dataverse plugin for AI coding agents (preview)](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/)
+
+  - [How the plugin works](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#how-the-plugin-works)
+  - [Prerequisites](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#prerequisites)
+  - [Install the plugin](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#install-the-plugin)
+  - [Connect to Dataverse](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#connect-to-dataverse)
+  - [Example prompts](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#example-prompts)
+  - [Safety and guardrails](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/#safety-and-guardrails)
+
 - [Microsoft Dataverse plugin for AI coding agents reference (preview)](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference)
+
+  - [dv-overview](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-overview)
+  - [dv-connect](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-connect)
+  - [dv-query](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-query)
+  - [dv-data](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-data)
+  - [dv-metadata](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-metadata)
+  - [dv-solution](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-solution)
+  - [dv-admin](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-admin)
+  - [dv-security](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#dv-security)
+  - [Skill selection examples](https://learn.microsoft.com/power-apps/developer/data-platform/agents-plugin/reference#skill-selection-examples)
 
 ## Contributing
 
