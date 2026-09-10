@@ -147,7 +147,7 @@ Present authentication options:
 
 > How would you like to authenticate with Dataverse?
 > 1. **Interactive login (recommended)** — Sign in via browser. No app registration needed. Token stays cached across sessions.
-> 2. **Service principal (for CI/CD)** — Uses CLIENT_ID and CLIENT_SECRET from an Azure app registration.
+> 2. **CI/CD service principal** — Use `CLIENT_SECRET` or `CLIENT_CERTIFICATE_PATH`.
 
 Write `.env` directly — do not instruct the user to create it:
 
