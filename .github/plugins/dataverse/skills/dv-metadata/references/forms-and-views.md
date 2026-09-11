@@ -193,17 +193,3 @@ guid = str(uuid.uuid4()).upper()
 ```
 
 **Do not use `python -c` for GUID generation on Windows** — multiline `python -c` commands break in Git Bash due to quoting differences. Always write a `.py` script instead.
-
-## Business Rules
-
-Create business rules in the Power Apps maker portal. They are too complex to write reliably as JSON/XAML. After creation, export+unpack the solution and commit the result.
-
-## FormXml Pitfalls
-
-- **All `id` attributes must be valid GUIDs** in `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` format. Do not use strings like `"general"`.
-- **`labelid` is also a GUID** — not a human-readable string.
-- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first.
-- **Cell, section, tab, and control IDs must all be unique** across the entire form.
-- **Control `classid` values** — see the classid table above.
-
-**Tip:** Create forms in the maker portal and pull via `pac solution export` — use the pulled XML as a template for programmatic creation.
