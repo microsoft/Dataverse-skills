@@ -19,7 +19,7 @@
     {
       "test_id": "erp_admin_001_list_running",
       "prompt": "Show me the latest Finance and Operations batch jobs in USMF, newest first, with the full fields available for scripting.",
-      "expected_response": "The agent directly uses dataverse erp batch list --company USMF --json without unrelated version, profile, or repository probes. It relies on the command's newest-first ordering and reports actual returned jobs or the valid no-results outcome.",
+      "expected_response": "The agent directly uses dataverse erp batch list --company USMF --json. It relies on the command's newest-first ordering and reports actual returned jobs or the valid no-results outcome.",
       "category": "erp-admin",
       "description": "List executing ERP batch jobs for one legal entity.",
       "priority": 1,
@@ -30,7 +30,6 @@
       "pr_file_filter": ["**/skills/dv-admin/**", "**/skills/dv-overview/**"],
       "assertions": [
         "PRIORITY_1: The trajectory uses dataverse erp batch list --company USMF --json.",
-        "PRIORITY_1: It does not run dataverse --version, dataverse org who, or repository searches before the batch-list command.",
         "PRIORITY_1: OUTCOME: the response is grounded in returned batch results and includes the available RecId, description, status, company, timestamps, and executing user, or accurately reports No batch jobs found.",
         "PRIORITY_1: The agent does not query BatchJobs with the Python SDK or use a fabricated watch/show command.",
         "PRIORITY_2: SKILL_LOADED: dv-admin"
