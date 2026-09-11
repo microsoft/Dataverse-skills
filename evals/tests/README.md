@@ -2,7 +2,7 @@
 
 Test files for the Dataverse Skills plugin eval system. Each `.biceval.json` contains one or more tests that are consumed by LocalEvalRunner to grade AI agent responses when the plugin is loaded.
 
-Cross-skill ERP evals live under [`erp/`](erp/README.md), separated from the Dataverse-only suites.
+All eval JSON files live directly in this folder. ERP suites use the `erp_` filename prefix to distinguish them from Dataverse-only suites.
 
 ## File Structure
 
@@ -63,7 +63,29 @@ dotnet run -- evals/tests/dv_data.biceval.json --copilotcliagent config.json
 ## Adding Tests
 
 - One `.biceval.json` per skill
-- Cross-skill domain suites may use a dedicated subfolder with one file per participating skill surface
+- ERP suites use `erp_<skill>.biceval.json` filenames in this folder
 - At least one `PRIORITY_1` assertion per test
 - Keep prompts focused — one concrete task per test
 - Use `custom_metadata` for skill/scenario context
+
+## ERP eval suites
+
+These suites provide a read-only passing baseline for Dataverse skill surfaces that can be exercised without requesting or executing a Finance and Operations mutation. The active set contains four tests, and every test declares `"safety_tier": "read-only"`.
+
+| File | Skill surface | Coverage |
+|---|---|---|
+| [`erp_dv_query.biceval.json`](erp_dv_query.biceval.json) | `dv-query` | ERP composite-key read |
+| [`erp_dv_admin.biceval.json`](erp_dv_admin.biceval.json) | `dv-admin` | ERP batch listing and local filtering |
+| [`erp_dv_overview.biceval.json`](erp_dv_overview.biceval.json) | `dv-overview` | ERP business-data read routing |
+
+> ## Safety and fixture requirements
+>
+> The active ERP suite must not request or execute create, update, delete, import, deploy, synchronize, cancel, install, uninstall, or potentially mutating ERP actions. Mutation coverage and read-only scenarios that did not pass the compatibility run were removed from the active files and remain recoverable from Git history.
+
+The live tests require an authenticated ERP-linked development environment.
+
+LocalEvalRunner is an external repository dependency; this repository does not contain its project or `config.json`. After checking out and configuring LocalEvalRunner, pass an ERP test file path to that runner, for example:
+
+```powershell
+dotnet run --project <LocalEvalRunner.csproj> -- evals/tests/erp_dv_query.biceval.json --copilotcliagent <config.json>
+```
