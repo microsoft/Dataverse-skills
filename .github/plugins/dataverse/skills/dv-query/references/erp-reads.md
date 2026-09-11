@@ -1,5 +1,7 @@
 # Querying ERP data
 
+**Skill loading:** If `dv-overview` has not been loaded in this session, load it before any ERP read. A Finance and Operations business-data query stays in `dv-query`; do not load `erp-xpp` unless the request is for X++ code development or deployment.
+
 When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP reads do not go through `DataverseClient`. Use one of:
 
 1. **ERP MCP** for simple, interactive reads — if `dataverse mcp <erpUrl>` is wired up as an MCP server in your client. Same `read_query` / `read_metadata` shape as Dataverse MCP.
