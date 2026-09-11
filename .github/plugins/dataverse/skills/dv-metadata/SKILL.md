@@ -330,7 +330,9 @@ Key invariants:
 
 ## Business Rules and Form Details
 
-Create business rules in the Power Apps maker portal, then export, unpack, and commit the solution. For FormXml GUID, subgrid, control-class, and template guidance, see [`references/forms-and-views.md`](references/forms-and-views.md).
+Create business rules in the Power Apps maker portal, then export, unpack, and commit the solution. See:
+- [`references/forms-and-views.md`](references/forms-and-views.md) for the full business-rule workflow and FormXml GUID, subgrid, control-class, and template guidance.
+- [`references/publisher-prefix.md`](references/publisher-prefix.md) for publisher-prefix discovery and naming rules.
 
 ---
 
@@ -350,13 +352,7 @@ This prevents downstream failures when the user tries to insert data using incor
 
 ## Common Web API Error Codes
 
-| Error Code | Meaning | Recovery |
-|---|---|---|
-| `0x80040216` | Metadata not propagated | Wait 3-5 seconds, then retry. |
-| `0x80048d19` | Invalid payload property | Verify logical names with `EntityDefinitions(...)/Attributes`. |
-| `0x80040237` | Schema name exists | Check whether an earlier timed-out call succeeded. |
-| `0x8004431a` | Publisher prefix mismatch | Use the solution publisher's prefix. |
-| `0x80060891` | Metadata cache not ready | Read `EntityDefinitions(...)`, then retry. |
+See [`references/metadata-propagation.md`](references/metadata-propagation.md) for error codes, full descriptions, and recovery guidance.
 
 ---
 

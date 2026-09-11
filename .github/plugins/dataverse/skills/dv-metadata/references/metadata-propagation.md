@@ -21,6 +21,18 @@ When creating many tables with alternate keys and lookups (e.g., multi-table imp
 
 Do NOT interleave: `create table A → create key A → create table B → create key B`. This causes lock contention because key A's index build blocks table B's creation.
 
+## Common Web API Error Codes
+
+| Error Code | Meaning | Recovery |
+|---|---|---|
+| `0x80040216` | Transient metadata cache error. Column or table metadata not yet propagated. | Wait 3-5 seconds and retry. Usually succeeds on second attempt. |
+| `0x80048d19` | Invalid property in payload. A field name doesn't match any column on the table. | Check logical column names — use `EntityDefinitions(LogicalName='...')/Attributes` to verify. |
+| `0x80040237` | Schema name already exists. | Verify the column/table exists before creating a new one — it may have been created by a previous timed-out call. |
+| `0x8004431a` | Publisher prefix mismatch. | Ensure all schema names use the solution's publisher prefix. |
+| `0x80060891` | Metadata cache not ready after table creation. | Call `GET EntityDefinitions(LogicalName='...')` first to force cache refresh, then retry. |
+
+Always translate error codes to plain English before presenting them to the user.
+
 **Retry pattern:** Wrap metadata operations with retry for transient lock errors. Use check-first helpers (`ensure_table`, `ensure_alternate_key`) to handle "already exists" before calling this — the retry wrapper only handles lock contention:
 
 ```python
