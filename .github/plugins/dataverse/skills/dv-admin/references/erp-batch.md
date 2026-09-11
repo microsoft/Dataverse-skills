@@ -6,6 +6,8 @@ ERP batch jobs are the async execution engine on ERP-linked envs — data import
 
 **Prerequisite**: an active Dataverse auth profile whose environment has ERP linkage. The CLI internally calls `RetrieveFinanceAndOperationsIntegrationDetails` on the Dataverse profile to derive the ERP URL and acquire a separately-scoped ERP token. If the env has no ERP linkage, both commands fail with a resolver error — point the user to dv-connect (Step 2 ERP detection).
 
+For a read-only batch request, run the matching `dataverse erp batch list` command directly. Do not first run `dataverse --version` (unsupported), `dataverse org who`, or repository-discovery searches: `batch list` validates the active profile and ERP linkage itself. Use only the flags the request needs; when no count is requested, rely on the default `--top 20`.
+
 ## `list` (alias `ls`)
 
 ```
@@ -29,6 +31,8 @@ dataverse erp batch list [--company <dataAreaId>] [--status <status>] [--caption
 - "What failed overnight?" → `dataverse erp batch list --status Error --top 50 --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`
 - "Show me posting jobs in the US legal entity" → `dataverse erp batch list --company USMF --caption posting --context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`
 - "Give me raw JSON for a script" → append `--json`
+
+If the environment rejects `--status` or `--caption`, rerun once without those server filters and evaluate the returned JSON locally. Do not retry the same failing filter or switch to the Python SDK.
 
 If no rows match, the CLI writes `No batch jobs found.` to stderr and exits 0.
 

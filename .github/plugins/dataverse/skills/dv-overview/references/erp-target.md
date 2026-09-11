@@ -64,6 +64,7 @@ dataverse data query --target erp --table CustomerGroups --cross-company \
 # Single record by composite key
 dataverse data get --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='10'" \
+  --select "dataAreaId,CustomerGroupId,Description" \
   --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
 
 # Count

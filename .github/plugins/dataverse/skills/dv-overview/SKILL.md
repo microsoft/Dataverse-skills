@@ -5,13 +5,13 @@ description: Foundational cross-cutting context for Dataverse / Power Platform w
 
 # Skill: Overview — What to Use and When
 
-Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+Load this skill first for Dataverse work. It provides shared scope, tool capabilities, safety rules, and the change lifecycle; specialist skills route from user intent.
 
 ---
 
 ## What This Plugin Covers
 
-Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
+Specialist skills cover these Dataverse / Power Platform areas:
 
 | Area | Skill |
 | --- | --- |
@@ -152,21 +152,9 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 ### MCP Availability Check
 
-If the user's request involves MCP — explicitly or implicitly — search your callable tools for any tool whose name or description contains `dataverse` (same search as Hard Rule 0).
+Search callable tools for names or descriptions containing `dataverse` (Hard Rule 0). If MCP is available, use it for simple reads and small CRUD.
 
-**If MCP NOT available and user explicitly asked for MCP** ("use MCP to query"):
-1. **Do NOT silently fall back** to the Python SDK or Web API
-2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
-3. Load `dv-connect` to set up the MCP server
-4. After MCP is configured, **stop** — the session must restart for MCP tools to appear. Do not proceed with SDK.
-
-**If MCP NOT available and user asked a data question** ("how many accounts?"):
-1. Use the CLI (if profile exists) or SDK to answer. Do not block the user.
-2. After answering, offer: "MCP would handle this conversationally — want me to set it up?"
-
-The distinction matters: explicit MCP request → block and set up MCP; implicit question → answer with SDK, offer MCP setup.
-
-**If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
+If the user explicitly requires MCP and it is unavailable, do not fall back: say it is not configured, load `dv-connect`, configure it, then stop because the session must restart. For an ordinary data question, answer with the CLI or SDK instead and optionally offer MCP setup afterward.
 
 ---
 
@@ -176,7 +164,7 @@ For any real change, walk these three steps in order: confirm **where**, confirm
 
 ### Step 1 — Confirm the Environment (MANDATORY)
 
-Dataverse work often spans multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
+**Never assume** the active PAC profile, `.env`, or prior-session context identifies the intended environment.
 
 **Before the FIRST operation that touches a specific environment** — creating a table, deploying a plugin, pushing a solution, inserting data — you MUST:
 
@@ -186,7 +174,7 @@ Dataverse work often spans multiple environments (dev, test, staging, prod) and 
 
 > "I'm about to make changes to `<URL>`. Is this the correct target environment?"
 
-**Do not proceed until the user explicitly confirms.** This is the single most important safety check in the plugin. Skipping it risks making irreversible changes to the wrong environment. Once confirmed for a session, you do not need to re-confirm for every subsequent operation in the same session against the same environment.
+**Do not proceed until the user explicitly confirms.** Once confirmed, do not re-confirm for later operations against the same environment in that session.
 
 ### Step 2 — Confirm the Solution (before any metadata change)
 
@@ -227,12 +215,6 @@ git push
 ```
 
 The repo is always the source of truth.
-
----
-
-## Scripts
-
-The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition — used by all other scripts and the SDK). Any Web API call beyond a one-off query should be a Python script committed to `/scripts/`, using `scripts/auth.py` for tokens. For writes see `dv-data`; queries and analytics see `dv-query`; post-import validation see `dv-solution`.
 
 ---
 

@@ -328,31 +328,9 @@ Key invariants:
 
 ---
 
-## Business Rules
+## Business Rules and Form Details
 
-Create business rules in the Power Apps maker portal. They are too complex to write reliably as JSON/XAML. After creation, export+unpack the solution and commit the result.
-
----
-
-## Publisher Prefix
-
-All custom schema names must use your solution's publisher prefix (e.g., `new_`, `contoso_`). Find yours:
-```
-pac solution list --environment <url>
-```
-Or check `solutions/<SOLUTION_NAME>/Other/Solution.xml` after the first pull — look for `<CustomizationPrefix>`.
-
----
-
-## FormXml Pitfalls
-
-- **All `id` attributes must be valid GUIDs** in `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` format. Do not use strings like `"general"`.
-- **`labelid` is also a GUID** — not a human-readable string.
-- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first.
-- **Cell, section, tab, and control IDs must all be unique** across the entire form.
-- **Control `classid` values** — see the classid table above.
-
-**Tip:** Create forms in the maker portal and pull via `pac solution export` — use the pulled XML as a template for programmatic creation.
+Create business rules in the Power Apps maker portal, then export, unpack, and commit the solution. For FormXml GUID, subgrid, control-class, and template guidance, see [`references/forms-and-views.md`](references/forms-and-views.md).
 
 ---
 
@@ -374,19 +352,17 @@ This prevents downstream failures when the user tries to insert data using incor
 
 | Error Code | Meaning | Recovery |
 |---|---|---|
-| `0x80040216` | Transient metadata cache error. Column or table metadata not yet propagated. | Wait 3-5 seconds and retry. Usually succeeds on second attempt. |
-| `0x80048d19` | Invalid property in payload. A field name doesn't match any column on the table. | Check logical column names — use `EntityDefinitions(LogicalName='...')/Attributes` to verify. |
-| `0x80040237` | Schema name already exists. | Verify the column/table exists before creating a new one — it may have been created by a previous timed-out call. |
-| `0x8004431a` | Publisher prefix mismatch. | Ensure all schema names use the solution's publisher prefix. |
-| `0x80060891` | Metadata cache not ready after table creation. | Call `GET EntityDefinitions(LogicalName='...')` first to force cache refresh, then retry. |
-
-Always translate error codes to plain English before presenting them to the user.
+| `0x80040216` | Metadata not propagated | Wait 3-5 seconds, then retry. |
+| `0x80048d19` | Invalid payload property | Verify logical names with `EntityDefinitions(...)/Attributes`. |
+| `0x80040237` | Schema name exists | Check whether an earlier timed-out call succeeded. |
+| `0x8004431a` | Publisher prefix mismatch | Use the solution publisher's prefix. |
+| `0x80060891` | Metadata cache not ready | Read `EntityDefinitions(...)`, then retry. |
 
 ---
 
 ## Metadata Propagation Delays and Lock Contention
 
-After creating tables / columns / alternate keys, Dataverse runs internal metadata operations (index build, cache propagation) for 3–30 seconds. Submitting another metadata operation while these run causes lock-contention errors.
+After metadata changes, Dataverse may spend 3–30 seconds building indexes and refreshing caches. Concurrent metadata work can then hit lock-contention errors.
 
 **Mitigation — phased creation, not interleaved.** Create ALL tables → wait 15–30s → create ALL alternate keys → wait 15–30s → create ALL lookups. Do NOT interleave operations on the same table.
 
@@ -400,8 +376,7 @@ For the `retry_metadata` helper that catches transient lock errors and the full 
 
 ## Inspect Existing Schema
 
-Before changing a model, inspect what already exists. These read-only calls return raw
-metadata dictionaries (PascalCase property names) and are safe to run anytime.
+Before changing a model, inspect it. These read-only calls return metadata dictionaries with PascalCase property names.
 
 > Assumes `client` from the auth setup shown earlier in this skill (`from auth import get_client`).
 
