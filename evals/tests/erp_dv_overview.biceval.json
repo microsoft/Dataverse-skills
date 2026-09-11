@@ -1,0 +1,37 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Routing",
+  "description": "Read-only cross-skill routing evals for ERP-linked environments. Tests cover ERP business-data reads, runtime schema inspection, and batch listing.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent recognized the ERP context and routed directly to the correct specialist skill and managed surface."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_routing_001_read",
+      "prompt": "Show me the first ten Finance and Operations sales orders.",
+      "expected_response": "The request routes through dv-query to ERP MCP or dataverse data query --target erp. It does not use DataverseClient, FetchXML, SQL, PAC, or erp-xpp.",
+      "category": "erp-routing",
+      "description": "Route an ERP business-data read to dv-query.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-overview", "Type": "routing"},
+      "custom_metadata": {"skill": "dv-overview,dv-query", "expected_route": "dv-query"},
+      "pr_file_filter": ["**/skills/dv-overview/**", "**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: The agent uses ERP MCP or dataverse data query --target erp with a bounded top value.",
+        "PRIORITY_1: It does not load erp-xpp or use the Python Dataverse SDK, FetchXML, SQL, or PAC for the ERP record read."
+      ]
+    }
+  ]
+}

@@ -518,6 +518,24 @@ npx -y @microsoft/dataverse@latest mcp {USER_URL} --validate
 
 Treat `GA endpoint is valid, but Preview endpoint is not configured` as **success** for a GA registration (the default). Only revisit enablement if the GA endpoint still returns **403 Forbidden** after `mcp allow` reported success.
 
+### ERP-linked environments
+
+If `.env` contains `ERP_URL`, the ERP MCP proxy has a separate F&O allowlist. Do not treat the Dataverse allow command or validation as covering ERP.
+
+The ERP proxy always authenticates as the Dataverse CLI app, including when the host's Dataverse MCP entry uses a different client ID. Use this fixed app ID:
+
+```
+dataverse mcp allow 0c412cc3-0dd6-449b-987f-05b053db9457 --erp
+```
+
+Then validate the ERP endpoint independently:
+
+```
+dataverse mcp {ERP_URL} --validate
+```
+
+An allow result of `already enabled`, `created and allowed`, or `enabled` is success. F&O AOS may cache the allowed-app list for up to five minutes; if validation initially returns 401 or 403 after a successful allow, wait for that cache window and retry once. Do not report the ERP MCP server as ready until ERP validation exits successfully.
+
 ---
 
 ## 8. Confirm success and provide next steps
@@ -588,6 +606,7 @@ If something goes wrong, help the user check:
   1. Go to [Power Platform Admin Center](https://admin.powerplatform.microsoft.com/) > Environments > your environment > Settings > Product > Features
   2. Verify **MCP Server** is toggled **On**
   3. Verify the MCP Client ID appears under **Allowed clients**
+- **ERP-linked environments** — Dataverse and ERP use separate allowlists and validation calls. Run `dataverse mcp allow 0c412cc3-0dd6-449b-987f-05b053db9457 --erp`, allow up to five minutes for the F&O AOS cache, and validate `{ERP_URL}` independently.
 - If using the Preview endpoint, verify that the Preview MCP endpoint is also enabled in the same Features page
 - **If TOOL_TYPE is `copilot`:**
   - For project-scoped configuration, ensure the `.mcp.json` file was created successfully

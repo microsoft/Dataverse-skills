@@ -255,7 +255,8 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 3. Get environment URL from `.env`
 4. Default to GA endpoint (`/api/mcp`)
 5. Register the MCP server per host (see the per-host blocks below)
-6. Handle admin consent and allowlist — prefer `dataverse mcp allow <MCP_CLIENT_ID>` over the portal (one-time per tenant/environment)
+6. Handle Dataverse admin consent and allowlist — prefer `dataverse mcp allow <MCP_CLIENT_ID>` over the portal (one-time per tenant/environment)
+7. If `ERP_URL` exists, separately allowlist and validate ERP
 
 **Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`). When registering it, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on requests to `/api/mcp`. Build the value from `.env`:
 

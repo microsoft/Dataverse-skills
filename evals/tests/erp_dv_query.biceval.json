@@ -1,0 +1,39 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Query",
+  "description": "Read-only Finance and Operations query and discovery evals for dv-query. Tests cover ERP MCP and Dataverse CLI routing, composite keys, cross-company reads, local aggregation, and entity/action discovery.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent used ERP MCP or the Dataverse CLI ERP target directly without trying Dataverse SDK, FetchXML, SQL, or unsupported ERP query features first.",
+    "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-query, and agent attribution."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_query_002_composite_key",
+      "prompt": "Get customer group 10 for legal entity USMF from Finance and Operations.",
+      "expected_response": "The agent directly uses ERP MCP if its get surface supports the composite key, otherwise dataverse data get --target erp --table CustomerGroups --key \"dataAreaId='usmf',CustomerGroupId='10'\" with a bounded --select. It does not treat the key as a GUID or perform unrelated repository or profile discovery.",
+      "category": "erp-query",
+      "description": "Retrieve one ERP record by composite key.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "composite-key"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP MCP or Dataverse CLI data get"},
+      "pr_file_filter": ["**/skills/dv-query/**"],
+      "assertions": [
+        "PRIORITY_1: The read targets the PascalCase entity set CustomerGroups on the ERP target.",
+        "PRIORITY_1: It supplies the complete composite key containing dataAreaId='usmf' and CustomerGroupId='10', rather than a GUID or Dataverse-style id.",
+        "PRIORITY_1: The read bounds the response with --select to the requested customer-group identity and description fields.",
+        "PRIORITY_1: OUTCOME: the response reflects the returned ERP record or accurately reports that it was not found.",
+        "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    }
+  ]
+}

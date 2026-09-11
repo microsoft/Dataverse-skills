@@ -8,16 +8,19 @@ When the env is ERP-linked — ERP (Finance and Operations) provisioned on the s
 ```bash
 # Create
 dataverse data create --target erp --table CustomerGroups \
-  --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}'
+  --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}' \
+  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Update (composite key)
 dataverse data update --target erp --table CustomerGroups \
   --key "dataAreaId='usmf',CustomerGroupId='demo'" \
-  --data '{"Description":"demo group (updated)"}'
+  --data '{"Description":"demo group (updated)"}' \
+  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Delete (suppress interactive confirm in scripts)
 dataverse data delete --target erp --table CustomerGroups \
-  --key "dataAreaId='usmf',CustomerGroupId='demo'" --no-confirm
+  --key "dataAreaId='usmf',CustomerGroupId='demo'" --no-confirm \
+  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 ```
 
 3. **DMF (Data Management Framework) data packages** for bulk writes. ERP OData has **no `CreateMultiple` equivalent** — looping `data create` is the wrong tool at higher volume. DMF dispatch via `dataverse api invoke --target erp` against the `DataManagementDefinitionGroups` bound actions (`GetAzureWriteUrl` → upload zip → `ImportFromPackage` → `GetExecutionSummaryStatus`). See [`erp-target.md`](../../dv-overview/references/erp-target.md) for the full flow.

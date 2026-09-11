@@ -1,6 +1,6 @@
 ---
 name: dv-query
-description: Bulk reads, multi-page iteration, and analytics over Dataverse data. Use when the user wants to read, list, filter, aggregate, group, join, or analyze records — including pandas DataFrame workflows and notebook exploration.
+description: Bulk reads, multi-page iteration, and analytics over Dataverse data. Use when the user wants to read, list, filter, aggregate, group, join, or analyze records — including pandas DataFrame workflows and notebook exploration. Also covers ERP (Finance and Operations / F&O) business-data reads, including sales orders; load dv-overview first, then this skill.
 ---
 
 # Skill: Query — Read and Analyze Dataverse Records

@@ -1,0 +1,57 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Administration",
+  "description": "Read-only ERP batch administration evals for dv-admin. Tests cover listing, local filtering, output, and refusal of unsupported retry or bulk-mutation verbs.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_2: FIRST_ATTEMPT: Agent used only the supported ERP batch list surface or refused unsupported mutation without fabricated verbs or avoidable retries.",
+    "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-admin, and agent attribution."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_admin_001_list_running",
+      "prompt": "Show me the latest Finance and Operations batch jobs in USMF, newest first, with the full fields available for scripting.",
+      "expected_response": "The agent directly uses dataverse erp batch list --company USMF --json. It relies on the command's newest-first ordering and reports actual returned jobs or the valid no-results outcome.",
+      "category": "erp-admin",
+      "description": "List executing ERP batch jobs for one legal entity.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-admin", "Type": "batch-list"},
+      "custom_metadata": {"skill": "dv-admin", "tool_routing": "Dataverse CLI ERP batch list"},
+      "pr_file_filter": ["**/skills/dv-admin/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: The trajectory uses dataverse erp batch list --company USMF --json.",
+        "PRIORITY_1: OUTCOME: the response is grounded in returned batch results and includes the available RecId, description, status, company, timestamps, and executing user, or accurately reports No batch jobs found.",
+        "PRIORITY_1: The agent does not query BatchJobs with the Python SDK or use a fabricated watch/show command.",
+        "PRIORITY_2: SKILL_LOADED: dv-admin"
+      ]
+    },
+    {
+      "test_id": "erp_admin_002_filter_failed",
+      "prompt": "Show the latest 50 Finance and Operations batch jobs as JSON and highlight any returned jobs whose status is Error and whose description contains posting.",
+      "expected_response": "The agent uses dataverse erp batch list --top 50 --json and filters only the returned payload locally for Error plus a case-insensitive posting substring. This avoids environment-specific server failures currently observed for --status and --caption while still using the dedicated batch surface.",
+      "category": "erp-admin",
+      "description": "Filter failed ERP batch jobs by caption.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-admin", "Type": "batch-filter"},
+      "custom_metadata": {"skill": "dv-admin", "tool_routing": "Dataverse CLI ERP batch list"},
+      "pr_file_filter": ["**/skills/dv-admin/**"],
+      "assertions": [
+        "PRIORITY_1: The trajectory uses dataverse erp batch list --top 50 --json without the environment-sensitive --status or --caption server filters.",
+        "PRIORITY_1: It filters the returned JSON locally for Status equal to Error and a case-insensitive posting substring in JobDescription.",
+        "PRIORITY_1: OUTCOME: results are grounded in the command output, including an accurate no-results response when applicable.",
+        "PRIORITY_2: SKILL_LOADED: dv-admin"
+      ]
+    }
+  ]
+}

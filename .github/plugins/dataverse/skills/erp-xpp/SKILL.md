@@ -1,6 +1,6 @@
 ---
 name: erp-xpp
-description: Finance and Operations X++ development lifecycle — scaffold models, author classes, custom services/APIs, and data entities, install matching SDKs, compile deployable packages, deploy packages, synchronize databases, and verify deployed artifacts. Use when the user wants to create, build, compile, package, deploy, DB-sync, or verify X++ customizations, or complete an end-to-end ERP code change.
+description: X++ code development lifecycle for Finance and Operations — scaffold models, author classes, custom services/APIs, and data entities, install matching SDKs, compile deployable packages, deploy packages, synchronize databases, and verify deployed artifacts. Use when the user explicitly requests creating, building, compiling, packaging, deploying, DB-syncing, or verifying X++ customizations, or an end-to-end ERP code change.
 ---
 
 # Skill: Finance and Operations X++ Development
