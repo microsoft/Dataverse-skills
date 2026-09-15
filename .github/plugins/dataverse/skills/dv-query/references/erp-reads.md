@@ -9,6 +9,8 @@ When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP read
 
 For a known entity and key, execute the read directly. Do not search the repository or run a separate auth/profile probe first: the data command validates authentication and ERP linkage. Always use `--select` to bound the response to fields needed by the request.
 
+For ERP CLI attribution, resolve `<ver>` from the loaded plugin manifest (`.github/plugins/dataverse/.claude-plugin/plugin.json` in a checkout), not the Copilot or Dataverse CLI version.
+
 ```bash
 # Multi-record read
 dataverse data query --target erp --table SalesOrderHeaders --top 200 \
