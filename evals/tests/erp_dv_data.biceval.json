@@ -50,6 +50,10 @@
       "assertions": [
         "PRIORITY_1: SKILL_LOADED: dv-data",
         "PRIORITY_1: The agent recommends DMF data packages, explicitly distinguishes ERP from Dataverse CreateMultiple, and does not recommend a per-record create loop at this volume.",
+        "PRIORITY_1: CONTAINS: GetAzureWriteUrl",
+        "PRIORITY_1: CONTAINS: ImportFromPackage",
+        "PRIORITY_1: CONTAINS: GetExecutionSummaryStatus",
+        "PRIORITY_1: CONTAINS: GetExecutionErrors",
         "PRIORITY_1: The plan covers obtaining an upload URL, uploading a package, ImportFromPackage, retaining the execution ID, and polling GetExecutionSummaryStatus.",
         "PRIORITY_1: Failed or PartiallySucceeded results lead to GetExecutionErrors and are not reported as full success.",
         "PRIORITY_1: The missing package and mapping are acknowledged; no environment calls or file writes occur."
