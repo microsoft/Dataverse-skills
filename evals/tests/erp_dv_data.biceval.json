@@ -1,0 +1,59 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Data Writes",
+  "description": "Non-executing ERP write-contract evals covering composite-key updates and DMF bulk imports without requiring disposable business records.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_1: The agent does not execute a business-data mutation, upload, import, or action invocation, and does not claim that one occurred.",
+    "PRIORITY_2: FIRST_ATTEMPT: The agent uses ERP write guidance rather than a Dataverse SDK or raw HTTP workaround."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_data_001_update_contract",
+      "prompt": "Show, but do not execute or save, the Dataverse CLI command to update only Description to 'ERP eval preview' on Finance and Operations CustomerGroups, legal entity usmf, CustomerGroupId 10. Include skill attribution. This is a command review only: do not connect, query, or change anything.",
+      "expected_response": "The response shows dataverse data update --target erp --table CustomerGroups with the complete composite --key, a --data body containing only Description, and a bare attributed --context. No command is executed.",
+      "category": "erp-data",
+      "description": "Preview an ERP update with exact composite-key and payload semantics.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-data", "Type": "write-contract"},
+      "custom_metadata": {"skill": "dv-data", "test_kind": "skill-contract", "tool_routing": "Dataverse CLI ERP update preview"},
+      "pr_file_filter": ["**/skills/dv-data/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-data",
+        "PRIORITY_1: The proposed command uses dataverse data update --target erp --table CustomerGroups.",
+        "PRIORITY_1: The complete key contains dataAreaId='usmf' and CustomerGroupId='10'; the payload changes only Description to ERP eval preview.",
+        "PRIORITY_1: The command carries --context with app=dataverse-skills/<version>, skill=dv-data, and agent; the value is not pre-wrapped in parentheses.",
+        "PRIORITY_1: No environment calls or file writes occur; skill/reference reads are allowed."
+      ]
+    },
+    {
+      "test_id": "erp_data_002_bulk_dmf_plan",
+      "prompt": "I need to import 20,000 customer-group rows into Finance and Operations. Explain the supported bulk-write approach and how to detect a partially failed import. Planning only: do not connect, create files, upload, or run an import. I have not supplied a DMF package or mapping yet.",
+      "expected_response": "The agent recommends a validated DMF data package and mapping, not CreateMultiple or 20,000 per-record OData writes. It explains GetAzureWriteUrl, upload, ImportFromPackage, execution ID, polling GetExecutionSummaryStatus, and GetExecutionErrors on failure or partial success. Missing package/mapping are prerequisites, not invented fixtures.",
+      "category": "erp-data",
+      "description": "Route high-volume ERP writes to DMF and retain failure evidence.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-data", "Type": "bulk-import-plan"},
+      "custom_metadata": {"skill": "dv-data", "test_kind": "skill-contract", "tool_routing": "DMF planning"},
+      "pr_file_filter": ["**/skills/dv-data/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-data",
+        "PRIORITY_1: The agent recommends DMF data packages, explicitly distinguishes ERP from Dataverse CreateMultiple, and does not recommend a per-record create loop at this volume.",
+        "PRIORITY_1: The plan covers obtaining an upload URL, uploading a package, ImportFromPackage, retaining the execution ID, and polling GetExecutionSummaryStatus.",
+        "PRIORITY_1: Failed or PartiallySucceeded results lead to GetExecutionErrors and are not reported as full success.",
+        "PRIORITY_1: The missing package and mapping are acknowledged; no environment calls or file writes occur."
+      ]
+    }
+  ]
+}

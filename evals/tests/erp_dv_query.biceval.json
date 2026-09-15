@@ -11,8 +11,9 @@
     {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
   ],
   "defaultAssertions": [
+    "PRIORITY_1: OUTCOME: A live read returns actual ERP data or an explicit successful service response with zero rows/not found. DNS, authentication, and transport failures are blockers, not successful empty results or a passing data outcome.",
     "PRIORITY_2: FIRST_ATTEMPT: Agent used ERP MCP or the Dataverse CLI ERP target directly without trying Dataverse SDK, FetchXML, SQL, or unsupported ERP query features first.",
-    "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-query, and agent attribution."
+    "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-query, and agent attribution; the app version comes from the loaded Dataverse plugin manifest, not the agent or CLI version."
   ],
   "tests": [
     {
@@ -33,6 +34,44 @@
         "PRIORITY_1: The read bounds the response with --select to the requested customer-group identity and description fields.",
         "PRIORITY_1: OUTCOME: the response reflects the returned ERP record or accurately reports that it was not found.",
         "PRIORITY_2: SKILL_LOADED: dv-query"
+      ]
+    },
+    {
+      "test_id": "erp_query_003_cross_company",
+      "prompt": "Read up to 20 Finance and Operations customer groups across all legal entities I can access. Show dataAreaId, CustomerGroupId, and Description. Keep the read bounded and do not imply that a 20-row sample is the complete inventory.",
+      "expected_response": "The agent uses dataverse data query --target erp --table CustomerGroups --cross-company --top 20 with the requested select fields, or an equivalent ERP MCP cross-company read. Company identity is preserved and the response is explicitly bounded.",
+      "category": "erp-query",
+      "description": "Bound a cross-company ERP read and preserve legal-entity identity.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "cross-company"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP cross-company query"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: The query targets CustomerGroups on ERP with cross-company enabled, top 20, and select containing dataAreaId, CustomerGroupId, and Description.",
+        "PRIORITY_1: OUTCOME: Returned rows preserve company identity and are grounded in tool output; the agent does not claim completeness beyond the requested bound.",
+        "PRIORITY_1: No writes, Dataverse SDK, FetchXML, SQL, or unsupported ERP aggregation calls occur."
+      ]
+    },
+    {
+      "test_id": "erp_query_004_local_aggregation",
+      "prompt": "Read a sample of at most 50 Finance and Operations customer groups across companies and count the returned sample rows by dataAreaId. Label these as sample counts, not totals for the environment.",
+      "expected_response": "The agent performs one bounded cross-company ERP query selecting dataAreaId, then groups only the returned rows locally. It does not use $apply, FetchXML, SQL, or imply that a capped sample gives environment totals.",
+      "category": "erp-query",
+      "description": "Aggregate a bounded ERP sample locally without overstating completeness.",
+      "priority": 1,
+      "mode": "live",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "local-aggregation"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP query and local aggregation"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: The ERP CustomerGroups query uses cross-company and a top bound of 50 or less and includes dataAreaId.",
+        "PRIORITY_1: Counts are computed from returned rows locally, not through ERP $apply, SQL, FetchXML, or DataverseClient.",
+        "PRIORITY_1: OUTCOME: Counts match the returned sample and are explicitly described as sample counts, with no claim of complete per-company totals."
       ]
     }
   ]

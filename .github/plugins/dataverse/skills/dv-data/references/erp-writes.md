@@ -2,7 +2,7 @@
 
 When the env is ERP-linked — ERP (Finance and Operations) provisioned on the same Dataverse env — ERP writes do not go through the Python SDK. Use:
 
-1. **ERP MCP** for simple, interactive writes — if `dataverse mcp <erpUrl>` is wired up as an MCP server. Same `create_record` / `update_record` / `delete_record` shape as Dataverse MCP.
+1. **ERP MCP** for simple, interactive writes — if `dataverse mcp <erpUrl>` is wired up as an MCP server. Discover its actual tools and parameter schemas; do not assume Dataverse MCP's `create_record` / `update_record` / `delete_record` names or payload shapes apply to ERP.
 2. **Dataverse CLI `--target erp`** for scripted single-record writes:
 
 ```bash

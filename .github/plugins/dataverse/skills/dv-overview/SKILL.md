@@ -95,6 +95,8 @@ Three entry points, one shared sign-in:
 
 **Telemetry attribution (keep it deterministic):** every request carries a closed-schema `app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>` context so the server sees which skill routed each OData call. It is baked in — `get_client(skill)` and `get_plugin_headers(skill, ...)` stamp it on the SDK and raw-HTTP paths; the Dataverse CLI auto-stamps `DataverseCli/<ver>` + the command, and you add the skill with `--context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"` (the CLI wraps it in parentheses itself — do not pre-wrap). Never modify, omit, or free-form this context — it is a closed schema (allowlisted skill/agent, no PII).
 
+Resolve `<ver>` from the loaded Dataverse plugin's manifest, not the Copilot or Dataverse CLI version. In a plugin checkout, read `.github/plugins/dataverse/.claude-plugin/plugin.json`.
+
 **NEVER:**
 - Read or parse raw token cache files (e.g., `tokencache_msalv3.dat`) — reuse the cache only through `scripts/auth.py` / `msal-extensions`
 - Implement your own MSAL device-code flow
@@ -132,23 +134,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Volume guidance:** CLI `dataverse data create/query/count` for one-off commands; MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; Web API for `$apply` aggregation.
 
-**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
-
-| Operation | SDK call | Skill |
-| --- | --- | --- |
-| Create / update / delete records | `client.records.create()` / `.update()` / `.delete()` (pass a list for bulk) | `dv-data` |
-| Upsert on an alternate key | `client.records.upsert()` | `dv-data` |
-| Query / filter records | `client.records.list(...)` (flat) or `.list_pages(...)` (streaming) | `dv-query` |
-| One record by GUID | `client.records.retrieve(table, guid)` (`None` if missing) | `dv-query` |
-| Aggregation / server-side joins | `client.query.fetchxml(xml)` (aggregates + link-entity) | `dv-query` |
-| Fluent query build (chainable) | `client.query.builder(Table).where(...).execute()` | `dv-query` |
-| Limited SQL read | `client.query.sql("SELECT ...")` | `dv-query` |
-| Load into pandas | `client.query.builder(table).select(...).execute().to_dataframe()` | `dv-query` |
-| Upload to a file column | `client.files.upload(...)` | `dv-data` |
-| Create tables / columns / lookups / N:N | `client.tables.create()` / `.add_columns()` / `.create_lookup_field()` / `.create_many_to_many_relationship()` | `dv-metadata` |
-| Create an alternate key (enables upsert) | `client.tables.create_alternate_key(...)` | `dv-metadata` |
-| Inspect existing schema | `client.tables.list_columns(table)` / `.list_table_relationships(table)` | `dv-metadata` |
-| Create publisher / solution | `client.records.create("publisher" / "solution", {...})` | `dv-solution` |
+**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): before writing SDK calls, read [`references/sdk-methods.md`](references/sdk-methods.md) for exact method names and owning skills. Surface selection still follows Hard Rule 2.
 
 ### MCP Availability Check
 

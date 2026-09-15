@@ -52,6 +52,25 @@
         "PRIORITY_1: OUTCOME: results are grounded in the command output, including an accurate no-results response when applicable.",
         "PRIORITY_2: SKILL_LOADED: dv-admin"
       ]
+    },
+    {
+      "test_id": "erp_admin_003_retry_boundary",
+      "prompt": "Does the supported Finance and Operations batch CLI have a retry-all-failed or watch command? Explain the supported alternative without running commands, retrying jobs, cancelling jobs, or changing anything.",
+      "expected_response": "The agent explains that the dedicated ERP batch surface supports list and cancel, not retry-all/watch. It suggests inspecting jobs with list and using supported F&O UI/admin workflows for retry, with separate confirmation for any cancellation.",
+      "category": "erp-admin",
+      "description": "Reject invented ERP batch retry/watch verbs without mutations.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-admin", "Type": "unsupported-verb"},
+      "custom_metadata": {"skill": "dv-admin", "test_kind": "skill-contract"},
+      "pr_file_filter": ["**/skills/dv-admin/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-admin",
+        "PRIORITY_1: The response identifies list and cancel as the supported ERP batch verbs and does not present retry-all-failed, retry, watch, or show as supported CLI verbs.",
+        "PRIORITY_1: The alternative uses batch listing for inspection and supported F&O UI/admin workflows for retry; cancellation is not a retry substitute.",
+        "PRIORITY_1: No environment calls or local file writes occur; skill/reference reads are allowed."
+      ]
     }
   ]
 }

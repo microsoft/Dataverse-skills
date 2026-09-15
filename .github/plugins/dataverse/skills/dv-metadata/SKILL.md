@@ -12,31 +12,7 @@ description: Dataverse schema authoring and inspection — tables, columns, rela
 **STOP and ask the user:**
 > "What solution name and publisher prefix should I use? The prefix (e.g., `contoso`, `lit`, `soc`) is permanent on every table and column."
 
-Then query existing publishers and show them — the user may want to reuse one:
-
-```python
-# Publisher discovery + solution creation — use SDK (never raw Web API).
-# See dv-solution for the full publisher discovery flow.
-publishers = client.records.list("publisher",
-    filter="customizationprefix ne 'none' and uniquename ne 'MicrosoftCorporation'",
-    select=["publisherid", "uniquename", "friendlyname", "customizationprefix"], top=10)
-# MANDATORY: Show existing publishers to user and ask which to use or create new
-```
-
-After user confirms, create using SDK:
-
-```python
-publisher_id = client.records.create("publisher", {
-    "uniquename": "<name>", "friendlyname": "<display>",
-    "customizationprefix": "<prefix>",  # from user input, NOT hardcoded
-    "description": "<desc>",
-})
-solution_id = client.records.create("solution", {
-    "uniquename": "<SolutionName>", "friendlyname": "<Display Name>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": f"/publishers({publisher_id})",
-})
-```
+Follow **dv-solution**'s [publisher discovery and solution creation](../dv-solution/SKILL.md#create-a-new-solution): query existing publishers with the SDK, show them, and ask which to reuse or create. Only after confirmation, create the publisher and solution as needed with the approved prefix and publisher binding. Never use raw HTTP.
 
 Never create tables or columns outside a solution.
 
@@ -49,7 +25,7 @@ Never create tables or columns outside a solution.
 | Create, update, or delete data records | **dv-data** |
 | Query or read records | **dv-query** |
 | Export or deploy solutions | **dv-solution** |
-| ERP schema | see erp-target.md |
+| ERP runtime schema (keys, properties, navigations, bound actions) | **dv-query** — [ERP discovery](../dv-overview/references/erp-target.md#discover-whats-on-an-entity), not Dataverse schema APIs |
 
 ---
 
@@ -102,34 +78,7 @@ info = client.tables.create(
 print(f"Created: {info['table_schema_name']}")
 ```
 
-**Web API fallback (ONLY when you need OwnershipType, HasActivities, or other properties the SDK doesn't expose):**
-
-```python
-# Helper for Label boilerplate
-def label(text):
-    return {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-            "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                  "Label": text, "LanguageCode": 1033}]}
-
-entity = {
-    "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
-    "SchemaName": "new_ProjectBudget",
-    "DisplayName": label("Project Budget"),
-    "DisplayCollectionName": label("Project Budgets"),
-    "Description": label(""),
-    "OwnershipType": "UserOwned",
-    "HasActivities": False, "HasNotes": False, "IsActivity": False,
-    "PrimaryNameAttribute": "new_name",
-    "Attributes": [{
-        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
-        "SchemaName": "new_name",
-        "DisplayName": label("Name"),
-        "RequiredLevel": {"Value": "ApplicationRequired"},
-        "MaxLength": 100, "IsPrimaryName": True,
-    }]
-}
-# POST to /api/data/v9.2/EntityDefinitions with MSCRM.SolutionUniqueName header
-```
+**Web API fallback (ONLY for properties the SDK doesn't expose):** the `OwnershipType` / `HasActivities` payload example is in [`references/table-properties.md`](references/table-properties.md). Keep the confirmed solution and publisher prefix.
 
 ---
 

@@ -1,0 +1,39 @@
+{
+  "group": "DataverseSkills",
+  "scenarioName": "ERP Solution Boundaries",
+  "description": "Planning-only ALM eval distinguishing Dataverse solution promotion from ERP X++ package deployment.",
+  "enabled_evaluators": [
+    {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
+    {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/SkillSecurityEvaluator.prompty", "passing_score": 3, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseEffectiveEffort.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataverseExecutionClassify.prompty", "passing_score": 1, "priority": 1},
+    {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
+  ],
+  "defaultAssertions": [
+    "PRIORITY_1: The agent only explains the plan; it does not export, import, compile, deploy, synchronize, or mutate configuration."
+  ],
+  "tests": [
+    {
+      "test_id": "erp_solution_001_mixed_alm_plan",
+      "prompt": "Plan moving my Dataverse solution containing tables/forms and my Finance and Operations X++ model from dev to test. Can one pac solution export/import carry both? Explain the two artifact paths and target checks. Planning only: no commands, environment access, file creation, deployment, or validation execution.",
+      "expected_response": "The agent uses dv-solution for Dataverse solution ALM and erp-xpp for ERP model compilation/deployment. It distinguishes solution ZIPs from X++ deployable packages, uses the linked Dataverse environment URL for PAC ERP deployment, and preserves explicit DB-sync and post-deployment validation choices.",
+      "category": "erp-solution",
+      "description": "Separate Dataverse solution promotion from ERP deployable packages.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-solution", "Type": "alm-boundary"},
+      "custom_metadata": {"skill": "dv-solution,erp-xpp", "test_kind": "skill-contract"},
+      "pr_file_filter": ["**/skills/dv-solution/**", "**/skills/erp-xpp/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-solution",
+        "PRIORITY_1: SKILL_LOADED: erp-xpp",
+        "PRIORITY_1: The plan separates Dataverse solution export/import from X++ compile/deploy with package-type erp and does not claim a Dataverse solution includes the X++ model.",
+        "PRIORITY_1: ERP deployment targets the linked Dataverse environment URL, with target confirmation and ERP linkage/version checks, not the ERP URL as PAC --environment.",
+        "PRIORITY_1: DB sync scope is explicit, and further ERP post-deployment validation is opt-in rather than an automatic runtime invocation.",
+        "PRIORITY_1: No environment calls or local file writes occur; skill/reference reads are allowed."
+      ]
+    }
+  ]
+}
