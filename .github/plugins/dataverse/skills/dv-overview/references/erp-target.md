@@ -1,6 +1,6 @@
 # ERP (Finance and Operations) target routing
 
-**ERP intent:** Load `dv-overview` first for Finance and Operations requests, then `dv-query` for business-data reads. Do not load `erp-xpp` for record reads; reserve it for X++ code development and deployment.
+**ERP intent:** Load `dv-overview` first for Finance and Operations requests, then `dv-query` for business-data reads or `dv-data` for record writes and DMF imports. For write previews and import planning, load `dv-data` even when execution is prohibited; this overview does not replace the specialist's operation-specific guidance. Do not load `erp-xpp` for record reads; reserve it for X++ code development and deployment.
 
 On Unified Operations environments, ERP is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the ERP linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
 
