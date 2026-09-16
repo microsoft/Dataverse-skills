@@ -36,6 +36,38 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Gemini CLI
+
+Install the extension from the public repository:
+
+```bash
+gemini extensions install https://github.com/microsoft/Dataverse-skills --skip-settings
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Enter the Dataverse environment URL when the configuration command prompts.
+The value is stored in local Gemini extension settings and is not committed to
+the repository. Restart Gemini after installation, then verify discovery:
+
+```text
+/extensions list
+/skills list
+```
+
+```bash
+gemini mcp list
+```
+
+Update or uninstall the extension with:
+
+```bash
+gemini extensions update dataverse
+gemini extensions uninstall dataverse
+```
+
+Gemini CLI extensions and Google Antigravity plugins use different package
+formats. This repository currently publishes the Gemini CLI extension only.
+
 ### Codex
 
 **Codex app**
@@ -81,7 +113,7 @@ After installation, ask your agent:
 
 > "Connect to Dataverse"
 
-The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server registered with your agent, and `pac auth list` should show your active environment.
+The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, your host should report a connected Dataverse MCP server, and `pac auth list` should show your active environment.
 
 ## Try these prompts
 
@@ -102,7 +134,7 @@ The plugin is designed around a least-privilege model — it cannot exceed the p
 - **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly.
 - **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions.
 - **Application-level telemetry only** — outbound Dataverse requests may carry application metadata (plugin / version / skill / agent labels) so server-side dashboards can attribute traffic. No prompts, tool arguments, or record data are transmitted.
-- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services.
+- **Token security** — interactive credentials use the OS credential store when available. Service-principal values live in the git-ignored `.env`; headless hosts can opt into an owner-only workspace cache that may be plaintext on systems without a keyring. Credentials are never included in plugin telemetry.
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 

@@ -98,6 +98,11 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-13 Gemini CLI Extension Projection
+    Checks the native Gemini manifest and generated root compatibility tree.
+    EVAL-GEMINI-01  Manifest declares the supported Dataverse MCP configuration
+    EVAL-GEMINI-02  Root skills/scripts match the canonical plugin payload
 """
 
 import argparse
@@ -105,6 +110,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+from sync_gemini_projection import check_projection
 
 try:
     import tiktoken
@@ -572,10 +579,10 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All eight version fields match across manifest files.
+    EVAL-VERSION-01: All nine version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The eight version fields live in six files:
+    The nine version fields live in seven files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
@@ -584,6 +591,7 @@ def check_version_consistency(repo_root):
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
       7. .cursor-plugin/marketplace.json -- metadata.version
       8. .cursor-plugin/marketplace.json -- plugins[0].version
+    9. gemini-extension.json -- version
     """
     failures = []
 
@@ -627,6 +635,11 @@ def check_version_consistency(repo_root):
             ".cursor-plugin/marketplace.json",
             lambda d: (d.get("plugins") or [{}])[0].get("version"),
             "plugins[0].version",
+        ),
+        (
+            "gemini-extension.json",
+            lambda d: d.get("version"),
+            "version",
         ),
     ]
 
@@ -702,6 +715,7 @@ _DESCRIPTION_SOURCES = [
      lambda d: (d.get("plugins") or [{}])[0].get("description"), "plugins[0].description"),
     (".cursor-plugin/marketplace.json",
      lambda d: (d.get("plugins") or [{}])[0].get("description"), "plugins[0].description"),
+    ("gemini-extension.json", lambda d: d.get("description"), "description"),
 ]
 
 
@@ -780,6 +794,85 @@ def check_manifest_assets(repo_root):
                 f"EVAL-ASSET-01 [{rel_path}] logo '{logo}' does not resolve to an "
                 f"existing file (expected at {_PLUGIN_ROOT}/{rel})"
             )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-13  Gemini CLI Extension Projection
+# ---------------------------------------------------------------------------
+
+
+def check_gemini_extension(repo_root):
+    """Validate the native Gemini manifest and generated compatibility tree."""
+    failures = []
+    manifest_path = repo_root / "gemini-extension.json"
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return ["EVAL-GEMINI-01 [gemini-extension.json] manifest file not found"]
+    except json.JSONDecodeError as error:
+        return [f"EVAL-GEMINI-01 [gemini-extension.json] invalid JSON: {error}"]
+
+    if manifest.get("name") != "dataverse":
+        failures.append(
+            "EVAL-GEMINI-01 [gemini-extension.json] name must be 'dataverse'"
+        )
+
+    settings = {
+        setting.get("envVar"): setting
+        for setting in manifest.get("settings", [])
+        if isinstance(setting, dict)
+    }
+    environment_setting = settings.get("DATAVERSE_URL")
+    if not environment_setting or environment_setting.get("sensitive") is not False:
+        failures.append(
+            "EVAL-GEMINI-01 [gemini-extension.json] DATAVERSE_URL must be declared "
+            "as a non-sensitive extension setting"
+        )
+
+    server = (manifest.get("mcpServers") or {}).get("dataverse") or {}
+    expected_args = [
+        "-y",
+        "@microsoft/dataverse@1.0.77",
+        "mcp",
+        "${DATAVERSE_URL}",
+    ]
+    if server.get("command") != "npx" or server.get("args") != expected_args:
+        failures.append(
+            "EVAL-GEMINI-01 [gemini-extension.json] Dataverse MCP server must use "
+            f"command='npx' and args={expected_args!r}"
+        )
+    if "trust" in server:
+        failures.append(
+            "EVAL-GEMINI-01 [gemini-extension.json] Dataverse MCP server must not "
+            "set unsupported 'trust'"
+        )
+
+    version = manifest.get("version")
+    expected_context = (
+        f"app=dataverse-skills/{version};skill=mcp-direct;agent=gemini-cli"
+    )
+    actual_context = (server.get("env") or {}).get("DATAVERSE_OPERATION_CONTEXT")
+    if actual_context != expected_context:
+        failures.append(
+            "EVAL-GEMINI-01 [gemini-extension.json] DATAVERSE_OPERATION_CONTEXT "
+            f"must equal {expected_context!r}"
+        )
+
+    auth_path = (
+        repo_root / ".github" / "plugins" / "dataverse" / "scripts" / "auth.py"
+    )
+    auth_text = auth_path.read_text(encoding="utf-8")
+    agent_match = re.search(r"_ALLOWED_AGENTS\s*=\s*frozenset\(\{([^}]+)\}\)", auth_text)
+    if not agent_match or '"gemini-cli"' not in agent_match.group(1):
+        failures.append(
+            "EVAL-GEMINI-01 [auth.py] _ALLOWED_AGENTS must include 'gemini-cli'"
+        )
+
+    for difference in check_projection():
+        failures.append(f"EVAL-GEMINI-02 {difference}")
 
     return failures
 
@@ -974,6 +1067,9 @@ def main():
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
+    # Native Gemini extension manifest + generated root compatibility projection
+    all_failures.extend(check_gemini_extension(repo_root))
+
     if all_failures:
         # Group output by category prefix for readability
         categories = {}
@@ -992,7 +1088,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"12 categories checked"
+            f"13 categories checked"
         )
 
 

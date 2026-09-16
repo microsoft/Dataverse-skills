@@ -7,6 +7,9 @@ on:
     # workflow, causing those PRs to be permanently blocked waiting for a check that never runs.
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   static-checks:
     name: Static skill checks
@@ -20,11 +23,21 @@ jobs:
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Install eval dependencies (tiktoken for CAT-8, pyyaml for CAT-4 STRUCT-05)
         run: pip install tiktoken pyyaml
 
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
+
+      - name: Run Gemini projection tests
+        run: python .github/evals/test_gemini_projection.py
+
+      - name: Validate Gemini extension
+        run: npx --yes --package @google/gemini-cli@0.61.0-nightly.20260909.ged2ac40df gemini extensions validate .
 
       - name: Run auth unit tests
         run: python .github/evals/test_auth.py

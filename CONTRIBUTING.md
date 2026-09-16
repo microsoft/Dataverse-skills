@@ -62,6 +62,7 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/microsoft/Dataverse-skills.git
+cd Dataverse-skills
 ```
 
 Then run the plugin against your local clone with the agent you're testing. The agents differ in how they load plugins from a local path: Claude Code reads the plugin directory on every launch, so edits are picked up automatically. Copilot copies the plugin into its store at install time, so refreshing after edits requires uninstall + reinstall.
@@ -93,6 +94,23 @@ claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 ```
 
 Quote the path if it contains spaces or special characters; use an absolute path.
+
+### Testing with Gemini CLI
+
+Regenerate the root compatibility projection, validate it, and link the local
+extension:
+
+```bash
+python .github/evals/sync_gemini_projection.py
+python .github/evals/sync_gemini_projection.py --check
+gemini extensions validate .
+gemini extensions link .
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
+`gemini mcp list` to verify discovery. Do not commit the environment URL stored
+by Gemini's local extension settings.
 
 ### Testing with Codex
 
