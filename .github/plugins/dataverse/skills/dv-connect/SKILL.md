@@ -26,7 +26,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** Refresh `DATAVERSE_PLUGIN_VERSION` in `.env` if it's stale, confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version`, and add `DATAVERSE_PLUGIN_AGENT` (detected host, see Step 3) if it's absent or a stale `unknown`/placeholder (older `.env` files often lack it). Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -155,16 +155,16 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
-Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
+Also set plugin attribution vars for User-Agent telemetry — both must be real values, **never `unknown` or a placeholder**:
 
-- `PLUGIN_VERSION` — the `version` field of your loaded plugin manifest (e.g. `"1.5.0"`). At runtime, `auth.py` re-reads this from the live manifest via host env vars; this `.env` entry is a fallback for offline cases.
-- `AGENT` — your host identity, one of: `claude-code`, `copilot`, `cursor`, `codex`, or `unknown`. Must match an entry in `_ALLOWED_AGENTS` in `auth.py` — if you don't recognize your host, use `unknown`.
+- `PLUGIN_VERSION` — the `version` of the plugin manifest you loaded (e.g. `"1.5.0"`); `auth.py` reads it straight from `.env` at runtime.
+- `AGENT` — derive from the host you detected above for `MCP_CLIENT_ID`: Claude -> `claude-code`, Copilot -> `copilot`, Cursor -> `cursor`, Codex -> `codex`. Use `unknown` only if the host is truly unidentifiable. Must match `_ALLOWED_AGENTS` in `auth.py`.
 
 ```python
-# Substitute these two literals from your loaded plugin context.
-# Do NOT leave the angle-bracket placeholders — replace with real values.
+# Real values only -- no placeholders, never "unknown".
+# agent_host = the host you detected for MCP_CLIENT_ID.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
-agent_host = "<your host name: claude-code | copilot | cursor | codex | unknown>"
+agent_host = "<claude-code | copilot | cursor | codex>"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
