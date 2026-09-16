@@ -134,7 +134,7 @@ The plugin is designed around a least-privilege model — it cannot exceed the p
 - **MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting; other plugin tools (SDK, PAC CLI) authenticate directly.
 - **Security role enforcement** — every API call is authorized server-side by Dataverse; the plugin cannot bypass or escalate permissions.
 - **Application-level telemetry only** — outbound Dataverse requests may carry application metadata (plugin / version / skill / agent labels) so server-side dashboards can attribute traffic. No prompts, tool arguments, or record data are transmitted.
-- **Token security** — interactive credentials use the OS credential store when available. Service-principal values live in the git-ignored `.env`; headless hosts can opt into an owner-only workspace cache that may be plaintext on systems without a keyring. Credentials are never included in plugin telemetry.
+- **Token security** — credentials are stored in your OS native credential store or held in memory only; never passed to external services.
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 
