@@ -40,15 +40,7 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 5. **PAC CLI X++ lifecycle** for source models and deployable packages: `pac package init --package-type erp`, `pac tool xpp install`, `pac package compile --package-type erp`, `pac package deploy --package-type erp`, and `pac package db-sync`. Use **erp-xpp**.
 
-6. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
-   ```
-   GetAzureWriteUrl     → returns blob SAS URL
-   (upload package.zip to that URL)
-   ImportFromPackage    → returns executionId
-   GetExecutionSummaryStatus  → poll until terminal
-   GetExecutionErrors   → on Failed / PartiallySucceeded
-   ```
-   DMF is reachable via `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"` against the bound actions.
+6. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData. For planning or execution, load **dv-data** and follow [`erp-writes.md`](../../dv-data/references/erp-writes.md); this overview does not replace the specialist's DMF workflow.
 
 ## Reads for ERP
 

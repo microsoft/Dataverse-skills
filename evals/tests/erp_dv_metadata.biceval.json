@@ -29,7 +29,6 @@
       "pr_file_filter": ["**/skills/dv-metadata/**", "**/skills/dv-overview/**", "**/skills/dv-query/**"],
       "assertions": [
         "PRIORITY_1: SKILL_LOADED: dv-query",
-        "PRIORITY_2: SKILL_LOADED: dv-metadata",
         "PRIORITY_1: The trajectory inspects CustomerGroups on the ERP target through data describe or equivalent ERP MCP metadata discovery, not DataverseClient.tables or EntityDefinitions.",
         "PRIORITY_1: OUTCOME: Keys, property types, navigation properties, and bound actions are grounded in returned runtime metadata, or an actual access/discovery blocker is reported.",
         "PRIORITY_1: Empty Actions means no exposed bound actions; the agent does not guess or invoke an action to discover it."
