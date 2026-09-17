@@ -36,6 +36,62 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Gemini CLI
+
+Install the extension from the public repository. Gemini CLI selects the
+generic extension archive attached to the latest GitHub Release:
+
+```bash
+gemini extensions install https://github.com/microsoft/Dataverse-skills --skip-settings
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Enter the Dataverse environment URL when the configuration command prompts.
+The value is stored in local Gemini extension settings and is not committed to
+the repository. Restart Gemini after installation, then verify discovery:
+
+```text
+/extensions list
+/skills list
+```
+
+```bash
+gemini mcp list
+```
+
+Update or uninstall the extension with:
+
+```bash
+gemini extensions update dataverse
+gemini extensions uninstall dataverse
+```
+
+Gemini CLI extensions and Google Antigravity plugins use different package
+manifests, but this repository publishes both from one canonical package with
+one shared `skills/` and `scripts/` tree.
+
+### Google Antigravity
+
+Install the native plugin from the same release archive used by Gemini CLI:
+
+```bash
+agy plugin install https://github.com/microsoft/Dataverse-skills/releases/latest/download/dataverse-agent-plugin.zip
+```
+
+If the Dataverse extension is already installed in Gemini CLI, Antigravity can
+convert it instead:
+
+```bash
+agy plugin import gemini
+```
+
+Start `agy`, invoke `/dv-connect`, and select the Dataverse environment. The
+skill writes the environment-specific MCP server to `.agents/mcp_config.json`;
+the published plugin does not contain an environment URL. The skill also
+restores the canonical auth helper from the release ZIP if Antigravity omits
+the package-root `scripts/` directory while staging. Restart Antigravity, then
+use `/skills` and `/mcp` to verify discovery.
+
 ### Codex
 
 **Codex app**
@@ -81,7 +137,7 @@ After installation, ask your agent:
 
 > "Connect to Dataverse"
 
-The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server registered with your agent, and `pac auth list` should show your active environment.
+The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, your host should report a connected Dataverse MCP server, and `pac auth list` should show your active environment.
 
 ## Try these prompts
 

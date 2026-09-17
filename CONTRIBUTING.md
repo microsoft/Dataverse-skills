@@ -62,6 +62,7 @@ Clone the repository:
 
 ```bash
 git clone https://github.com/microsoft/Dataverse-skills.git
+cd Dataverse-skills
 ```
 
 Then run the plugin against your local clone with the agent you're testing. The agents differ in how they load plugins from a local path: Claude Code reads the plugin directory on every launch, so edits are picked up automatically. Copilot copies the plugin into its store at install time, so refreshing after edits requires uninstall + reinstall.
@@ -93,6 +94,37 @@ claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 ```
 
 Quote the path if it contains spaces or special characters; use an absolute path.
+
+### Testing with Gemini CLI
+
+The canonical plugin directory is also the Gemini extension root, so local
+development does not require a copied compatibility tree. Validate and link it
+directly. CI pins the exact Gemini CLI artifact used for validation because the
+npm `latest` tag currently resolves to a nightly build:
+
+```bash
+gemini extensions validate .github/plugins/dataverse
+gemini extensions link .github/plugins/dataverse
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
+`gemini mcp list` to verify discovery. Do not commit the environment URL stored
+by Gemini's local extension settings.
+
+### Testing with Google Antigravity
+
+The same canonical directory is also a native Antigravity plugin. Install it
+locally without copying its skills or scripts:
+
+```bash
+agy plugin install .github/plugins/dataverse
+```
+
+Start `agy`, invoke `/dv-connect`, and verify the plugin with `/skills` and
+`/mcp`. Reinstall the local plugin after source edits because Antigravity stages
+the directory in its user profile. Do not commit the generated
+`.agents/mcp_config.json`, which contains the test environment URL.
 
 ### Testing with Codex
 

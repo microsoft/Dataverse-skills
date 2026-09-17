@@ -421,5 +421,6 @@ FodyWeavers.xsd
 *.snk
 solutions/*.zip
 .claude/mcp_settings.json
+.agents/mcp_config.json
 
 .dataverse/
