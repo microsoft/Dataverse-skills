@@ -98,6 +98,14 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-13 Antigravity Plugin
+    Checks the native manifest and host attribution required for direct
+    installation from the canonical plugin directory.
+    EVAL-ANTIGRAVITY-01  Native manifest matches canonical identity
+    EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
+    EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
+    EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
 """
 
 import argparse
@@ -685,6 +693,8 @@ def check_version_consistency(repo_root):
 # marketplace-level metadata.description is intentionally different (it
 # describes the marketplace, not the plugin) and is deliberately excluded.
 _DESCRIPTION_SOURCES = [
+    (".github/plugins/dataverse/plugin.json",
+     lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.cursor-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.claude-plugin/plugin.json",
@@ -779,6 +789,87 @@ def check_manifest_assets(repo_root):
             failures.append(
                 f"EVAL-ASSET-01 [{rel_path}] logo '{logo}' does not resolve to an "
                 f"existing file (expected at {_PLUGIN_ROOT}/{rel})"
+            )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-13  Antigravity Plugin
+# ---------------------------------------------------------------------------
+
+
+def check_antigravity_plugin(repo_root):
+    """Validate the native manifest and Antigravity integration contract."""
+    failures = []
+    relative_path = ".github/plugins/dataverse/plugin.json"
+    manifest_path = repo_root / relative_path
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest file not found"]
+    except json.JSONDecodeError as error:
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] invalid JSON: {error}"]
+
+    canonical_path = repo_root / ".github/plugins/dataverse/.claude-plugin/plugin.json"
+    try:
+        canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError) as error:
+        return failures + [
+            f"EVAL-ANTIGRAVITY-01 [{canonical_path.relative_to(repo_root)}] "
+            f"cannot read canonical identity: {error}"
+        ]
+    expected = {
+        "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+        "name": canonical.get("name"),
+        "description": canonical.get("description"),
+    }
+    if manifest != expected:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] must contain only the "
+            "official schema, canonical name, and canonical description"
+        )
+
+    auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
+    try:
+        auth_text = auth_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, UnicodeDecodeError) as error:
+        return failures + [
+            f"EVAL-ANTIGRAVITY-02 [{auth_path.relative_to(repo_root)}] "
+            f"cannot read host allowlist: {error}"
+        ]
+    match = re.search(r"_ALLOWED_AGENTS\s*=\s*frozenset\(\{([^}]+)\}\)", auth_text)
+    allowed_agents = match.group(1) if match else ""
+    if '"antigravity-cli"' not in allowed_agents:
+        failures.append(
+            "EVAL-ANTIGRAVITY-02 [auth.py] _ALLOWED_AGENTS must include "
+            "'antigravity-cli'"
+        )
+
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    expected_install_path = (
+        "https://github.com/microsoft/Dataverse-skills/tree/main/"
+        ".github/plugins/dataverse"
+    )
+    if expected_install_path not in readme:
+        failures.append(
+            "EVAL-ANTIGRAVITY-03 [README.md] install command must target the "
+            "canonical plugin directory"
+        )
+
+    mcp_reference = (
+        repo_root
+        / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
+    ).read_text(encoding="utf-8")
+    for required_text in (
+        ".agents/mcp_config.json",
+        '"dataverse-{orgid}"',
+        "agent=antigravity-cli",
+    ):
+        if required_text not in mcp_reference:
+            failures.append(
+                "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] missing required "
+                f"Antigravity configuration text: {required_text}"
             )
 
     return failures
@@ -970,6 +1061,7 @@ def main():
     # Manifest description consistency + asset references
     all_failures.extend(check_description_consistency(repo_root))
     all_failures.extend(check_manifest_assets(repo_root))
+    all_failures.extend(check_antigravity_plugin(repo_root))
 
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
@@ -992,7 +1084,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"12 categories checked"
+            f"13 categories checked"
         )
 
 
