@@ -97,20 +97,34 @@ Quote the path if it contains spaces or special characters; use an absolute path
 
 ### Testing with Gemini CLI
 
-Regenerate the root compatibility projection, validate it, and link the local
-extension:
+The canonical plugin directory is also the Gemini extension root, so local
+development does not require a copied compatibility tree. Validate and link it
+directly. CI pins the exact Gemini CLI artifact used for validation because the
+npm `latest` tag currently resolves to a nightly build:
 
 ```bash
-python .github/evals/sync_gemini_projection.py
-python .github/evals/sync_gemini_projection.py --check
-gemini extensions validate .
-gemini extensions link .
+gemini extensions validate .github/plugins/dataverse
+gemini extensions link .github/plugins/dataverse
 gemini extensions config dataverse DATAVERSE_URL --scope workspace
 ```
 
 Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
 `gemini mcp list` to verify discovery. Do not commit the environment URL stored
 by Gemini's local extension settings.
+
+### Testing with Google Antigravity
+
+The same canonical directory is also a native Antigravity plugin. Install it
+locally without copying its skills or scripts:
+
+```bash
+agy plugin install .github/plugins/dataverse
+```
+
+Start `agy`, invoke `/dv-connect`, and verify the plugin with `/skills` and
+`/mcp`. Reinstall the local plugin after source edits because Antigravity stages
+the directory in its user profile. Do not commit the generated
+`.agents/mcp_config.json`, which contains the test environment URL.
 
 ### Testing with Codex
 

@@ -38,7 +38,8 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 ### Gemini CLI
 
-Install the extension from the public repository:
+Install the extension from the public repository. Gemini CLI selects the
+generic extension archive attached to the latest GitHub Release:
 
 ```bash
 gemini extensions install https://github.com/microsoft/Dataverse-skills --skip-settings
@@ -66,7 +67,30 @@ gemini extensions uninstall dataverse
 ```
 
 Gemini CLI extensions and Google Antigravity plugins use different package
-formats. This repository currently publishes the Gemini CLI extension only.
+manifests, but this repository publishes both from one canonical package with
+one shared `skills/` and `scripts/` tree.
+
+### Google Antigravity
+
+Install the native plugin from the same release archive used by Gemini CLI:
+
+```bash
+agy plugin install https://github.com/microsoft/Dataverse-skills/releases/latest/download/dataverse-agent-plugin.zip
+```
+
+If the Dataverse extension is already installed in Gemini CLI, Antigravity can
+convert it instead:
+
+```bash
+agy plugin import gemini
+```
+
+Start `agy`, invoke `/dv-connect`, and select the Dataverse environment. The
+skill writes the environment-specific MCP server to `.agents/mcp_config.json`;
+the published plugin does not contain an environment URL. The skill also
+restores the canonical auth helper from the release ZIP if Antigravity omits
+the package-root `scripts/` directory while staging. Restart Antigravity, then
+use `/skills` and `/mcp` to verify discovery.
 
 ### Codex
 

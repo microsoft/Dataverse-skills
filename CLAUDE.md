@@ -160,7 +160,7 @@ When a PR changes skill files (`.github/plugins/dataverse/skills/**`), bump the 
 6. `.github/plugins/dataverse/.codex-plugin/plugin.json` — `version`
 7. `.cursor-plugin/marketplace.json` — top-level `metadata.version`
 8. `.cursor-plugin/marketplace.json` — plugin entry `version`
-9. `gemini-extension.json` — `version`
+9. `.github/plugins/dataverse/gemini-extension.json` — `version`
 
 All nine must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
 

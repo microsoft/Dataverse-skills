@@ -59,12 +59,12 @@ CAT-6  dv-admin Allowlist Enforcement
        EVAL-ALLOW-01  dv-admin has an 'Allowed settings' heading
        EVAL-ALLOW-02  Allowlist text contains the refusal directive ('must be refused')
        EVAL-ALLOW-03  Known out-of-scope settings are named as explicit denylist examples
-       EVAL-ALLOW-04  Every expected allowlisted backend key is present in dv-admin
-       
+    EVAL-ALLOW-04  Every expected allowlisted backend key is present in dv-admin
+
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-       EVAL-VERSION-01  All eight version fields match (6 files, 8 fields total)
+    EVAL-VERSION-01  All nine version fields match (7 files, 9 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
@@ -99,10 +99,11 @@ CAT-11 Deprecated SDK Read API Gate
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
 
-CAT-13 Gemini CLI Extension Projection
-    Checks the native Gemini manifest and generated root compatibility tree.
+CAT-13 Google Agent Package
+    Checks the Gemini and Antigravity manifests in the canonical plugin root.
     EVAL-GEMINI-01  Manifest declares the supported Dataverse MCP configuration
-    EVAL-GEMINI-02  Root skills/scripts match the canonical plugin payload
+    EVAL-GEMINI-02  Canonical package is complete and has no root copies
+    EVAL-ANTIGRAVITY-01  Native plugin manifest matches the canonical identity
 """
 
 import argparse
@@ -110,8 +111,6 @@ import json
 import re
 import sys
 from pathlib import Path
-
-from sync_gemini_projection import check_projection
 
 try:
     import tiktoken
@@ -591,7 +590,7 @@ def check_version_consistency(repo_root):
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
       7. .cursor-plugin/marketplace.json -- metadata.version
       8. .cursor-plugin/marketplace.json -- plugins[0].version
-    9. gemini-extension.json -- version
+            9. .github/plugins/dataverse/gemini-extension.json -- version
     """
     failures = []
 
@@ -637,7 +636,7 @@ def check_version_consistency(repo_root):
             "plugins[0].version",
         ),
         (
-            "gemini-extension.json",
+            ".github/plugins/dataverse/gemini-extension.json",
             lambda d: d.get("version"),
             "version",
         ),
@@ -715,7 +714,8 @@ _DESCRIPTION_SOURCES = [
      lambda d: (d.get("plugins") or [{}])[0].get("description"), "plugins[0].description"),
     (".cursor-plugin/marketplace.json",
      lambda d: (d.get("plugins") or [{}])[0].get("description"), "plugins[0].description"),
-    ("gemini-extension.json", lambda d: d.get("description"), "description"),
+    (".github/plugins/dataverse/gemini-extension.json",
+     lambda d: d.get("description"), "description"),
 ]
 
 
@@ -799,25 +799,26 @@ def check_manifest_assets(repo_root):
 
 
 # ---------------------------------------------------------------------------
-# CAT-13  Gemini CLI Extension Projection
+# CAT-13  Google Agent Package
 # ---------------------------------------------------------------------------
 
 
 def check_gemini_extension(repo_root):
-    """Validate the native Gemini manifest and generated compatibility tree."""
+    """Validate Gemini and Antigravity manifests in the canonical package."""
     failures = []
-    manifest_path = repo_root / "gemini-extension.json"
+    manifest_relative_path = ".github/plugins/dataverse/gemini-extension.json"
+    manifest_path = repo_root / manifest_relative_path
 
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return ["EVAL-GEMINI-01 [gemini-extension.json] manifest file not found"]
+        return [f"EVAL-GEMINI-01 [{manifest_relative_path}] manifest file not found"]
     except json.JSONDecodeError as error:
-        return [f"EVAL-GEMINI-01 [gemini-extension.json] invalid JSON: {error}"]
+        return [f"EVAL-GEMINI-01 [{manifest_relative_path}] invalid JSON: {error}"]
 
     if manifest.get("name") != "dataverse":
         failures.append(
-            "EVAL-GEMINI-01 [gemini-extension.json] name must be 'dataverse'"
+            f"EVAL-GEMINI-01 [{manifest_relative_path}] name must be 'dataverse'"
         )
 
     settings = {
@@ -828,7 +829,7 @@ def check_gemini_extension(repo_root):
     environment_setting = settings.get("DATAVERSE_URL")
     if not environment_setting or environment_setting.get("sensitive") is not False:
         failures.append(
-            "EVAL-GEMINI-01 [gemini-extension.json] DATAVERSE_URL must be declared "
+            f"EVAL-GEMINI-01 [{manifest_relative_path}] DATAVERSE_URL must be declared "
             "as a non-sensitive extension setting"
         )
 
@@ -841,12 +842,12 @@ def check_gemini_extension(repo_root):
     ]
     if server.get("command") != "npx" or server.get("args") != expected_args:
         failures.append(
-            "EVAL-GEMINI-01 [gemini-extension.json] Dataverse MCP server must use "
+            f"EVAL-GEMINI-01 [{manifest_relative_path}] Dataverse MCP server must use "
             f"command='npx' and args={expected_args!r}"
         )
     if "trust" in server:
         failures.append(
-            "EVAL-GEMINI-01 [gemini-extension.json] Dataverse MCP server must not "
+            f"EVAL-GEMINI-01 [{manifest_relative_path}] Dataverse MCP server must not "
             "set unsupported 'trust'"
         )
 
@@ -857,22 +858,73 @@ def check_gemini_extension(repo_root):
     actual_context = (server.get("env") or {}).get("DATAVERSE_OPERATION_CONTEXT")
     if actual_context != expected_context:
         failures.append(
-            "EVAL-GEMINI-01 [gemini-extension.json] DATAVERSE_OPERATION_CONTEXT "
+            f"EVAL-GEMINI-01 [{manifest_relative_path}] DATAVERSE_OPERATION_CONTEXT "
             f"must equal {expected_context!r}"
         )
 
-    auth_path = (
-        repo_root / ".github" / "plugins" / "dataverse" / "scripts" / "auth.py"
-    )
+    plugin_root = repo_root / ".github" / "plugins" / "dataverse"
+    auth_path = plugin_root / "scripts" / "auth.py"
     auth_text = auth_path.read_text(encoding="utf-8")
     agent_match = re.search(r"_ALLOWED_AGENTS\s*=\s*frozenset\(\{([^}]+)\}\)", auth_text)
-    if not agent_match or '"gemini-cli"' not in agent_match.group(1):
+    allowed_agents = agent_match.group(1) if agent_match else ""
+    for agent in ("gemini-cli", "antigravity-cli"):
+        if f'"{agent}"' not in allowed_agents:
+            failures.append(
+                f"EVAL-GEMINI-01 [auth.py] _ALLOWED_AGENTS must include '{agent}'"
+            )
+
+    for required_directory in ("skills", "scripts"):
+        if not (plugin_root / required_directory).is_dir():
+            failures.append(
+                f"EVAL-GEMINI-02 canonical package is missing {required_directory}/"
+            )
+
+    symlinks = sorted(
+        path.relative_to(plugin_root).as_posix()
+        for path in plugin_root.rglob("*")
+        if path.is_symlink()
+    )
+    for relative_path in symlinks:
         failures.append(
-            "EVAL-GEMINI-01 [auth.py] _ALLOWED_AGENTS must include 'gemini-cli'"
+            f"EVAL-GEMINI-02 canonical package contains symlink: {relative_path}"
         )
 
-    for difference in check_projection():
-        failures.append(f"EVAL-GEMINI-02 {difference}")
+    antigravity_relative_path = ".github/plugins/dataverse/plugin.json"
+    antigravity_path = repo_root / antigravity_relative_path
+    try:
+        antigravity = json.loads(antigravity_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{antigravity_relative_path}] manifest file not found"
+        )
+        antigravity = {}
+    except json.JSONDecodeError as error:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{antigravity_relative_path}] invalid JSON: {error}"
+        )
+        antigravity = {}
+
+    expected_antigravity = {
+        "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+        "name": manifest.get("name"),
+        "description": manifest.get("description"),
+    }
+    if antigravity and antigravity != expected_antigravity:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{antigravity_relative_path}] must contain only "
+            "the official schema, canonical name, and canonical description"
+        )
+
+    for duplicate_directory in ("skills", "scripts"):
+        duplicate_root = repo_root / duplicate_directory
+        if duplicate_root.is_symlink() or any(
+            path.is_file() or path.is_symlink()
+            for path in duplicate_root.rglob("*")
+        ):
+            failures.append(
+                f"EVAL-GEMINI-02 root {duplicate_directory}/ duplicates the canonical "
+                f".github/plugins/dataverse/{duplicate_directory}/ source"
+            )
 
     return failures
 
@@ -1067,7 +1119,7 @@ def main():
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
-    # Native Gemini extension manifest + generated root compatibility projection
+    # Shared Gemini and Antigravity package rooted in the canonical plugin
     all_failures.extend(check_gemini_extension(repo_root))
 
     if all_failures:
