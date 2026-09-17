@@ -71,6 +71,18 @@ Alternatively, run `/plugins`, search for **Microsoft Dataverse**, and install
 
 The listing is published at [cursor.com/marketplace/microsoft-dataverse](https://cursor.com/marketplace/microsoft-dataverse).
 
+### Google Antigravity
+
+Install the native plugin directly from its canonical directory in this repository:
+
+```bash
+agy plugin install https://github.com/microsoft/Dataverse-skills/tree/main/.github/plugins/dataverse
+```
+
+Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
+select an environment and write the workspace-specific Dataverse MCP entry to
+`.agents/mcp_config.json`; verify it with `/mcp` after restarting.
+
 ## Verify the install
 
 After installation, ask your agent:

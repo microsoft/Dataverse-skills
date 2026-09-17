@@ -106,6 +106,18 @@ In the **Codex app**, do the same through **Plugins → Add marketplace**: set *
 
 Codex discovers the plugin via the repo-root `.agents/plugins/marketplace.json` (its native marketplace path; it falls back to `.claude-plugin/marketplace.json` if that's absent) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
 
+### Testing with Google Antigravity
+
+Install the canonical plugin directory from your local clone:
+
+```bash
+agy plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+Restart `agy`, verify the nine Dataverse skills with `/skills`, and run
+`/dv-connect`. Reinstall after source edits because Antigravity stages a copy of
+the plugin rather than linking the working tree.
+
 ## Legal
 
 This project is licensed under the [MIT License](LICENSE).
