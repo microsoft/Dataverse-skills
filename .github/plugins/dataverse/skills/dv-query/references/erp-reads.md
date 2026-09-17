@@ -9,7 +9,7 @@ When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP read
 
 For a known entity and key, execute the read directly. Do not search the repository or run a separate auth/profile probe first: the data command validates authentication and ERP linkage. Always use `--select` to bound the response to fields needed by the request.
 
-For ERP CLI attribution, resolve `<ver>` from the loaded plugin manifest (`.github/plugins/dataverse/.claude-plugin/plugin.json` in a checkout), not the Copilot or Dataverse CLI version.
+For ERP CLI attribution, resolve `<ver>` from the `version` field of the live loaded plugin manifest, not the Copilot or Dataverse CLI version. The [`dv-connect` attribution guidance](../../dv-connect/SKILL.md) explains how `PLUGIN_VERSION` is re-read from that manifest through the host-provided plugin context.
 
 ```bash
 # Multi-record read

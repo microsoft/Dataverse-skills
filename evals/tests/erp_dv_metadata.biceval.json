@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "ERP Metadata",
-  "description": "Read-only runtime schema discovery for ERP public data entities, distinct from Dataverse schema authoring.",
+  "description": "Read-only routing and runtime schema discovery for ERP public data entities, distinct from Dataverse schema authoring.",
   "enabled_evaluators": [
     {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
     {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
@@ -18,17 +18,18 @@
     {
       "test_id": "erp_metadata_001_runtime_schema",
       "prompt": "Inspect the existing Finance and Operations CustomerGroups schema: list its key fields, property names and types, navigation properties, and any bound actions exposed in this environment. Schema inspection only, not business records or a schema change.",
-      "expected_response": "The agent loads dv-metadata for schema inspection and follows ERP routing to dataverse data describe --target erp --table CustomerGroups --json or equivalent ERP MCP metadata discovery. It reports actual runtime keys, properties, navigations, and actions, including empty arrays, without downloading full metadata or trying actions.",
+      "expected_response": "The agent routes ERP runtime schema inspection to dv-query and uses dataverse data describe --target erp --table CustomerGroups --json or equivalent ERP MCP metadata discovery. It reports actual runtime keys, properties, navigations, and actions, including empty arrays, without downloading full metadata or trying actions.",
       "category": "erp-metadata",
       "description": "Inspect ERP runtime entity metadata without Dataverse schema APIs.",
       "priority": 1,
       "mode": "live",
       "safety_tier": "read-only",
-      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-metadata", "Type": "runtime-schema"},
-      "custom_metadata": {"skill": "dv-metadata", "tool_routing": "ERP runtime describe"},
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "runtime-schema"},
+      "custom_metadata": {"skill": "dv-query", "tool_routing": "ERP runtime describe"},
       "pr_file_filter": ["**/skills/dv-metadata/**", "**/skills/dv-overview/**", "**/skills/dv-query/**"],
       "assertions": [
-        "PRIORITY_1: SKILL_LOADED: dv-metadata",
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_2: SKILL_LOADED: dv-metadata",
         "PRIORITY_1: The trajectory inspects CustomerGroups on the ERP target through data describe or equivalent ERP MCP metadata discovery, not DataverseClient.tables or EntityDefinitions.",
         "PRIORITY_1: OUTCOME: Keys, property types, navigation properties, and bound actions are grounded in returned runtime metadata, or an actual access/discovery blocker is reported.",
         "PRIORITY_1: Empty Actions means no exposed bound actions; the agent does not guess or invoke an action to discover it."

@@ -5,6 +5,8 @@ When the env is ERP-linked — ERP (Finance and Operations) provisioned on the s
 1. **ERP MCP** for simple, interactive writes — if `dataverse mcp <erpUrl>` is wired up as an MCP server. Discover its actual tools and parameter schemas; do not assume Dataverse MCP's `create_record` / `update_record` / `delete_record` names or payload shapes apply to ERP.
 2. **Dataverse CLI `--target erp`** for scripted single-record writes:
 
+For ERP CLI attribution, resolve `<ver>` from the `version` field of the live loaded plugin manifest, not the agent or Dataverse CLI version. The [`dv-connect` attribution guidance](../../dv-connect/SKILL.md) explains how `PLUGIN_VERSION` is re-read from that manifest through the host-provided plugin context.
+
 ```bash
 # Create
 dataverse data create --target erp --table CustomerGroups \
@@ -23,7 +25,7 @@ dataverse data delete --target erp --table CustomerGroups \
   --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 ```
 
-3. **DMF (Data Management Framework) data packages** for bulk writes. ERP OData has **no `CreateMultiple` equivalent** — looping `data create` is the wrong tool at higher volume. DMF dispatch via `dataverse api invoke --target erp` against the `DataManagementDefinitionGroups` bound actions (`GetAzureWriteUrl` → upload zip → `ImportFromPackage` → `GetExecutionSummaryStatus`). See [`erp-target.md`](../../dv-overview/references/erp-target.md) for the full flow.
+3. **DMF (Data Management Framework) data packages** for bulk writes. ERP OData has **no `CreateMultiple` equivalent** — looping `data create` is the wrong tool at higher volume. DMF dispatch via `dataverse api invoke --target erp` against the `DataManagementDefinitionGroups` bound actions (`GetAzureWriteUrl` → upload zip → `ImportFromPackage` → retain the execution ID → poll `GetExecutionSummaryStatus` → call `GetExecutionErrors` on `Failed` or `PartiallySucceeded`). See [`erp-target.md`](../../dv-overview/references/erp-target.md) for the full flow.
 
 4. **`data associate` / `data disassociate` are not supported on ERP.** Set or clear the linking property on the entity directly via `dataverse data update --target erp`.
 

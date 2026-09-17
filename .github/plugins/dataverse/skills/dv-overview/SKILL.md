@@ -5,7 +5,7 @@ description: Foundational cross-cutting context for Dataverse / Power Platform w
 
 # Skill: Overview — What to Use and When
 
-Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+Load this skill first for any Dataverse work. It provides cross-cutting scope, tool capabilities, safety rules, and the change lifecycle; specialist skills route from their own triggers.
 
 ---
 
@@ -38,6 +38,8 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 ## Hard Rules
 
 Safety rules (init, auth, env confirmation) are non-negotiable. Tool selection (Rules 1, 2, 4) is capability-based.
+
+**Offline requests:** when the user asks to show, explain, or plan without execution or saving, skill and reference reads are allowed; environment calls and local file writes are not.
 
 ### 0. Check Init State First
 
