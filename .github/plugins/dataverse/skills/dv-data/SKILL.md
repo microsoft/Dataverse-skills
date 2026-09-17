@@ -7,7 +7,7 @@ description: Record-level CRUD and bulk operations — create, update, delete, u
 
 > **This skill uses Python and the Dataverse CLI.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
 
-**ERP exception, including planning-only requests:** load **dv-overview**, then read [`references/erp-writes.md`](references/erp-writes.md). ERP writes and DMF imports do not use the Dataverse SDK guidance below.
+**ERP exception, including planning-only requests:** load **dv-overview**, then read [`references/erp-writes.md`](references/erp-writes.md). ERP writes and DMF imports do not use the Dataverse SDK guidance below. A request not to execute operations still permits loading skills and reading local references.
 
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
 
