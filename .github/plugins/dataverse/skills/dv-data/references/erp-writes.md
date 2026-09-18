@@ -25,7 +25,7 @@ dataverse data delete --target erp --table CustomerGroups \
   --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 ```
 
-3. **DMF (Data Management Framework) data packages** for bulk writes. ERP OData has **no `CreateMultiple` equivalent** — looping `data create` is the wrong tool at higher volume. DMF dispatch via `dataverse api invoke --target erp` against the `DataManagementDefinitionGroups` bound actions (`GetAzureWriteUrl` → upload zip → `ImportFromPackage` → retain the execution ID → poll `GetExecutionSummaryStatus` → call `GetExecutionErrors` on `Failed` or `PartiallySucceeded`). See [`erp-target.md`](../../dv-overview/references/erp-target.md) for the full flow.
+3. **DMF (Data Management Framework) data packages** for bulk writes. ERP OData has **no `CreateMultiple` equivalent** — looping `data create` is the wrong tool at higher volume. DMF dispatch via `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"` against the `DataManagementDefinitionGroups` bound actions (`GetAzureWriteUrl` → upload zip → `ImportFromPackage` → retain the execution ID → poll `GetExecutionSummaryStatus` → call `GetExecutionErrors` on `Failed` or `PartiallySucceeded`).
 
 4. **`data associate` / `data disassociate` are not supported on ERP.** Set or clear the linking property on the entity directly via `dataverse data update --target erp`.
 
