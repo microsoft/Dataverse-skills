@@ -155,15 +155,15 @@ Detect the current tool (Claude or Copilot) from context and set `MCP_CLIENT_ID`
 - Claude (CLI or VSCode extension): `0c412cc3-0dd6-449b-987f-05b053db9457`
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 
-Also set plugin attribution vars for User-Agent telemetry — both must be real values, **never `unknown` or a placeholder**:
+Also set plugin attribution vars for User-Agent telemetry — fill both with real values, not `<placeholders>`:
 
 - `PLUGIN_VERSION` — the `version` of the plugin manifest you loaded (e.g. `"1.5.0"`); `auth.py` reads it straight from `.env` at runtime.
-- `AGENT` — from the host detected for `MCP_CLIENT_ID`: Claude -> `claude-code`, Copilot -> `copilot`, Cursor -> `cursor`, Codex -> `codex`; else `unknown`. Must match `_ALLOWED_AGENTS` in `auth.py`.
+- `AGENT` — from the host detected for `MCP_CLIENT_ID`: Claude -> `claude-code`, Copilot -> `copilot`, Cursor -> `cursor`, Codex -> `codex`; else `unknown`. Must be in `_ALLOWED_AGENTS` in `auth.py` — add new hosts there.
 
 ```python
-# Real values only -- no placeholders, never "unknown".
+# "unknown" only if your host is not in _ALLOWED_AGENTS.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
-agent_host = "<claude-code | copilot | cursor | codex>"
+agent_host = "<host: claude-code | copilot | cursor | codex | unknown>"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
