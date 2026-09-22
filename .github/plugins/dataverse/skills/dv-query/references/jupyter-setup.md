@@ -7,11 +7,17 @@
 import os
 from azure.identity import InteractiveBrowserCredential
 from PowerPlatform.Dataverse.client import DataverseClient
+from PowerPlatform.Dataverse.core.config import OperationContext
 
 credential = InteractiveBrowserCredential()
+# Telemetry attribution (same closed schema as scripts/auth.py): skill is fixed for this
+# notebook; agent/version come from the plugin env when present, else "unknown".
+_ver = os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+_agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
 client = DataverseClient(
     base_url="https://<org>.crm.dynamics.com",  # replace with your org URL
     credential=credential,
+    context=OperationContext(user_agent_context=f"app=dataverse-skills/{_ver};skill=dv-query;agent={_agent}"),
 )
 
 # Cell 2: Load data into pandas (direct DataFrame, no manual iteration)
