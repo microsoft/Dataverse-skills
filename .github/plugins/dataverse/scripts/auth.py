@@ -850,15 +850,24 @@ def _plugin_version():
     layout copies this file to <project>/scripts/auth.py -- away from the plugin
     manifest -- so a manifest path relative to __file__ is unreliable here; the
     env var, refreshed at connect, is the source of truth.
+
+    Fail-open: a value that would break the closed-schema context string is
+    coerced to "unknown", so attribution can never block the operation.
     """
-    return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+    ver = os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+    return ver if re.fullmatch(r"[a-zA-Z0-9_./-]+", ver or "") else "unknown"
 
 
 def _current_agent():
+    """Return the attribution agent, fail-open.
+
+    An unrecognized host string (LLM host misdetection: 'github-copilot' vs
+    'copilot', 'claude', 'windsurf', ...) is coerced to "unknown" rather than
+    raised -- telemetry attribution must never gate the user's data operation.
+    Strict validation stays on the .env WRITE path (dv-connect guidance).
+    """
     agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
-    if agent not in _ALLOWED_AGENTS:
-        raise ValueError(f"Unknown agent '{agent}'; allowed: {_ALLOWED_AGENTS}")
-    return agent
+    return agent if agent in _ALLOWED_AGENTS else "unknown"
 
 
 def _validate_skill(skill):
@@ -867,24 +876,30 @@ def _validate_skill(skill):
     return skill
 
 
-def _build_operation_context(skill):
-    """Build and validate the operation_context string.
+def _operation_context_str(skill):
+    """Assemble the closed-schema attribution string, fail-open.
 
-    Returns an OperationContext object for the SDK.  The string is validated
-    both here (via allowlists) and inside OperationContext.__post_init__
-    (via regex + control-char check).
-
-    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and
-    _ALLOWED_AGENTS are used.  Never pass user-provided or free-form
-    strings into operation_context — it is written to HTTP headers and
-    server-side telemetry logs.
+    agent/version are already coerced to allow-listed / charset-safe values, so
+    the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
+    mismatch it degrades to a minimal safe context instead of raising, so a bad
+    attribution value can never block the call. `skill` is a plugin-authored
+    literal validated strictly by the public entry points.
     """
     ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
     if not _CONTEXT_RE.match(ctx_str):
-        raise ValueError(
-            f"operation_context failed format validation: {ctx_str!r}. "
-            "Must be semicolon-separated key=value pairs with no spaces or special characters."
-        )
+        safe_skill = skill if skill in _ALLOWED_SKILLS else "unknown"
+        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown"
+    return ctx_str
+
+
+def _build_operation_context(skill):
+    """Build the operation_context for the SDK.
+
+    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and _ALLOWED_AGENTS
+    reach the string; agent/version are coerced (never passed through raw), so
+    nothing un-allow-listed is written to HTTP headers or server-side telemetry.
+    """
+    ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
     return OperationContext(user_agent_context=ctx_str)
 
@@ -929,11 +944,7 @@ def get_plugin_headers(skill, token=None):
     :returns: Headers dict with User-Agent and optional Authorization.
     """
     _validate_skill(skill)
-    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
-    if not _CONTEXT_RE.match(ctx_str):
-        raise ValueError(
-            f"operation_context failed format validation: {ctx_str!r}."
-        )
+    ctx_str = _operation_context_str(skill)
     headers = {"User-Agent": f"Python-urllib ({ctx_str})"}
     if token:
         headers["Authorization"] = f"Bearer {token}"

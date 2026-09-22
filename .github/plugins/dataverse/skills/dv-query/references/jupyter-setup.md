@@ -11,7 +11,17 @@ from PowerPlatform.Dataverse.core.config import OperationContext
 
 credential = InteractiveBrowserCredential()
 # Telemetry attribution (same closed schema as scripts/auth.py): skill is fixed for this
-# notebook; agent/version come from the plugin env when present, else "unknown".
+# notebook. A fresh kernel does not auto-load .env, so read it (cwd or parent) first,
+# then fall back to "unknown".
+from pathlib import Path
+for _p in (Path.cwd() / ".env", Path.cwd().parent / ".env"):
+    if _p.exists():
+        for _line in _p.read_text().splitlines():
+            _s = _line.strip()
+            if _s and not _s.startswith("#") and "=" in _s:
+                _k, _, _v = _s.partition("=")
+                os.environ.setdefault(_k.strip(), _v.strip())
+        break
 _ver = os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
 _agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
 client = DataverseClient(

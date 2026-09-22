@@ -478,6 +478,37 @@ class PluginVersionAttribution(_AuthTestBase):
             self.assertEqual(auth._plugin_version(), "unknown")
 
 
+class AgentAttributionFailOpen(_AuthTestBase):
+    def test_recognized_agent_passes_through(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "cursor"}, clear=True):
+            self.assertEqual(auth._current_agent(), "cursor")
+
+    def test_unrecognized_agent_coerced_to_unknown_not_raised(self):
+        # LLM host misdetection ('github-copilot', 'claude', 'windsurf', ...) must
+        # never raise -- telemetry can't gate the user's data op. Coerce to unknown.
+        for bad in ("github-copilot", "claude", "vscode", "windsurf", ""):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_missing_agent_defaults_to_unknown(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_bad_version_coerced_to_unknown(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.5 beta (x)"}, clear=True):
+            self.assertEqual(auth._plugin_version(), "unknown")
+
+    def test_context_string_never_raises_and_stays_valid(self):
+        # Even with a garbage agent/version, the assembled context is coerced to a
+        # _CONTEXT_RE-valid string rather than raising.
+        env = {"DATAVERSE_PLUGIN_AGENT": "not a host!", "DATAVERSE_PLUGIN_VERSION": "@@@"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            ctx = auth._operation_context_str("dv-query")
+            self.assertTrue(auth._CONTEXT_RE.match(ctx))
+            self.assertIn("agent=unknown", ctx)
+            self.assertIn("skill=dv-query", ctx)
+
+
 class SilentChainReasons(_AuthTestBase):
     def test_reasons_recorded_on_exhaustion(self):
         chain = auth._SilentChain([("a", _RaiseUnavailable()), ("b", _RaiseGeneric())])
