@@ -1,6 +1,6 @@
 # ERP (Finance and Operations) target routing
 
-**ERP intent:** Load `dv-overview` first for Finance and Operations requests, then `dv-query` for business-data reads. Do not load `erp-xpp` for record reads; reserve it for X++ code development and deployment.
+**ERP intent:** Load `dv-overview` first for Finance and Operations requests, then `dv-connect` for setup or existing-linkage diagnostics, `dv-query` for business-data reads, or `dv-data` for record writes and DMF imports. For write previews and import planning, load `dv-data` even when execution is prohibited; this overview does not replace the specialist's operation-specific guidance. Do not load `erp-xpp` for record reads; reserve it for X++ code development and deployment.
 
 On Unified Operations environments, ERP is provisioned on top of the same Dataverse environment — it's an app running on Dataverse, not a separate product. Same auth profile, same tenant, same `pac auth list`. The Dataverse CLI surfaces the ERP linkage automatically (`dataverse org who --json` includes `erpUrl`, version, deployment type, env state when ERP is linked; `dataverse env list` adds an ERP URL column).
 
@@ -40,15 +40,7 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 5. **PAC CLI X++ lifecycle** for source models and deployable packages: `pac package init --package-type erp`, `pac tool xpp install`, `pac package compile --package-type erp`, `pac package deploy --package-type erp`, and `pac package db-sync`. Use **erp-xpp**.
 
-6. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData; DMF is the platform's bulk path. The flow uses bound-to-collection actions on `DataManagementDefinitionGroups`:
-   ```
-   GetAzureWriteUrl     → returns blob SAS URL
-   (upload package.zip to that URL)
-   ImportFromPackage    → returns executionId
-   GetExecutionSummaryStatus  → poll until terminal
-   GetExecutionErrors   → on Failed / PartiallySucceeded
-   ```
-   DMF is reachable via `dataverse api invoke --target erp --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"` against the bound actions.
+6. **DMF data packages** for write volume above what `data create/update` covers reasonably (~hundreds+) — there is no `CreateMultiple` analog on ERP OData. For planning or execution, load **dv-data** and follow [`erp-writes.md`](../../dv-data/references/erp-writes.md); this overview does not replace the specialist's DMF workflow.
 
 ## Reads for ERP
 

@@ -18,6 +18,8 @@ description: X++ code development lifecycle for Finance and Operations — scaff
 
 PAC CLI is the managed surface for the X++ lifecycle. Do not replace these commands with raw Dataverse APIs, direct calls to the ERP sidecar, LCS upload automation, or hand-written compiler invocations.
 
+For a planning-only X++ request, loading skills and reading local references is allowed; do not make environment calls or write local files.
+
 ## Intent routing
 
 | User intent | Action |
