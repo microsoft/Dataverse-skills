@@ -116,7 +116,7 @@ If this fails with permissions error, guide the user to [Power Platform Admin Ce
 **Confirm connection:**
 ```
 dataverse auth who
-dataverse org who      # or: pac org who
+dataverse org who --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 Parse the output to extract `DATAVERSE_URL`, `TENANT_ID`, and — on ERP-linked envs — `ERP_URL` (see [`erp-detection.md`](references/erp-detection.md)).
 
@@ -162,7 +162,6 @@ Also set plugin attribution vars for User-Agent telemetry — both must be real 
 
 ```python
 # Real values only -- no placeholders, never "unknown".
-# agent_host = the host you detected for MCP_CLIENT_ID.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
 agent_host = "<claude-code | copilot | cursor | codex>"
 
