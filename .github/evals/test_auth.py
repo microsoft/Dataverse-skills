@@ -477,6 +477,19 @@ class PluginVersionAttribution(_AuthTestBase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(auth._plugin_version(), "unknown")
 
+    def test_antigravity_agent_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.14.0",
+            "DATAVERSE_PLUGIN_AGENT": "antigravity-cli",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.14.0;skill=dv-connect;agent=antigravity-cli",
+            headers["User-Agent"],
+        )
+
 
 class SilentChainReasons(_AuthTestBase):
     def test_reasons_recorded_on_exhaustion(self):

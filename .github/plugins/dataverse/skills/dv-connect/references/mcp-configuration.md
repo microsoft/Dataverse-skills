@@ -1,16 +1,20 @@
 # MCP Server Configuration Reference
 
-Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, Cursor, Codex, Gemini CLI, or Antigravity CLI.
+Detailed instructions for configuring the Dataverse MCP server for GitHub Copilot, Claude Code, Cursor, Codex, or Antigravity CLI.
 
 The environment URL should already be known from the `dv-connect` flow (stored in `DATAVERSE_URL` in `.env`). If it's not set, go back to Step 2 of the `dv-connect` skill to discover and select the environment first.
 
 The parameters for the MCP server should be determined from context or environment variables where possible, and interactive prompts should only be used when it cannot be done.
 
+Antigravity stages this plugin at
+`~/.gemini/config/plugins/dataverse/`; its canonical auth helper is
+`scripts/auth.py` under that directory.
+
 ---
 
 ## 0. Determine which tool to configure
 
-Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, Codex, Gemini CLI, or Antigravity CLI:
+Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, Codex, or Antigravity CLI:
 - If explicitly mentioned in prompt, use that.
 - Otherwise, determine which tool the user is running from the context.
 - Only if choosing based on the context is impossible, ask the user:
@@ -20,14 +24,13 @@ Determine whether to configure MCP for GitHub Copilot, Claude Code, Cursor, Code
 > 2. **Claude**
 > 3. **Cursor**
 > 4. **Codex**
-> 5. **Gemini CLI**
-> 6. **Antigravity CLI**
+> 5. **Antigravity CLI**
 
-Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, `cursor`, `codex`, `gemini`, or `antigravity`. Store this for use in all subsequent steps.
+Based on the result, set the `TOOL_TYPE` variable to `copilot`, `claude`, `cursor`, `codex`, or `antigravity`. Store this for use in all subsequent steps.
 
 Set the `MCP_CLIENT_ID` variable in `.env` based on the tool choice:
 - If `copilot`: `MCP_CLIENT_ID` = `aebc6443-996d-45c2-90f0-388ff96faa56`
-- If `claude`, `cursor`, `codex`, `gemini`, or `antigravity`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
+- If `claude`, `cursor`, `codex`, or `antigravity`: `MCP_CLIENT_ID` = `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the `@microsoft/dataverse` npx stdio proxy, which authenticates as the Dataverse CLI app)
 - If `claude` and the VSCode extension is used: set it to the same value as `CLIENT_ID` if already set, otherwise offer to create a new app registration following the auth setup in the `dv-connect` skill.
 
 ---
@@ -86,13 +89,6 @@ Based on the scope, set the `CONFIG_PATH` variable:
 
 Store this path for use in steps 2 and 5.
 
-**If TOOL_TYPE is `gemini`:**
-
-Gemini stores extension settings at user or workspace scope. Default to
-`workspace` so the Dataverse environment remains project-specific. Store
-`GEMINI_SCOPE=workspace` for steps 2 and 5 unless the user explicitly requests
-the user scope.
-
 **If TOOL_TYPE is `antigravity`:**
 
 Default to the workspace configuration `.agents/mcp_config.json`, so the
@@ -149,19 +145,11 @@ Read the `config.toml` file at `CONFIG_PATH` (determined in step 1) to check for
 
 If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP server is **already configured**. Confirm with the user whether they want to re-register it before proceeding. If not, skip to the end.
 
-**If TOOL_TYPE is `gemini`:**
-
-Run `gemini extensions list` and confirm the `dataverse` extension is enabled.
-Then run `gemini mcp list`; if its `dataverse` entry resolves to the environment
-URL from `.env`, the bundled server is already configured. Do not add a second
-server entry.
-
 **If TOOL_TYPE is `antigravity`:**
 
-Check `/mcp` first because `agy plugin import gemini` may have converted the
-extension's bundled server. If a connected `dataverse` entry has the selected
-environment URL, do not add another server. Otherwise, read `CONFIG_PATH` and
-update an existing `dataverse` entry instead of adding a duplicate.
+Read `CONFIG_PATH` and inspect the `mcpServers` object. If a `dataverse-{orgid}`
+entry already uses the selected environment URL, do not add a duplicate.
+Confirm the live state in `/mcp` after restarting `agy`.
 
 ---
 
@@ -278,11 +266,6 @@ Take the URL determined above (from context, `.env`, manual entry, or `instanceU
 
 ## 4. Decide whether to use the "Preview" or "Generally Available (GA)" endpoint
 
-If `TOOL_TYPE` is `gemini`, use GA. The v1 extension manifest intentionally
-does not expose Preview selection. If the user explicitly requests Preview,
-explain that the bundled Gemini configuration supports GA only and do not
-report Preview as active.
-
 Determine from the context which of these options the user wants to use. If they did not mention either, default to GA:
 
 - If **Generally Available (GA)**: set `MCP_URL` to `{USER_URL}/api/mcp`
@@ -292,36 +275,17 @@ Determine from the context which of these options the user wants to use. If they
 
 ## 5. Register the MCP server
 
-**If TOOL_TYPE is `gemini`:**
-
-The installed extension already declares the pinned stdio server. Do not run
-`gemini mcp add`. If the extension setting is missing or points at another
-environment, run:
-
-```
-gemini extensions config dataverse DATAVERSE_URL --scope {GEMINI_SCOPE}
-```
-
-Enter the confirmed `USER_URL` when prompted. Restart Gemini after changing the
-setting. In the restarted interactive session, run `/mcp reload` if the tool
-list still shows the old URL, then verify with `gemini mcp list`.
-
-The bundled v1 server uses the GA endpoint. Do not claim Preview is configured
-through the manifest.
-
 **If TOOL_TYPE is `antigravity`:**
 
-Skip registration when `/mcp` already shows a connected imported server for
-`USER_URL`. Otherwise, create `.agents` for workspace scope, then read
-`CONFIG_PATH` or start with `{ "mcpServers": {} }`. Preserve all existing
-servers and add or update:
+Create `.agents` for workspace scope, then read `CONFIG_PATH` or start with
+`{ "mcpServers": {} }`. Preserve all existing servers and add or update:
 
 ```json
 {
    "mcpServers": {
-      "dataverse": {
+      "dataverse-{orgid}": {
          "command": "npx",
-         "args": ["-y", "@microsoft/dataverse@1.0.77", "mcp", "{USER_URL}"],
+         "args": ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
          "env": {
             "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli"
          }
@@ -332,8 +296,8 @@ servers and add or update:
 
 Append `"--preview"` to `args` only when the user explicitly selected Preview.
 Write valid JSON with two-space indentation, restart `agy`, and verify the
-server in `/mcp`. The native plugin does not ship this file because `{USER_URL}`
-is environment-specific.
+server in `/mcp`. The plugin does not ship this file because `{USER_URL}` is
+workspace-specific.
 
 **If TOOL_TYPE is `copilot`:**
 
@@ -523,7 +487,7 @@ Where:
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot, Claude, Cursor, Codex, Gemini CLI, or Antigravity CLI) from step 0
+- Tool type (Copilot, Claude, Cursor, Codex, or Antigravity) from step 0
 - Scope from step 1
 - Environment URL from step 3
 - Endpoint (GA or Preview) from step 4
@@ -618,19 +582,6 @@ An allow result of `already enabled`, `created and allowed`, or `enabled` is suc
 
 ## 8. Confirm success and provide next steps
 
-**If TOOL_TYPE is `gemini`:**
-
-Tell the user:
-
-> Dataverse is configured for Gemini CLI at `{USER_URL}`.
->
-> Restart Gemini, run `/extensions list` and `/skills list`, then run
-> `gemini mcp list`. If the tools still show the prior environment, run
-> `/mcp reload` in the restarted session.
-
-Do not claim the tools are ready until `gemini mcp list` shows the resolved URL
-and a real table-list request succeeds through the Dataverse MCP server.
-
 **If TOOL_TYPE is `antigravity`:**
 
 Tell the user where `CONFIG_PATH` was written, restart `agy`, open `/skills`
@@ -705,12 +656,8 @@ If something goes wrong, help the user check:
   3. Verify the MCP Client ID appears under **Allowed clients**
 - **ERP-linked environments** — Dataverse and ERP use separate allowlists and validation calls. Run `dataverse mcp allow 0c412cc3-0dd6-449b-987f-05b053db9457 --erp`, allow up to five minutes for the F&O AOS cache, and validate `{ERP_URL}` independently.
 - If using the Preview endpoint, verify that the Preview MCP endpoint is also enabled in the same Features page
-- **If TOOL_TYPE is `gemini`:**
-   - Confirm `gemini extensions list` shows `dataverse` enabled.
-   - Confirm `gemini mcp list` shows the resolved environment URL, not `${DATAVERSE_URL}`.
-   - Re-run `gemini extensions config dataverse DATAVERSE_URL --scope workspace` when the setting is missing or stale, restart Gemini, then use `/mcp reload`.
 - **If TOOL_TYPE is `antigravity`:**
-   - Confirm `/skills` lists the Dataverse skills and `/mcp` lists `dataverse`.
+   - Confirm `/skills` lists the Dataverse skills and `/mcp` lists `dataverse-{orgid}`.
    - Validate `.agents/mcp_config.json` as JSON and confirm its URL matches `.env`.
    - Restart `agy` after changing the configuration.
 - **If TOOL_TYPE is `copilot`:**
