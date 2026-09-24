@@ -210,14 +210,32 @@ If this is a new project (no `scripts/` directory):
 mkdir -p solutions plugins scripts
 ```
 
-Copy plugin scripts:
+Ensure the helper scripts are present. When this plugin is installed as a repo clone or a native plugin, they are local; when it is installed via `npx skills add` or the JetBrains AI Assistant registry (which install skill folders only), they are not -- fetch them from the canonical repo. This covers `auth.py` (Python-SDK path) and `enable-mcp-client.py` (MCP allowlist helper).
+
+**PowerShell:**
 ```
-cp .github/plugins/dataverse/scripts/auth.py scripts/
+$base = 'https://raw.githubusercontent.com/microsoft/Dataverse-skills/main/.github/plugins/dataverse/scripts'
+New-Item -ItemType Directory -Force scripts | Out-Null
+foreach ($f in 'auth.py','enable-mcp-client.py') {
+  $src = ".github/plugins/dataverse/scripts/$f"
+  if (Test-Path $src) { Copy-Item $src "scripts/$f" -Force }
+  else { Invoke-WebRequest "$base/$f" -OutFile "scripts/$f" }
+}
+```
+
+**bash / zsh:**
+```
+base='https://raw.githubusercontent.com/microsoft/Dataverse-skills/main/.github/plugins/dataverse/scripts'
+mkdir -p scripts
+for f in auth.py enable-mcp-client.py; do
+  src=".github/plugins/dataverse/scripts/$f"
+  if [ -f "$src" ]; then cp "$src" "scripts/$f"; else curl -fsSL "$base/$f" -o "scripts/$f"; fi
+done
 ```
 
 Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeholders (`{{DATAVERSE_URL}}`, `{{SOLUTION_NAME}}`, `{{PUBLISHER_PREFIX}}`) with values from `.env`.
 
-**Skip condition:** `scripts/auth.py` exists.
+**Skip condition:** `scripts/auth.py` and `scripts/enable-mcp-client.py` both exist.
 
 ---
 
@@ -257,6 +275,12 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 5. Register the MCP server per host (see the per-host blocks below)
 6. Handle Dataverse admin consent and allowlist — prefer `dataverse mcp allow <MCP_CLIENT_ID>` over the portal (one-time per tenant/environment)
 7. If `ERP_URL` exists, separately allowlist and validate ERP
+
+> **Reliability — pre-warm auth before the editor restart (fixes the "MCP won't authenticate on restart" failure).** The stdio proxy acquires its token *lazily on the first tool call* and reads the **shared MSAL cache silently**; it does not reliably surface an interactive prompt from the IDE's background subprocess. The token must therefore already be cached before the restart:
+> 1. Confirm `dataverse auth create --environment <url>` completed in a terminal (Step 2) and `dataverse org who` succeeds — this warms the cache.
+> 2. Allowlist the client: `dataverse mcp allow <MCP_CLIENT_ID>` (required, or `/api/mcp` rejects the client even when auth is valid).
+> 3. Confirm the proxy authenticates against the warm cache: `npx @microsoft/dataverse mcp <url> --validate` — the **GA `/api/mcp`** result must pass. A `403` on the preview endpoint plus a non-zero aggregate exit code is expected; judge only the GA line.
+> 4. Then restart the editor — the proxy reads the cache silently, no browser needed. If the token later expires and cannot refresh, re-run `dataverse auth create --environment <url> --deviceCode` in a terminal and restart; do not rely on the proxy to prompt.
 
 **Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`). When registering it, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on requests to `/api/mcp`. Build the value from `.env`:
 
