@@ -886,14 +886,26 @@ def check_antigravity_plugin(repo_root):
         / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
     ).read_text(encoding="utf-8")
     for required_text in (
-        ".agents/mcp_config.json",
-        '"dataverse-{orgid}"',
+        "agy mcp add",
+        "agy mcp list",
+        "does not discover",
+        "dataverse-{orgid}",
         "agent=antigravity-cli",
     ):
         if required_text not in mcp_reference:
             failures.append(
                 "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] missing required "
                 f"Antigravity configuration text: {required_text}"
+            )
+
+    for obsolete_text in (
+        "Default to the workspace configuration `.agents/mcp_config.json`",
+        "Validate `.agents/mcp_config.json` as JSON",
+    ):
+        if obsolete_text in mcp_reference:
+            failures.append(
+                "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] contains "
+                f"unsupported Antigravity CLI guidance: {obsolete_text}"
             )
 
     return failures

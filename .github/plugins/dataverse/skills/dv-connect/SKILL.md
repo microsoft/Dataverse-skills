@@ -247,7 +247,7 @@ Before metadata work, also confirm the account has the `prvCreateEntity` customi
 
 **Skip this step** if MCP is already configured:
 - `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` or `~/.codex/config.toml` contains a Dataverse server entry
-- Antigravity `/mcp` or `.agents/mcp_config.json` contains `dataverse`
+- `agy mcp list` contains the selected Dataverse environment
 - `claude mcp list` shows a `dataverse-*` server registered
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
@@ -296,7 +296,7 @@ After the editor/CLI restarts, **both** of these must succeed before declaring t
 **Check 1: the host's MCP list shows the Dataverse server connected**
 - Claude: `claude mcp list`
 - Gemini: `gemini extensions list`, then `gemini mcp list`
-- Antigravity: open `/mcp`
+- Antigravity: `agy mcp list`; after restart, `/mcp`
 This proves the MCP server starts, but not that data operations work.
 
 **Check 2: Agent successfully lists tables via `describe`/`search` and returns data**

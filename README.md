@@ -114,8 +114,8 @@ agy plugin install https://github.com/microsoft/Dataverse-skills/tree/main/.gith
 ```
 
 Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
-select an environment and write the workspace-specific Dataverse MCP entry to
-`.agents/mcp_config.json`; verify it with `/mcp` after restarting.
+select an environment and register the Dataverse MCP server with `agy mcp add`;
+verify it with `agy mcp list` after restarting.
 
 ## Verify the install
 
