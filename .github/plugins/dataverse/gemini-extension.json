@@ -1,6 +1,6 @@
 {
   "name": "dataverse",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Microsoft Dataverse plugin for coding agents, covering record CRUD, bulk data operations, advanced queries, schema and metadata, administration, security, environment management, and solution lifecycle through MCP, CLI, and SDK workflows.",
   "settings": [
     {
@@ -20,7 +20,7 @@
         "${DATAVERSE_URL}"
       ],
       "env": {
-        "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/1.14.0;skill=mcp-direct;agent=gemini-cli"
+        "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/1.15.0;skill=mcp-direct;agent=gemini-cli"
       }
     }
   }

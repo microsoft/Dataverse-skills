@@ -1,29 +1,40 @@
-name: Publish Agent Package
+name: Publish Gemini Extension
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - '.github/plugins/dataverse/**'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: gemini-extension-release
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Attach Gemini and Antigravity package
+  validate:
+    name: Validate Gemini extension
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
+
+      - name: Install eval dependencies
+        run: pip install tiktoken pyyaml
 
       - name: Run static checks
         run: python .github/evals/static_checks.py
@@ -31,32 +42,60 @@ jobs:
       - name: Validate Gemini extension
         run: npx --yes --package @google/gemini-cli@0.61.0-nightly.20260910.ged2ac40df gemini extensions validate .github/plugins/dataverse
 
-      - name: Verify release version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+  publish:
+    name: Create Gemini extension release
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read release version
+        id: version
         run: |
-          package_version=$(python -c "import json; print(json.load(open('.github/plugins/dataverse/gemini-extension.json'))['version'])")
-          if [ "$RELEASE_TAG" != "$package_version" ] && [ "$RELEASE_TAG" != "v$package_version" ]; then
-            echo "Release tag $RELEASE_TAG does not match package version $package_version"
+          version=$(jq -r .version .github/plugins/dataverse/gemini-extension.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Require a new release version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo "Tag $RELEASE_TAG already exists. Bump the plugin version for canonical package changes."
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists. Bump the plugin version for canonical package changes."
             exit 1
           fi
 
-      - name: Build shared agent package
+      - name: Build Gemini extension package
         run: >-
           git archive --format=zip
-          --output=dataverse-agent-plugin.zip
+          --output=dataverse-gemini-extension.zip
           HEAD:.github/plugins/dataverse
 
       - name: Verify package root
         run: |
-          unzip -Z1 dataverse-agent-plugin.zip > package-files.txt
+          unzip -Z1 dataverse-gemini-extension.zip > package-files.txt
           grep -Fxq gemini-extension.json package-files.txt
-          grep -Fxq plugin.json package-files.txt
           grep -Fxq skills/dv-connect/SKILL.md package-files.txt
           grep -Fxq scripts/auth.py package-files.txt
 
-      - name: Attach shared agent package
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dataverse-agent-plugin.zip --clobber
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dataverse-gemini-extension.zip
+          --target "$GITHUB_SHA"
+          --title "$RELEASE_TAG"
+          --generate-notes

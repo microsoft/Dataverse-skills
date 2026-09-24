@@ -112,20 +112,6 @@ Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
 `gemini mcp list` to verify discovery. Do not commit the environment URL stored
 by Gemini's local extension settings.
 
-### Testing with Google Antigravity
-
-The same canonical directory is also a native Antigravity plugin. Install it
-locally without copying its skills or scripts:
-
-```bash
-agy plugin install .github/plugins/dataverse
-```
-
-Start `agy`, invoke `/dv-connect`, and verify the plugin with `/skills` and
-`/mcp`. Reinstall the local plugin after source edits because Antigravity stages
-the directory in its user profile. Do not commit the generated
-`.agents/mcp_config.json`, which contains the test environment URL.
-
 ### Testing with Codex
 
 Add your local clone as a marketplace source, then browse `/plugins` and install `dataverse`:

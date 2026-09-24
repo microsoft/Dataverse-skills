@@ -66,31 +66,9 @@ gemini extensions update dataverse
 gemini extensions uninstall dataverse
 ```
 
-Gemini CLI extensions and Google Antigravity plugins use different package
-manifests, but this repository publishes both from one canonical package with
-one shared `skills/` and `scripts/` tree.
-
-### Google Antigravity
-
-Install the native plugin from the same release archive used by Gemini CLI:
-
-```bash
-agy plugin install https://github.com/microsoft/Dataverse-skills/releases/latest/download/dataverse-agent-plugin.zip
-```
-
-If the Dataverse extension is already installed in Gemini CLI, Antigravity can
-convert it instead:
-
-```bash
-agy plugin import gemini
-```
-
-Start `agy`, invoke `/dv-connect`, and select the Dataverse environment. The
-skill writes the environment-specific MCP server to `.agents/mcp_config.json`;
-the published plugin does not contain an environment URL. The skill also
-restores the canonical auth helper from the release ZIP if Antigravity omits
-the package-root `scripts/` directory while staging. Restart Antigravity, then
-use `/skills` and `/mcp` to verify discovery.
+The release archive is generated from `.github/plugins/dataverse/` when a new
+plugin version reaches `main`; the repository does not track a second skills or
+scripts tree.
 
 ### Codex
 
