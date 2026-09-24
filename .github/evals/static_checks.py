@@ -599,7 +599,7 @@ def check_version_consistency(repo_root):
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
       7. .cursor-plugin/marketplace.json -- metadata.version
       8. .cursor-plugin/marketplace.json -- plugins[0].version
-    9. .github/plugins/dataverse/gemini-extension.json -- version
+        9. .github/plugins/dataverse/gemini-extension.json -- version
     """
     failures = []
 
@@ -709,9 +709,9 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in five plugin manifest fields (including
+# The plugin description appears in seven plugin manifest fields (including
 # Codex's long description) and the plugins[0] entry of three marketplace.json
-# catalogs. All eight describe the same plugin and must match. The
+# catalogs. All ten describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
 # describes the marketplace, not the plugin) and is deliberately excluded.
 _DESCRIPTION_SOURCES = [
@@ -1015,6 +1015,30 @@ def check_gemini_extension(repo_root):
         failures.append(
             "EVAL-GEMINI-03 [README.md] missing repository installation command"
         )
+
+    connect_text = (
+        repo_root / ".github/plugins/dataverse/skills/dv-connect/SKILL.md"
+    ).read_text(encoding="utf-8")
+    mcp_text = (
+        repo_root
+        / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
+    ).read_text(encoding="utf-8")
+    for required_text in (
+        "Gemini: `gemini mcp list` resolves bundled server `dataverse` to the selected URL",
+        "Gemini supports GA only",
+        "stop before setup shortcuts",
+        "Gemini user\nexplicitly requests Preview",
+        "silently configuring GA",
+        "Gemini's bundled `dataverse` server",
+    ):
+        source = readme if required_text.startswith("Gemini's bundled") else (
+            connect_text if "\n" not in required_text and required_text != "silently configuring GA" else mcp_text
+        )
+        if required_text not in source:
+            failures.append(
+                "EVAL-GEMINI-03 connection guidance is missing required text: "
+                f"{required_text}"
+            )
 
     return failures
 

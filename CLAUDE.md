@@ -167,7 +167,7 @@ All nine must match. The static eval (`python .github/evals/static_checks.py`) v
 Run the PR-level bump check to verify the bump level matches the structural changes in your branch:
 
 ```bash
-python .github/evals/version_bump_check.py
+python .github/evals/version_bump_check.py --base origin/main
 ```
 
 It compares your branch to `main` and flags common mistakes — e.g., adding a new skill without a MINOR bump, or removing a skill without a MAJOR bump.

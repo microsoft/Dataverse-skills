@@ -19,6 +19,8 @@ One-step, idempotent Dataverse connection. Each step checks if it's already done
 
 Before touching anything, check whether this workspace is already connected to a Dataverse environment. Repeating setup on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
 
+Gemini supports GA only. If Preview is requested, explain and stop before setup shortcuts.
+
 Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
@@ -245,10 +247,10 @@ Before metadata work, also confirm the account has the `prvCreateEntity` customi
 
 ## Step 6: Configure MCP server
 
-**Skip this step** if MCP is already configured:
-- `.mcp.json` or `~/.copilot/mcp-config.json` or `~/.cursor/mcp.json` or `~/.codex/config.toml` contains a Dataverse server entry
-- `agy mcp list` contains the selected Dataverse environment
-- `claude mcp list` shows a `dataverse-*` server registered
+**Skip this step** only when the current host points to the selected environment:
+- Gemini: `gemini mcp list` resolves bundled server `dataverse` to the selected URL
+- Antigravity: `agy mcp list` contains the selected environment
+- Other hosts: their MCP list or config contains a Dataverse server for the selected URL
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
 

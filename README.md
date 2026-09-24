@@ -113,6 +113,9 @@ Install the native plugin directly from its canonical directory in this reposito
 agy plugin install https://github.com/microsoft/Dataverse-skills/tree/main/.github/plugins/dataverse
 ```
 
+If the Gemini extension is already installed, import the same plugin with
+`agy plugin import gemini` instead.
+
 Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
 select an environment and register the Dataverse MCP server with `agy mcp add`;
 verify it with `agy mcp list` after restarting.
@@ -123,7 +126,7 @@ After installation, ask your agent:
 
 > "Connect to Dataverse"
 
-The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server registered with your agent, and `pac auth list` should show your active environment.
+The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server (or Gemini's bundled `dataverse` server), and `pac auth list` should show your active environment.
 
 ## Try these prompts
 

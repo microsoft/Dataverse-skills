@@ -59,20 +59,14 @@ jobs:
         id: version
         run: |
           version=$(jq -r .version .github/plugins/dataverse/gemini-extension.json)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Require a new release version
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
             echo "Tag $RELEASE_TAG already exists. Bump the plugin version for canonical package changes."
-            exit 1
-          fi
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release $RELEASE_TAG already exists. Bump the plugin version for canonical package changes."
             exit 1
           fi
 

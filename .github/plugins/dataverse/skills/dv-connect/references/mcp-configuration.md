@@ -281,14 +281,18 @@ Determine from the context which of these options the user wants to use. If they
 - If **Generally Available (GA)**: set `MCP_URL` to `{USER_URL}/api/mcp`
 - If **Preview**: set `MCP_URL` to `{USER_URL}/api/mcp_preview`
 
+The bundled Gemini server supports the GA endpoint only. If a Gemini user
+explicitly requests Preview, explain that limitation and stop rather than
+silently configuring GA.
+
 ---
 
 ## 5. Register the MCP server
 
 **If TOOL_TYPE is `gemini`:**
 
-The installed extension already declares the pinned stdio server. Do not run
-`gemini mcp add`. Set or update its environment URL instead:
+The installed extension already declares the pinned GA stdio server. Do not
+run `gemini mcp add`. Set or update its environment URL instead:
 
 ```
 gemini extensions config dataverse DATAVERSE_URL --scope {GEMINI_SCOPE}
@@ -495,7 +499,7 @@ Where:
 The MCP client app registration must be granted admin consent on the Azure AD tenant. This is a **one-time** action per tenant — once done, it applies to all Dataverse environments in that tenant. It **requires an Azure AD Global Admin or Privileged Role Admin**.
 
 List out the parameters chosen in previous steps:
-- Tool type (Copilot, Claude, Cursor, Codex, or Antigravity) from step 0
+- Tool type (Copilot, Claude, Cursor, Codex, Gemini, or Antigravity) from step 0
 - Scope from step 1
 - Environment URL from step 3
 - Endpoint (GA or Preview) from step 4

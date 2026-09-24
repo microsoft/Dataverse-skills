@@ -216,10 +216,10 @@ def main():
         print(
             f"\nWARN -- declared {declared.upper()} bump but no structural skill "
             f"changes detected.\n"
-            f"       Verify this is intentional (e.g., auth pattern change, "
-            f"renamed required section,\n"
-            f"       or other breaking change not reflected in skill directory "
-            f"structure)."
+            f"       Verify this is intentional (e.g., a new capability within "
+            f"an existing skill,\n"
+            f"       an auth pattern change, or another change not reflected in "
+            f"skill directory structure)."
         )
 
     sys.exit(0)
