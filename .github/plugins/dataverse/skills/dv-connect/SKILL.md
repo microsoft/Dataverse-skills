@@ -22,7 +22,7 @@ Before touching anything, check whether this workspace is already connected to a
 Run these checks in order. If **all four pass**, skip straight to Step 7 (final verification) and stop there.
 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
-2. **MCP is registered** — the host MCP configuration has a `dataverse-*` server entry pointing at the `DATAVERSE_URL` from `.env`
+2. **MCP is registered** — the host MCP list has a `dataverse-*` entry, or Gemini has its bundled `dataverse` entry, pointing at `DATAVERSE_URL`
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
@@ -153,18 +153,18 @@ Write `.env` directly — do not instruct the user to create it:
 
 Set `MCP_CLIENT_ID` from the current host:
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
-- Claude, Antigravity, Cursor, or Codex: `0c412cc3-0dd6-449b-987f-05b053db9457`
+- Claude, Gemini, Antigravity, Cursor, or Codex: `0c412cc3-0dd6-449b-987f-05b053db9457`
 
 Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
 
 - `PLUGIN_VERSION` — the loaded plugin version. For Antigravity, read `version` from the installed plugin's `.claude-plugin/plugin.json`; its native `plugin.json` schema has no version field. `auth.py` reads the resulting `DATAVERSE_PLUGIN_VERSION` environment variable.
-- `AGENT` — one of `claude-code`, `copilot`, `cursor`, `codex`, `antigravity-cli`, or `unknown`; it must match `_ALLOWED_AGENTS` in `auth.py`.
+- `AGENT` — one of `claude-code`, `copilot`, `cursor`, `codex`, `gemini-cli`, `antigravity-cli`, or `unknown`; it must match `_ALLOWED_AGENTS` in `auth.py`.
 
 ```python
 # Substitute these two literals from your loaded plugin context.
 # Do NOT leave the angle-bracket placeholders — replace with real values.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
-agent_host = "<claude-code | copilot | cursor | codex | antigravity-cli | unknown>"
+agent_host = "<claude-code | copilot | cursor | codex | gemini-cli | antigravity-cli | unknown>"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
@@ -252,7 +252,7 @@ Before metadata work, also confirm the account has the `prvCreateEntity` customi
 
 If MCP is not configured, follow [mcp-configuration.md](references/mcp-configuration.md):
 
-1. Detect which tool the user is running (Copilot, Claude, Cursor, Codex, or Antigravity) from context
+1. Detect which tool the user is running (Copilot, Claude, Cursor, Codex, Gemini, or Antigravity) from context
 2. Set `MCP_CLIENT_ID` based on tool choice
 3. Get environment URL from `.env`
 4. Default to GA endpoint (`/api/mcp`)
@@ -294,11 +294,10 @@ For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION
 After the editor/CLI restarts, **both** of these must succeed before declaring the setup complete:
 
 **Check 1: the host's MCP list shows the Dataverse server connected**
-```
-claude mcp list
-```
-For Antigravity, open `/mcp` and confirm `dataverse-{orgid}` is connected.
-This proves the MCP server process starts and speaks the MCP protocol. It does NOT by itself prove that data operations work — authentication, environment allowlisting, and endpoint reachability are only exercised on the first real tool call.
+- Claude: `claude mcp list`
+- Gemini: `gemini extensions list`, then `gemini mcp list`
+- Antigravity: open `/mcp`
+This proves the MCP server starts, but not that data operations work.
 
 **Check 2: Agent successfully lists tables via `describe`/`search` and returns data**
 > "List the tables in my Dataverse environment."
@@ -351,6 +350,6 @@ After verifying MCP works, tell the user:
 
 ## Supported Agents
 
-This plugin's skills are natively loaded by **GitHub Copilot CLI**, **Claude Code CLI**, and **Antigravity CLI** when installed as a plugin. No manual context loading is needed.
+This plugin's skills are natively loaded by **GitHub Copilot CLI**, **Claude Code CLI**, **Gemini CLI**, and **Antigravity CLI** when installed as a plugin. No manual context loading is needed.
 
 The PAC CLI commands, Python scripts, and XML templates work identically across hosts.

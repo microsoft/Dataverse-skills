@@ -94,6 +94,22 @@ claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 
 Quote the path if it contains spaces or special characters; use an absolute path.
 
+### Testing with Gemini CLI
+
+The canonical plugin directory is also the Gemini extension root, so local
+development does not require a copied compatibility tree. Validate and link it
+directly. CI validates it with the current Gemini CLI npm `latest` release:
+
+```bash
+gemini extensions validate .github/plugins/dataverse
+gemini extensions link .github/plugins/dataverse
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
+`gemini mcp list` to verify discovery. Do not commit the environment URL stored
+by Gemini's local extension settings.
+
 ### Testing with Codex
 
 Add your local clone as a marketplace source, then browse `/plugins` and install `dataverse`:

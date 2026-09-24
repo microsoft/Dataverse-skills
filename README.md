@@ -36,6 +36,40 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Gemini CLI
+
+Install the extension from the public repository. Gemini CLI selects the
+generic extension archive attached to the latest GitHub Release:
+
+```bash
+gemini extensions install https://github.com/microsoft/Dataverse-skills --skip-settings
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Enter the Dataverse environment URL when the configuration command prompts.
+The value is stored in local Gemini extension settings and is not committed to
+the repository. Restart Gemini after installation, then verify discovery:
+
+```text
+/extensions list
+/skills list
+```
+
+```bash
+gemini mcp list
+```
+
+Update or uninstall the extension with:
+
+```bash
+gemini extensions update dataverse
+gemini extensions uninstall dataverse
+```
+
+The release archive is generated from `.github/plugins/dataverse/` when a new
+plugin version reaches `main`; the repository does not track a second skills or
+scripts tree.
+
 ### Codex
 
 **Codex app and ChatGPT**
