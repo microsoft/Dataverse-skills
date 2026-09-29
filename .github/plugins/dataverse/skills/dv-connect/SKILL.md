@@ -28,7 +28,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** Refresh `DATAVERSE_PLUGIN_VERSION` in `.env` if it's stale, confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected host, per Step 3) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -118,7 +118,7 @@ If this fails with permissions error, guide the user to [Power Platform Admin Ce
 **Confirm connection:**
 ```
 dataverse auth who
-dataverse org who      # or: pac org who
+dataverse org who --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"
 ```
 Parse the output to extract `DATAVERSE_URL`, `TENANT_ID`, and — on ERP-linked envs — `ERP_URL` (see [`erp-detection.md`](references/erp-detection.md)).
 
@@ -157,14 +157,13 @@ Set `MCP_CLIENT_ID` from the current host:
 - GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
 - Claude, Gemini, Antigravity, Cursor, or Codex: `0c412cc3-0dd6-449b-987f-05b053db9457`
 
-Also set plugin attribution variables for User-Agent tagging. **Fill in the two literals below from your own context** — you (the agent) loaded this plugin, so you already know both values:
+Also set plugin attribution vars — fill both with real values, not `<placeholders>`:
 
-- `PLUGIN_VERSION` — the loaded plugin version. For Antigravity, read `version` from the installed plugin's `.claude-plugin/plugin.json`; its native `plugin.json` schema has no version field. `auth.py` reads the resulting `DATAVERSE_PLUGIN_VERSION` environment variable.
-- `AGENT` — one of `claude-code`, `copilot`, `cursor`, `codex`, `gemini-cli`, `antigravity-cli`, or `unknown`; it must match `_ALLOWED_AGENTS` in `auth.py`.
+- `PLUGIN_VERSION` — loaded manifest version; Antigravity uses `.claude-plugin/plugin.json` because native `plugin.json` has none.
+- `AGENT` — detected host: `claude-code`, `copilot`, `cursor`, `codex`, `gemini-cli`, `antigravity-cli`, or `unknown`.
 
 ```python
-# Substitute these two literals from your loaded plugin context.
-# Do NOT leave the angle-bracket placeholders — replace with real values.
+# "unknown" only if host not in _ALLOWED_AGENTS.
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
 agent_host = "<claude-code | copilot | cursor | codex | gemini-cli | antigravity-cli | unknown>"
 
