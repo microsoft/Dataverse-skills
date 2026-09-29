@@ -152,7 +152,7 @@ If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP serv
 
 **If TOOL_TYPE is `antigravity`:**
 
-Run `agy mcp list`. If a `dataverse-{orgid}` entry already uses the selected
+Run `agy mcp list`. If a `dataverse-{orgname}` entry already uses the selected
 environment URL, do not add a duplicate.
 
 **If TOOL_TYPE is `gemini`:**
@@ -305,7 +305,7 @@ Enter `USER_URL`, restart Gemini, and verify with `gemini mcp list`.
 Register through Antigravity's native CLI:
 
 ```
-agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli" dataverse-{orgid} npx -y @microsoft/dataverse@latest mcp {USER_URL}
+agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli" dataverse-{orgname} npx -y @microsoft/dataverse@latest mcp {USER_URL}
 ```
 
 Append `--preview` only when the user explicitly selected Preview. Restart
@@ -679,7 +679,7 @@ If something goes wrong, help the user check:
    - Re-run `gemini extensions config dataverse DATAVERSE_URL --scope workspace` when the URL is missing or stale.
    - Restart Gemini and verify `gemini mcp list` before testing a real query.
 - **If TOOL_TYPE is `antigravity`:**
-   - Confirm `/skills` lists the Dataverse skills and `/mcp` lists `dataverse-{orgid}`.
+   - Confirm `/skills` lists the Dataverse skills and `/mcp` lists `dataverse-{orgname}`.
    - Run `agy mcp list` and confirm its URL matches `.env`.
    - Restart `agy` after changing the configuration.
 - **If TOOL_TYPE is `copilot`:**

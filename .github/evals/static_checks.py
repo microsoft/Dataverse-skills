@@ -895,7 +895,7 @@ def check_antigravity_plugin(repo_root):
         "agy mcp add",
         "agy mcp list",
         "does not discover",
-        "dataverse-{orgid}",
+        "dataverse-{orgname}",
         "agent=antigravity-cli",
     ):
         if required_text not in mcp_reference:
@@ -1029,17 +1029,17 @@ def check_gemini_extension(repo_root):
         repo_root
         / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
     ).read_text(encoding="utf-8")
-    for required_text in (
-        "Gemini: `gemini mcp list` resolves bundled server `dataverse` to the selected URL",
-        "Gemini supports GA only",
-        "stop before setup shortcuts",
-        "Gemini user\nexplicitly requests Preview",
-        "silently configuring GA",
-        "Gemini's bundled `dataverse` server",
-    ):
-        source = readme if required_text.startswith("Gemini's bundled") else (
-            connect_text if "\n" not in required_text and required_text != "silently configuring GA" else mcp_text
-        )
+    required_guidance = (
+        (connect_text, "Gemini: `gemini mcp list` resolves bundled server `dataverse` to the selected URL"),
+        (connect_text, "Gemini supports GA only"),
+        (connect_text, "stop before setup shortcuts"),
+        (connect_text, '"gemini": "gemini-cli"'),
+        (connect_text, '"antigravity": "antigravity-cli"'),
+        (mcp_text, "Gemini user\nexplicitly requests Preview"),
+        (mcp_text, "silently configuring GA"),
+        (readme, "Gemini's bundled `dataverse` server"),
+    )
+    for source, required_text in required_guidance:
         if required_text not in source:
             failures.append(
                 "EVAL-GEMINI-03 connection guidance is missing required text: "

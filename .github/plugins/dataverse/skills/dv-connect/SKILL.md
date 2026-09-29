@@ -153,19 +153,17 @@ Present authentication options:
 
 Write `.env` directly — do not instruct the user to create it:
 
-Set `MCP_CLIENT_ID` from the current host:
-- GitHub Copilot: `aebc6443-996d-45c2-90f0-388ff96faa56`
-- Claude, Gemini, Antigravity, Cursor, or Codex: `0c412cc3-0dd6-449b-987f-05b053db9457`
-
-Also set plugin attribution vars — fill both with real values, not `<placeholders>`:
-
-- `PLUGIN_VERSION` — loaded manifest version; Antigravity uses `.claude-plugin/plugin.json` because native `plugin.json` has none.
-- `AGENT` — detected host: `claude-code`, `copilot`, `cursor`, `codex`, `gemini-cli`, `antigravity-cli`, or `unknown`.
+Use one detected `tool_type` to derive both `MCP_CLIENT_ID` and canonical attribution. Set `PLUGIN_VERSION` from the loaded manifest; Antigravity uses `.claude-plugin/plugin.json` because native `plugin.json` has none.
 
 ```python
-# "unknown" only if host not in _ALLOWED_AGENTS.
+tool_type = "<copilot | claude | cursor | codex | gemini | antigravity | unknown>"
 plugin_version = "<plugin manifest version, e.g. 1.5.0>"
-agent_host = "<claude-code | copilot | cursor | codex | gemini-cli | antigravity-cli | unknown>"
+mcp_client_id = "aebc6443-996d-45c2-90f0-388ff96faa56" if tool_type == "copilot" else "0c412cc3-0dd6-449b-987f-05b053db9457"
+agent_host = {
+    "copilot": "copilot", "claude": "claude-code", "cursor": "cursor",
+    "codex": "codex", "gemini": "gemini-cli",
+    "antigravity": "antigravity-cli",
+}.get(tool_type, "unknown")
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
