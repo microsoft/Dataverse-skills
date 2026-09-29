@@ -98,6 +98,12 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-12 CLI Attribution (--context)
+       Checks that every dataverse data-plane CLI command in a shell or
+       unlabeled fenced block (SKILL.md and references/) carries --context for
+       skill attribution. mcp (registration -e) and auth (token flow) exempt.
+       EVAL-CONTEXT-01  No dataverse data/api/org/env/erp example missing --context
 """
 
 import argparse
@@ -883,28 +889,41 @@ def check_token_budget(name, text, skill_dir):
 # CAT-12  CLI Attribution (--context)
 # ---------------------------------------------------------------------------
 
-_CLI_CMD_RE = re.compile(r"^\s*dataverse\s+(data|api|org)\s+\S+", re.MULTILINE)
+# Attributable data-plane verbs. mcp is attributed via the registration -e block
+# and auth is the pre-request token flow, so both are intentionally excluded.
+_CLI_CMD_RE = re.compile(r"^\s*dataverse\s+(data|api|org|env|erp)\s+\S+", re.MULTILINE)
 _CONTEXT_FLAG_RE = re.compile(r"--context\s+")
+
+# Shell-ish fence languages (plus unlabeled) that hold runnable CLI examples.
+# python blocks use the SDK, not the CLI, so they are excluded.
+_SHELL_FENCE_LANGS = {"", "bash", "sh", "shell", "shell-session", "console", "zsh"}
+_FENCE_LANG_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
 
 
 def check_cli_attribution(name, text):
-    """EVAL-CONTEXT-01: every dataverse CLI command in a bash block must carry --context.
+    """EVAL-CONTEXT-01: every dataverse data-plane CLI command in a shell fenced
+    block must carry --context for skill attribution.
 
     Per CLAUDE.md verified-failure #3 and the telemetry convention, every
-    dataverse command (data, api, org) should include --context for skill
-    attribution. Scans bash fenced blocks only. Handles backslash line
-    continuations by joining them before checking.
+    dataverse data/api/org/env/erp command should include --context. Scans
+    shell-ish and unlabeled fenced blocks (SKILL.md and references/), skipping
+    python (SDK) blocks. Joins backslash line continuations before checking.
+    mcp (registration -e) and auth (token flow) verbs are intentionally exempt.
     """
     failures = []
-    for i, block in extract_fenced_blocks(text, "bash"):
+    for i, m in enumerate(_FENCE_LANG_RE.finditer(text), start=1):
+        info = m.group(1).strip().lower()
+        lang = info.split(maxsplit=1)[0] if info else ""
+        if lang not in _SHELL_FENCE_LANGS:
+            continue
         # Join backslash continuations into single logical lines
-        joined = block.replace("\\\n", " ")
+        joined = m.group(2).replace("\\\n", " ")
         for line in joined.splitlines():
             if _CLI_CMD_RE.match(line) and not _CONTEXT_FLAG_RE.search(line):
                 cmd = line.strip()[:80]
                 failures.append(
-                    f"EVAL-CONTEXT-01 [{name} bash-block-{i}] CLI command missing "
-                    f"--context attribution: `{cmd}...`"
+                    f"EVAL-CONTEXT-01 [{name} {lang or 'plain'}-block-{i}] CLI command "
+                    f"missing --context attribution: `{cmd}...`"
                 )
     return failures
 
@@ -952,11 +971,12 @@ def main():
         all_failures.extend(check_deprecated_read_api(name, text))
         all_failures.extend(check_cli_attribution(name, text))
 
-    # CAT-11 also covers reference files (Level 3), which teach the same read API
+    # CAT-11 + CAT-12 also cover reference files (Level 3): read API + CLI attribution
     for rf in sorted(skills_dir.glob("*/references/*.md")):
         rtext = rf.read_text(encoding="utf-8")
         rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
+        all_failures.extend(check_cli_attribution(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
