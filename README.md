@@ -38,26 +38,22 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 ### Codex
 
-**Codex app**
+**Codex app and ChatGPT**
 
-1. Open **Plugins → Add marketplace**.
-2. Set **Source** to `https://github.com/microsoft/Dataverse-skills.git`.
-3. Leave **Git ref** and **Sparse paths** empty.
-4. Click **Add marketplace**, then browse the **dataverse-skills** marketplace, open `dataverse`, and select **Install plugin**.
+1. Open **Plugins**.
+2. Search for **Microsoft Dataverse** in the OpenAI plugin directory.
+3. Open the `dataverse` plugin and select **Install**.
 
 **Codex CLI**
 
-Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
+Install directly from the OpenAI-curated marketplace:
 
 ```bash
-codex plugin marketplace add microsoft/Dataverse-skills
+codex plugin add dataverse@openai-curated
 ```
 
-Update to the latest release:
-
-```bash
-codex plugin marketplace upgrade dataverse-skills
-```
+Alternatively, run `/plugins`, search for **Microsoft Dataverse**, and install
+`dataverse` from the `openai-curated` marketplace.
 
 ### Cursor
 
