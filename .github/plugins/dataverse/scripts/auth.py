@@ -842,16 +842,56 @@ _CONTEXT_RE = re.compile(
 )
 
 
+_PLUGIN_VERSION_CACHE = None
+
+
 def _plugin_version():
     """Return the plugin version for telemetry attribution.
 
-    Sourced from DATAVERSE_PLUGIN_VERSION, which dv-connect writes into .env from
-    the live plugin manifest on every connect (Step 0 / Step 3). The deployed
-    layout copies this file to <project>/scripts/auth.py -- away from the plugin
-    manifest -- so a manifest path relative to __file__ is unreliable here; the
-    env var, refreshed at connect, is the source of truth.
+    Primary source is DATAVERSE_PLUGIN_VERSION, which dv-connect writes into .env
+    from the live plugin manifest on marketplace / plugin installs. npx and the
+    JetBrains registry install skill folders only (no manifest), so the env var is
+    often "unknown" there; in that case resolve the version from the canonical
+    manifest (local if reachable, else fetched once and cached).
     """
-    return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+    env_version = os.environ.get("DATAVERSE_PLUGIN_VERSION", "").strip()
+    if env_version and env_version != "unknown":
+        return env_version
+    return _resolve_manifest_version()
+
+
+def _resolve_manifest_version():
+    """Resolve the plugin version from the canonical manifest, cached per process.
+
+    Tries a local manifest (present on repo-clone / plugin installs), then fetches
+    it from GitHub (npx / registry installs ship no manifest). Network and parse
+    failures degrade to "unknown" -- this never raises.
+    """
+    global _PLUGIN_VERSION_CACHE
+    if _PLUGIN_VERSION_CACHE is not None:
+        return _PLUGIN_VERSION_CACHE
+    import json
+
+    version = "unknown"
+    for manifest in (".claude-plugin/plugin.json",
+                     ".github/plugins/dataverse/.claude-plugin/plugin.json"):
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                version = json.load(fh).get("version") or version
+            break
+        except (OSError, ValueError):
+            continue
+    if version == "unknown":
+        try:
+            import urllib.request
+            url = ("https://raw.githubusercontent.com/microsoft/Dataverse-skills/"
+                   "main/.github/plugins/dataverse/.claude-plugin/plugin.json")
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                version = json.load(resp).get("version") or "unknown"
+        except Exception:
+            version = "unknown"
+    _PLUGIN_VERSION_CACHE = version
+    return version
 
 
 def _current_agent():
