@@ -26,7 +26,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected host, per Step 3) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** First ensure `.env` has valid attribution for the SDK path — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected host, per Step 3) if absent or a stale `unknown`/placeholder. (The MCP path self-refreshes via `mcp_proxy.py` — no re-registration needed on upgrade; see Step 6.) Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -257,13 +257,7 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 6. Handle Dataverse admin consent and allowlist — prefer `dataverse mcp allow <MCP_CLIENT_ID>` over the portal (one-time per tenant/environment)
 7. If `ERP_URL` exists, separately allowlist and validate ERP
 
-**Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`). When registering it, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on requests to `/api/mcp`. Build the value from `.env`:
-
-```
-DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent={DATAVERSE_PLUGIN_AGENT}
-```
-
-For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For Copilot/Cursor JSON configs, add it to the `"env"` object in the stdio server entry; for Codex, add it to its `[mcp_servers.<name>.env]` table.
+**Plugin attribution for MCP:** registration invokes **`mcp_proxy.py`** (this plugin's `scripts/` dir) instead of `npx` directly. At each proxy start it reads the live plugin version from the manifest and injects `DATAVERSE_OPERATION_CONTEXT` into the npx proxy, so attribution never goes stale after an upgrade (issue #114). Bake only `DATAVERSE_PLUGIN_AGENT` into the MCP config, never the version. Per-host registration blocks: [mcp-configuration.md](references/mcp-configuration.md).
 
 **Important:** MCP configuration requires an editor/CLI restart.
 
