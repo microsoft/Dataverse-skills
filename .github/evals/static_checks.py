@@ -929,6 +929,64 @@ def check_cli_attribution(name, text):
 
 
 # ---------------------------------------------------------------------------
+# CAT-13  MCP Attribution Launcher (issue #114)
+# ---------------------------------------------------------------------------
+
+# The frozen-literal form the launcher replaces: a concrete version or the
+# {DATAVERSE_PLUGIN_VERSION} template baked into an MCP registration. The
+# launcher-injected form uses the <version> prose placeholder and is allowed.
+_BAKED_VERSION_RE = re.compile(r"app=dataverse-skills/(?:\{DATAVERSE_PLUGIN_VERSION\}|\d)")
+
+
+def check_mcp_attribution_launcher(repo_root):
+    """EVAL-MCPATTR-01/02: the MCP path must attribute via scripts/mcp_proxy.py
+    (which reads the live manifest version at launch), not a version literal
+    baked into the host MCP config at registration time (issue #114).
+
+    EVAL-MCPATTR-01  scripts/mcp_proxy.py exists and is fail-open (sets
+                     DATAVERSE_OPERATION_CONTEXT, launches the npx proxy, and
+                     degrades to "unknown" rather than failing).
+    EVAL-MCPATTR-02  dv-connect never bakes a concrete or {DATAVERSE_PLUGIN_VERSION}
+                     version into an MCP registration -- the version must come
+                     from the launcher at runtime.
+    """
+    failures = []
+    scripts_dir = repo_root / ".github" / "plugins" / "dataverse" / "scripts"
+    launcher = scripts_dir / "mcp_proxy.py"
+
+    if not launcher.exists():
+        failures.append(
+            "EVAL-MCPATTR-01 scripts/mcp_proxy.py is missing -- the MCP path needs "
+            "the launcher to inject a live-resolved attribution version (issue #114)"
+        )
+    else:
+        src = launcher.read_text(encoding="utf-8")
+        required = {
+            "DATAVERSE_OPERATION_CONTEXT": "must set the attribution env var",
+            '"unknown"': 'must fail open to "unknown" when the version cannot be resolved',
+            "@microsoft/dataverse": "must launch the npx stdio proxy",
+        }
+        for token, why in required.items():
+            if token not in src:
+                failures.append(
+                    f"EVAL-MCPATTR-01 mcp_proxy.py {why} (missing token: {token})"
+                )
+
+    connect_dir = repo_root / ".github" / "plugins" / "dataverse" / "skills" / "dv-connect"
+    if connect_dir.is_dir():
+        for md in sorted(connect_dir.rglob("*.md")):
+            m = _BAKED_VERSION_RE.search(md.read_text(encoding="utf-8"))
+            if m:
+                rel = md.relative_to(repo_root)
+                failures.append(
+                    f"EVAL-MCPATTR-02 [{rel}] bakes a version into MCP attribution "
+                    f"(`{m.group(0)}`) -- register scripts/mcp_proxy.py so the version "
+                    f"is resolved live at launch instead (issue #114)"
+                )
+    return failures
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -991,6 +1049,9 @@ def main():
     all_failures.extend(check_description_consistency(repo_root))
     all_failures.extend(check_manifest_assets(repo_root))
 
+    # MCP attribution launcher (issue #114) -- version resolved live, not baked
+    all_failures.extend(check_mcp_attribution_launcher(repo_root))
+
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
@@ -1012,7 +1073,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"12 categories checked"
+            f"13 categories checked"
         )
 
 

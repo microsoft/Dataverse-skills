@@ -317,29 +317,24 @@ This is the `SERVER_NAME`.
 
 **Build the command:**
 
-Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint. **Always pass `-e DATAVERSE_OPERATION_CONTEXT="…"`** so the stdio proxy attaches plugin attribution to outbound requests (same role as the `env` block in the Copilot / Cursor JSON configs):
+Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint. Register the **`mcp_proxy.py` launcher** (not `npx` directly) and pass **`-e DATAVERSE_PLUGIN_AGENT="claude-code"`**. The launcher reads the live plugin version from the manifest at every start and injects `DATAVERSE_OPERATION_CONTEXT` into the proxy, so attribution can't go stale after an upgrade (issue #114) — no re-registration needed:
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_PLUGIN_AGENT="claude-code" -- python "{PLUGIN_SCRIPTS_PATH}/mcp_proxy.py" "{USER_URL}" {ENDPOINT_FLAG}
 ```
 
-When running on Windows without WSL, wrap the `npx` call into `cmd //c` and omit the quotes around the URL:
-
-```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
-```
+`python` is a real executable on Windows (unlike `npx`), so the outer command needs no `cmd //c` wrapper — the launcher routes the `npx` call through `cmd /c` internally. The same command works on all platforms.
 
 Where:
 - `{CLAUDE_SCOPE}` is `user`, `project`, or `local` (from step 1)
 - `{SERVER_NAME}` is the generated server name (e.g., `dataverse-orgbc9a965c`)
 - `{USER_URL}` is the base environment URL (e.g., `https://orgbc9a965c.crm10.dynamics.com`)
 - `{ENDPOINT_FLAG}` is `--preview` if the user chose Preview endpoint in step 4, otherwise omit this flag
-- `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
+- `{PLUGIN_SCRIPTS_PATH}` is the absolute path to this plugin's `scripts/` directory (the folder holding `mcp_proxy.py` and `auth.py`). You loaded this plugin, so you know its install location — append `/scripts`.
 
-**Example commands:**
-- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
-- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
-- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
+**Example commands** (replace `/path/to/plugin/scripts` with the real absolute path):
+- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_PLUGIN_AGENT="claude-code" -- python "/path/to/plugin/scripts/mcp_proxy.py" "https://orgbc9a965c.crm10.dynamics.com"`
+- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_PLUGIN_AGENT="claude-code" -- python "/path/to/plugin/scripts/mcp_proxy.py" "https://orgbc9a965c.crm10.dynamics.com" --preview`
 
 Store this command as `CLAUDE_COMMAND` for use in step 8.
 
@@ -374,10 +369,10 @@ This is the `SERVER_NAME`.
    {
      "mcpServers": {
        "{SERVER_NAME}": {
-         "command": "npx",
-         "args": ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
+         "command": "python",
+         "args": ["{PLUGIN_SCRIPTS_PATH}/mcp_proxy.py", "{USER_URL}"],
          "env": {
-           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=cursor"
+           "DATAVERSE_PLUGIN_AGENT": "cursor"
          }
        }
      }
@@ -419,11 +414,11 @@ This is the `SERVER_NAME`.
 3. Add the server as a `[mcp_servers.{SERVER_NAME}]` table with an `env` sub-table:
    ```toml
    [mcp_servers.{SERVER_NAME}]
-   command = "npx"
-   args = ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"]
+   command = "python"
+   args = ["{PLUGIN_SCRIPTS_PATH}/mcp_proxy.py", "{USER_URL}"]
 
    [mcp_servers.{SERVER_NAME}.env]
-   DATAVERSE_OPERATION_CONTEXT = "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=codex"
+   DATAVERSE_PLUGIN_AGENT = "codex"
    ```
 
    Append `"--preview"` to the `args` array if the user chose the Preview endpoint in step 4.
@@ -431,7 +426,7 @@ This is the `SERVER_NAME`.
 Where:
 - `{SERVER_NAME}` is the generated server name (e.g., `dataverse-orgbc9a965c`)
 - `{USER_URL}` is the base environment URL (e.g., `https://orgbc9a965c.crm10.dynamics.com`)
-- `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
+- `{PLUGIN_SCRIPTS_PATH}` is the absolute path to this plugin's `scripts/` directory (holding `mcp_proxy.py`)
 
 **Important notes:**
 - Do NOT overwrite other entries in the file — preserve sibling `[mcp_servers.*]` tables and any other settings
