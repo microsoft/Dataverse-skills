@@ -187,7 +187,6 @@ import os
 
 GITIGNORE_ENTRIES = [
     ".env", ".vscode/settings.json", ".claude/mcp_settings.json",
-    ".agents/mcp_config.json",
     ".token_cache.bin", ".dataverse/", "*.snk", "__pycache__/", "*.pyc",
     "solutions/*.zip", "plugins/**/bin/", "plugins/**/obj/",
 ]

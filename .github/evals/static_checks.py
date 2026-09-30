@@ -891,28 +891,29 @@ def check_antigravity_plugin(repo_root):
         repo_root
         / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
     ).read_text(encoding="utf-8")
+    normalized_mcp_reference = " ".join(mcp_reference.split())
     for required_text in (
         "agy mcp add",
         "agy mcp list",
-        "does not discover",
+        "Do not write `.agents/mcp_config.json`",
+        "~/.gemini/config/mcp_config.json",
         "dataverse-{orgname}",
         "agent=antigravity-cli",
     ):
-        if required_text not in mcp_reference:
+        if required_text not in normalized_mcp_reference:
             failures.append(
                 "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] missing required "
-                f"Antigravity configuration text: {required_text}"
+                f"Antigravity configuration token: {required_text}"
             )
 
-    for obsolete_text in (
-        "Default to the workspace configuration `.agents/mcp_config.json`",
-        "Validate `.agents/mcp_config.json` as JSON",
-    ):
-        if obsolete_text in mcp_reference:
-            failures.append(
-                "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] contains "
-                f"unsupported Antigravity CLI guidance: {obsolete_text}"
-            )
+    connect_text = (
+        repo_root / ".github/plugins/dataverse/skills/dv-connect/SKILL.md"
+    ).read_text(encoding="utf-8")
+    if '".agents/mcp_config.json"' in connect_text:
+        failures.append(
+            "EVAL-ANTIGRAVITY-04 [dv-connect/SKILL.md] must not add the "
+            "unsupported .agents/mcp_config.json path to .gitignore"
+        )
 
     return failures
 
@@ -1029,22 +1030,25 @@ def check_gemini_extension(repo_root):
         repo_root
         / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
     ).read_text(encoding="utf-8")
-    required_guidance = (
-        (connect_text, "Gemini: `gemini mcp list` resolves bundled server `dataverse` to the selected URL"),
-        (connect_text, "Gemini supports GA only"),
-        (connect_text, "stop before setup shortcuts"),
-        (connect_text, '"gemini": "gemini-cli"'),
-        (connect_text, '"antigravity": "antigravity-cli"'),
-        (mcp_text, "Gemini user\nexplicitly requests Preview"),
-        (mcp_text, "silently configuring GA"),
-        (readme, "Gemini's bundled `dataverse` server"),
+    guidance_contracts = (
+        ("dv-connect/SKILL.md", connect_text, (
+            "gemini mcp list", "Gemini supports GA only",
+            '"gemini": "gemini-cli"', '"antigravity": "antigravity-cli"',
+        )),
+        ("mcp-configuration.md", mcp_text, (
+            "gemini extensions config dataverse DATAVERSE_URL",
+            "/api/mcp_preview", "Preview", "stop", "GA",
+        )),
+        ("README.md", readme, ("Gemini", "bundled `dataverse` server")),
     )
-    for source, required_text in required_guidance:
-        if required_text not in source:
-            failures.append(
-                "EVAL-GEMINI-03 connection guidance is missing required text: "
-                f"{required_text}"
-            )
+    for source_name, source, required_tokens in guidance_contracts:
+        normalized_source = " ".join(source.split())
+        for required_token in required_tokens:
+            if required_token not in normalized_source:
+                failures.append(
+                    f"EVAL-GEMINI-03 [{source_name}] connection guidance is "
+                    f"missing required token: {required_token}"
+                )
 
     return failures
 
