@@ -15,7 +15,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@microsoft/dataverse@1.0.77",
+        "@microsoft/dataverse@latest",
         "mcp",
         "${DATAVERSE_URL}"
       ],

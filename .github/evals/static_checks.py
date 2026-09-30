@@ -968,7 +968,7 @@ def check_gemini_extension(repo_root):
     if not isinstance(server, dict):
         server = {}
     expected_args = [
-        "-y", "@microsoft/dataverse@1.0.77", "mcp", "${DATAVERSE_URL}",
+        "-y", "@microsoft/dataverse@latest", "mcp", "${DATAVERSE_URL}",
     ]
     if server.get("command") != "npx" or server.get("args") != expected_args:
         failures.append(
