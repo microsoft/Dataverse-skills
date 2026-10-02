@@ -209,14 +209,9 @@ If this is a new project (no `scripts/` directory):
 mkdir -p solutions plugins scripts
 ```
 
-Copy `auth.py` from the loaded plugin into the project `scripts/` directory. In a source clone:
-```
-cp .github/plugins/dataverse/scripts/auth.py scripts/
-```
+Ensure `scripts/auth.py` and `scripts/enable-mcp-client.py` exist -- see [`references/helper-scripts.md`](references/helper-scripts.md).
 
 Copy `templates/CLAUDE.md` to the repo root if it doesn't exist. Replace placeholders (`{{DATAVERSE_URL}}`, `{{SOLUTION_NAME}}`, `{{PUBLISHER_PREFIX}}`) with values from `.env`.
-
-**Skip condition:** `scripts/auth.py` exists.
 
 ---
 

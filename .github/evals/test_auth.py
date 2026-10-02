@@ -465,17 +465,30 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
 
 
 class PluginVersionAttribution(_AuthTestBase):
-    def test_reads_from_env_in_deployed_layout(self):
-        # In the DEPLOYED layout dv-connect copies auth.py to <project>/scripts/,
-        # away from the plugin manifest, so _plugin_version reads the env var that
-        # dv-connect refreshes on connect -- not a manifest path relative to
-        # __file__. Assert the env var is the source of truth.
+    def test_reads_from_env_when_set(self):
+        auth._PLUGIN_VERSION_CACHE = None
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.11.0"}, clear=True):
             self.assertEqual(auth._plugin_version(), "1.11.0")
 
-    def test_defaults_to_unknown_when_env_absent(self):
+    def test_resolves_from_manifest_when_env_absent(self):
+        # npx/registry installs ship no manifest and leave DATAVERSE_PLUGIN_VERSION
+        # "unknown"; auth.py then resolves from the canonical manifest. From the repo
+        # root the local .claude-plugin/plugin.json is found without a network call.
+        auth._PLUGIN_VERSION_CACHE = None
         with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(auth._plugin_version(), "unknown")
+            self.assertRegex(auth._plugin_version(), r"^\d+\.\d+\.\d+")
+
+    def test_unknown_when_env_absent_and_manifest_unreachable(self):
+        import tempfile
+        auth._PLUGIN_VERSION_CACHE = None
+        cwd = os.getcwd()
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch("urllib.request.urlopen", side_effect=OSError("no network")):
+            try:
+                os.chdir(tempfile.gettempdir())
+                self.assertEqual(auth._plugin_version(), "unknown")
+            finally:
+                os.chdir(cwd)
 
     def test_antigravity_agent_is_emitted_in_operation_context(self):
         env = {

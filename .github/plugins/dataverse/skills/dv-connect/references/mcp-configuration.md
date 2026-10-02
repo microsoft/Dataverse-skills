@@ -704,3 +704,12 @@ If something goes wrong, help the user check:
   - If `--validate` returns **403 Forbidden** on the GA endpoint, the client isn't allowlisted yet — run `dataverse mcp allow {MCP_CLIENT_ID}` (Step 7, Method A), then re-validate.
   - Confirm the server entry exists: look for `[mcp_servers.{SERVER_NAME}]` in `~/.codex/config.toml` (global) or `.codex/config.toml` (project).
   - If `npx` can't be found when Codex launches the server, ensure Node.js 18+ is on PATH; on Windows the proxy command may need `cmd /c` wrapping (see Step 5).
+
+## Reliability -- pre-warm auth before the editor restart
+
+Fixes the "MCP won't authenticate on restart" failure. The stdio proxy acquires its token *lazily on the first tool call* and reads the shared MSAL cache silently; it does not reliably surface an interactive prompt from the IDE's background subprocess. The token must therefore already be cached before the restart:
+
+1. Confirm `dataverse auth create --environment <url>` completed in a terminal (Step 2) and `dataverse org who` succeeds -- this warms the cache.
+2. Allowlist the client: `dataverse mcp allow <MCP_CLIENT_ID>` (required, or `/api/mcp` rejects the client even when auth is valid).
+3. Confirm the proxy authenticates against the warm cache: `npx @microsoft/dataverse mcp <url> --validate` -- the GA `/api/mcp` result must pass. A `403` on the preview endpoint plus a non-zero aggregate exit code is expected; judge only the GA line.
+4. Then restart the editor -- the proxy reads the cache silently, no browser needed. If the token later expires and cannot refresh, re-run `dataverse auth create --environment <url> --deviceCode` in a terminal and restart; do not rely on the proxy to prompt.

@@ -24,6 +24,26 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 ## Install
 
+### Quick install — any agent, incl. JetBrains (npx)
+
+One command installs **all** Dataverse skills and lets you choose which agent(s) to add them to:
+
+```bash
+npx skills add microsoft/Dataverse-skills -s "*"
+```
+
+- `-s "*"` installs every Dataverse skill (skips the per-skill prompt).
+- You'll be prompted to pick which **agent(s)** to install into (Codex, GitHub Copilot, Claude Code, Cursor, …).
+- Add `-g` to install **globally** so the skills are available in every project on your machine:
+
+```bash
+npx skills add microsoft/Dataverse-skills -s "*" -g
+```
+
+This is the recommended path for **JetBrains IDEs (PyCharm, Rider)** via Codex or Claude, and works with any agent that reads local skills. After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
+
+The per-marketplace installs below are alternatives for agents that have a dedicated plugin listing.
+
 ### GitHub Copilot
 
 ```bash
