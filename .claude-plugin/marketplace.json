@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "dataverse",
-      "description": "Microsoft Dataverse and Power Platform plugin for AI coding agents, covering Dynamics 365 CRM data, bulk operations, advanced queries, schema and metadata, administration, security, environment and solution ALM, and linked Finance and Operations/X++ development through MCP, Dataverse CLI, Python SDK, and PAC CLI.",
+      "description": "Microsoft Dataverse plugin for coding agents, covering record CRUD, bulk data operations, advanced queries, schema and metadata, administration, security, environment management, and solution lifecycle through MCP, CLI, and SDK workflows.",
       "source": "./.github/plugins/dataverse",
       "homepage": "https://github.com/microsoft/Dataverse-skills"
     }
