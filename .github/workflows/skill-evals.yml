@@ -20,11 +20,18 @@ jobs:
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Install eval dependencies (tiktoken for CAT-8, pyyaml for CAT-4 STRUCT-05)
         run: pip install tiktoken pyyaml
 
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
+
+      - name: Validate Gemini extension
+        run: npx --yes --package @google/gemini-cli@latest gemini extensions validate .github/plugins/dataverse
 
       - name: Run auth unit tests
         run: python .github/evals/test_auth.py

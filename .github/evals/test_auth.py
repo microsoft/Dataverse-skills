@@ -490,6 +490,32 @@ class PluginVersionAttribution(_AuthTestBase):
             finally:
                 os.chdir(cwd)
 
+    def test_antigravity_agent_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.14.0",
+            "DATAVERSE_PLUGIN_AGENT": "antigravity-cli",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.14.0;skill=dv-connect;agent=antigravity-cli",
+            headers["User-Agent"],
+        )
+
+    def test_gemini_agent_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.15.0",
+            "DATAVERSE_PLUGIN_AGENT": "gemini-cli",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.15.0;skill=dv-connect;agent=gemini-cli",
+            headers["User-Agent"],
+        )
+
 
 class AgentAttributionFailOpen(_AuthTestBase):
     def test_recognized_agent_passes_through(self):

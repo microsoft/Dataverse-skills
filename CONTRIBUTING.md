@@ -94,6 +94,22 @@ claude --plugin-dir "<path/to/repo>/.github/plugins/dataverse"
 
 Quote the path if it contains spaces or special characters; use an absolute path.
 
+### Testing with Gemini CLI
+
+The canonical plugin directory is also the Gemini extension root, so local
+development does not require a copied compatibility tree. Validate and link it
+directly. CI validates it with the current Gemini CLI npm `latest` release:
+
+```bash
+gemini extensions validate .github/plugins/dataverse
+gemini extensions link .github/plugins/dataverse
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Restart Gemini after linking. Use `/extensions list`, `/skills list`, and
+`gemini mcp list` to verify discovery. Do not commit the environment URL stored
+by Gemini's local extension settings.
+
 ### Testing with Codex
 
 Add your local clone as a marketplace source, then browse `/plugins` and install `dataverse`:
@@ -105,6 +121,18 @@ codex plugin marketplace add <path/to/repo>
 In the **Codex app**, do the same through **Plugins → Add marketplace**: set **Source** to your local clone path (or the repo's HTTPS URL), leave **Sparse paths** empty, then install `dataverse` from the marketplace.
 
 Codex discovers the plugin via the repo-root `.agents/plugins/marketplace.json` (its native marketplace path; it falls back to `.claude-plugin/marketplace.json` if that's absent) and loads it through the native `.github/plugins/dataverse/.codex-plugin/plugin.json` manifest. Like Copilot, Codex caches the plugin at install time, so run `codex plugin marketplace upgrade dataverse-skills` after local edits to refresh.
+
+### Testing with Google Antigravity
+
+Install the canonical plugin directory from your local clone:
+
+```bash
+agy plugin install <path/to/repo>/.github/plugins/dataverse
+```
+
+Restart `agy`, verify the nine Dataverse skills with `/skills`, and run
+`/dv-connect`. Reinstall after source edits because Antigravity stages a copy of
+the plugin rather than linking the working tree.
 
 ## Legal
 
