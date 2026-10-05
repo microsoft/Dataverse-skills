@@ -117,7 +117,7 @@ CAT-14 Gemini Extension
     Checks the canonical Gemini manifest, settings, MCP declaration,
     attribution, package layout, and repository installation command.
     EVAL-GEMINI-01  Manifest settings and MCP declaration are valid
-    EVAL-GEMINI-02  Canonical package is complete with no root projection
+    EVAL-GEMINI-02  Canonical package is complete with a matching root manifest
     EVAL-GEMINI-03  README installs from the public repository
 """
 
@@ -1010,7 +1010,30 @@ def check_gemini_extension(repo_root):
                 f"EVAL-GEMINI-02 canonical package is missing {directory}/"
             )
 
-    for duplicate in ("gemini-extension.json", "skills", "scripts"):
+    root_manifest_path = repo_root / "gemini-extension.json"
+    try:
+        root_manifest = json.loads(root_manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        failures.append("EVAL-GEMINI-02 [gemini-extension.json] root manifest not found")
+    except json.JSONDecodeError as error:
+        failures.append(
+            f"EVAL-GEMINI-02 [gemini-extension.json] invalid JSON: {error}"
+        )
+    else:
+        for field in ("name", "version", "description"):
+            value = root_manifest.get(field)
+            if not isinstance(value, str) or not value.strip():
+                failures.append(
+                    f"EVAL-GEMINI-02 [gemini-extension.json] {field} must be a "
+                    "non-empty string"
+                )
+            elif value != manifest.get(field):
+                failures.append(
+                    f"EVAL-GEMINI-02 [gemini-extension.json] {field} must match "
+                    f"{relative_path}"
+                )
+
+    for duplicate in ("skills", "scripts"):
         duplicate_path = repo_root / duplicate
         if duplicate_path.exists() or duplicate_path.is_symlink():
             failures.append(
