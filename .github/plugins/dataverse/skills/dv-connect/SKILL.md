@@ -1,11 +1,13 @@
 ---
 name: dv-connect
-description: One-step setup and connection diagnostics for a Dataverse environment — installs tools, authenticates, registers MCP, writes `.env`, and verifies active profiles and linked ERP endpoints. Use when starting a new project, switching environments, fixing authentication, troubleshooting MCP, or checking existing Dataverse / Finance and Operations connectivity or linkage.
+description: One-step Dataverse connection setup and diagnostics — verifies WhoAmI, reuses injected non-interactive credentials, installs tools, authenticates, registers MCP, and writes `.env`. Use when starting a project, checking an existing or CI connection, switching environments, fixing authentication, troubleshooting MCP, or verifying linked Finance and Operations endpoints.
 ---
 
 # Skill: Connect
 
-One-step, idempotent Dataverse connection. Each step checks if it's already done and skips.
+> ## Critical workspace safety rules — read first
+> 1. In CI, reuse injected auth and verify only. Never start browser or device-code login.
+> 2. Never replace `.gitignore`; append missing entries and preserve every existing line.
 
 > **Environment-First Rule** — All metadata and plugin registrations are created **in the environment** via API/scripts, then pulled into the repo. Never hand-write solution XML to create components.
 
