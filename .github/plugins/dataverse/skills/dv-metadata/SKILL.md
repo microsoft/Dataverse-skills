@@ -154,7 +154,7 @@ created = client.tables.add_columns(
 print(created)  # ['new_Description', 'new_Amount', 'new_Active']
 ```
 
-Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
+Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets). For true currency, SDK `"money"` is currently Decimal; use the managed path in [currency-columns.md](references/currency-columns.md).
 
 **Choice (picklist) column via SDK:**
 
@@ -170,25 +170,6 @@ created = client.tables.add_columns(
     "new_ProjectBudget",
     {"new_Status": BudgetStatus},
 )
-```
-
-**Web API approach (needed for column types the SDK doesn't support — e.g., currency with precision, memo with custom max length):**
-
-```python
-# Currency column
-attribute = {
-    "@odata.type": "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
-    "SchemaName": "new_amount",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                          "Label": "Amount", "LanguageCode": 1033}]},
-    "RequiredLevel": {"Value": "None"},
-    "MinValue": 0,
-    "MaxValue": 1000000000,
-    "Precision": 2,
-    "PrecisionSource": 2
-}
-# POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
 ```
 
 ---
