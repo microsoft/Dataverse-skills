@@ -64,7 +64,7 @@ import requests                        # WRONG for SDK-supported ops
 
 Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association — CLI `dataverse data associate` / `disassociate`; set N:1 lookups with `client.records.update()`
+- Record association — CLI `dataverse data associate` / `disassociate` supports N:N and lookup navigation properties; `client.records.update()` is the scripted N:1 lookup path
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 - DeleteMultiple, general OData batching
@@ -86,7 +86,7 @@ dataverse data upsert --table accounts --key "accountnumber='ACC-001'" --data '{
 # Delete (--no-confirm skips the prompt)
 dataverse data delete --table accounts --id <guid> --no-confirm --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
-# Associate two records (N:N or lookup)
+# Link an existing contact to its parent account using the IDs returned by create
 dataverse data associate --table accounts --id <guid> --relationship contact_customer_accounts --related contacts --related-id <contact-guid> --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
 
 # Disassociate (N:N — pass --related-id; clear a lookup — omit --related-id)
@@ -163,6 +163,14 @@ print(f"Created: {guid}")
 | Custom: `new_AccountId` | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
 | System polymorphic: `customerid` | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
 | System: `parentcustomerid` | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
+
+For an account/contact N:1 link, update the contact side with the IDs returned by the create calls; do not handcraft a raw `$ref` request:
+
+```python
+client.records.update("contact", contact_id, {
+    "parentcustomerid_account@odata.bind": f"/accounts({account_id})",
+})
+```
 
 ### Find the Navigation Property Name
 
