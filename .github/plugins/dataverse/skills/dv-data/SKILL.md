@@ -64,7 +64,7 @@ import requests                        # WRONG for SDK-supported ops
 
 Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
+- N:N record association — CLI `dataverse data associate` / `disassociate`; set N:1 lookups with `client.records.update()`
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 - DeleteMultiple, general OData batching
