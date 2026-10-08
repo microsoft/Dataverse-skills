@@ -392,16 +392,16 @@ For the `retry_metadata` helper that catches transient lock errors and the full 
 
 ## Inspect Existing Schema
 
-Before changing a model, inspect what already exists. These read-only calls return raw
-metadata dictionaries (PascalCase property names) and are safe to run anytime.
+Before changing a model, inspect what exists. These read-only calls return raw
+metadata dicts (PascalCase names) and are safe to run anytime.
 
 > Assumes `client` from the auth setup shown earlier in this skill (`from auth import get_client`).
 
 ```python
-# Columns on a table (optionally filtered / projected)
-columns = client.tables.list_columns("account", select=["LogicalName", "AttributeType", "SchemaName"])
-for col in columns:
-    print(f"{col['LogicalName']} ({col.get('AttributeType')})")
+# typed=True returns type-specific fields (MaxLength, MinValue/MaxValue) in one request -- no @odata.type cast, no urllib
+for col in client.tables.list_columns("account", typed=True):
+    print(col["LogicalName"], col.get("MaxLength"))
+# get_column(table, col, typed=True) reads one column's constraints
 
 # All relationships for one table (1:N, N:1, and N:N combined)
 rels = client.tables.list_table_relationships("account")

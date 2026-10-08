@@ -13,7 +13,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
 **PyPI package:** `PowerPlatform-Dataverse-Client` (this is the only official one — do not use `dataverse-api` or other unofficial packages)
-**Status:** GA (`1.0.0`, Production/Stable)
+**Status:** GA (`1.1.0`, Production/Stable)
 
 ## Skill boundaries
 
