@@ -26,7 +26,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 1. **`.env` is present and complete** — file exists at the workspace root and contains non-empty values for `DATAVERSE_URL`, `TENANT_ID`, and `MCP_CLIENT_ID`
 2. **MCP is registered** — the host MCP list has a `dataverse-*` entry, or Gemini has its bundled `dataverse` entry, pointing at `DATAVERSE_URL`
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
-4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
+4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); parts=tuple(int(p) for p in v.split('.')[:2]); assert parts>=(1,1), f'SDK {v} is outdated, need >=1.1.0'"` exits 0
 
 **If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected host, per Step 3) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 

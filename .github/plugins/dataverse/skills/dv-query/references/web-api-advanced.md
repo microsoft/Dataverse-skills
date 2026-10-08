@@ -11,7 +11,7 @@
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK cannot do this
+from auth import get_token, get_plugin_headers, load_env  # raw in-process N:N $expand; one-shot reads use client.query.builder(...).expand(...) or records.list(expand=...) (SDK)
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")
@@ -33,11 +33,30 @@ with urllib.request.urlopen(req, timeout=150) as resp:
 
 ---
 
-## $apply Aggregation (Web API — SDK does not support)
+## Aggregation — prefer SDK FetchXML; raw `$apply` only for in-process OData loops
 
-**Use `$apply` for any single-table aggregation** — "which X has the most Y", "total by group", "top N", "average per category". This runs server-side and returns only the grouped results. One HTTP call, no client-side processing. Limit: 50,000 source records per aggregation.
+**For aggregation ("total by group", "top N", "count/sum/avg per category"), the SDK is the path** — `client.query.fetchxml()` runs server-side aggregates (count/sum/avg/min/max), group-by, and joins with no raw HTTP:
 
-**Common $apply patterns:**
+```python
+from auth import get_client
+client = get_client("dv-query")
+
+xml = """
+<fetch aggregate="true">
+  <entity name="opportunity">
+    <attribute name="estimatedvalue" aggregate="sum"   alias="total_value" />
+    <attribute name="opportunityid"  aggregate="count" alias="count" />
+    <attribute name="statuscode"     groupby="true"    alias="status" />
+  </entity>
+</fetch>
+"""
+for row in client.query.fetchxml(xml).execute():
+    print(row.get("status"), row.get("count"), row.get("total_value"))
+```
+
+Reach for the raw OData `$apply` form below **only** when you specifically need OData `$apply` grouping as one step inside a larger in-process Python loop. Limit: 50,000 source records per aggregation.
+
+**Common $apply patterns (raw OData form):**
 
 | User question | $apply expression |
 |---|---|
@@ -49,7 +68,7 @@ with urllib.request.urlopen(req, timeout=150) as resp:
 ```python
 import os, sys, json, urllib.request
 sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
-from auth import get_token, get_plugin_headers, load_env  # get_token + get_plugin_headers — SDK does not support $apply
+from auth import get_token, get_plugin_headers, load_env  # raw OData $apply only; for aggregation prefer client.query.fetchxml() (SDK, shown above)
 
 load_env()
 env = os.environ["DATAVERSE_URL"].rstrip("/")

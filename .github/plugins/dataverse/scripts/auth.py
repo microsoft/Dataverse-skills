@@ -970,11 +970,36 @@ def get_client(skill, **kwargs):
     )
 
 
-def get_plugin_headers(skill, token=None):
-    """Return HTTP headers for raw Web API calls, with plugin attribution.
+_RAW_FALLBACK_HINT_EMITTED = False
 
-    Use this for operations the SDK does not support (forms, views, $apply,
-    N:N $expand, unbound actions).
+
+def _emit_raw_fallback_hint():
+    """Emit a one-time, non-fatal hint that this is the raw Web API fallback.
+
+    Printed once per process to stderr so an agent is informed without polluting
+    stdout/data. The call still succeeds -- this only informs, it never blocks.
+    Set DATAVERSE_SUPPRESS_FALLBACK_HINT=1 to silence.
+    """
+    global _RAW_FALLBACK_HINT_EMITTED
+    if _RAW_FALLBACK_HINT_EMITTED or os.environ.get("DATAVERSE_SUPPRESS_FALLBACK_HINT"):
+        return
+    _RAW_FALLBACK_HINT_EMITTED = True
+    print(
+        "[dataverse-skills] get_plugin_headers() is the raw Web API FALLBACK. "
+        "Prefer get_client() (SDK) for record CRUD, queries, bulk delete, batching, "
+        "and metadata; use raw HTTP only for genuine gaps (unbound actions, global option sets).",
+        file=sys.stderr,
+    )
+
+
+def get_plugin_headers(skill, token=None):
+    """Return HTTP headers for a raw Web API call -- the FALLBACK path.
+
+    PREFER ``get_client(skill)`` (the SDK). The SDK covers all record CRUD,
+    queries (aggregation via ``client.query.fetchxml()``, N:N via
+    ``builder().expand()``), bulk delete, batching, and metadata. Reach for this
+    raw-HTTP helper ONLY for genuine SDK gaps -- unbound actions such as
+    ``PublishXml`` / ``AddSolutionComponent``, or global option sets.
 
     IMPORTANT: Do not modify the User-Agent context — it uses a closed
     schema (app/skill/agent) for safe server-side attribution.  Never
@@ -985,6 +1010,7 @@ def get_plugin_headers(skill, token=None):
     :returns: Headers dict with User-Agent and optional Authorization.
     """
     _validate_skill(skill)
+    _emit_raw_fallback_hint()
     ctx_str = _operation_context_str(skill)
     headers = {"User-Agent": f"Python-urllib ({ctx_str})"}
     if token:

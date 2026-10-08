@@ -711,5 +711,58 @@ class WorkspaceCacheDecision(_AuthTestBase):
             self.assertIsNone(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": val}, browser=False), msg=val)
 
 
+class GetPluginHeadersFallbackNudge(unittest.TestCase):
+    """The raw-Web-API fallback nudge on get_plugin_headers (the urllib chokepoint).
+
+    get_plugin_headers sets the ``Python-urllib`` User-Agent, so it is the single
+    funnel for every hand-rolled raw HTTP call. The nudge frames it as a fallback
+    and steers callers to the SDK (get_client) -- these tests guard that behavior.
+    """
+
+    def setUp(self):
+        auth._RAW_FALLBACK_HINT_EMITTED = False
+        os.environ.pop("DATAVERSE_SUPPRESS_FALLBACK_HINT", None)
+
+    def _call_capture(self, n=1):
+        import io
+        buf, old = io.StringIO(), sys.stderr
+        sys.stderr = buf
+        try:
+            headers = None
+            for _ in range(n):
+                headers = auth.get_plugin_headers("dv-data", "tok")
+        finally:
+            sys.stderr = old
+        return headers, buf.getvalue()
+
+    def test_docstring_frames_as_fallback(self):
+        doc = auth.get_plugin_headers.__doc__ or ""
+        self.assertIn("FALLBACK", doc)
+        self.assertIn("get_client", doc)
+
+    def test_hint_fires_exactly_once(self):
+        _, err = self._call_capture(n=3)
+        self.assertEqual(err.count("[dataverse-skills]"), 1)
+        self.assertIn("Prefer get_client", err)
+
+    def test_hint_suppressed_by_env(self):
+        os.environ["DATAVERSE_SUPPRESS_FALLBACK_HINT"] = "1"
+        try:
+            _, err = self._call_capture(n=1)
+        finally:
+            os.environ.pop("DATAVERSE_SUPPRESS_FALLBACK_HINT", None)
+        self.assertEqual(err, "")
+
+    def test_call_not_broken(self):
+        headers, _ = self._call_capture(n=1)
+        self.assertTrue(
+            headers["User-Agent"].startswith("Python-urllib (app=dataverse-skills/")
+        )
+        self.assertEqual(headers["Authorization"], "Bearer tok")
+
+    def test_get_client_docstring_stays_clean(self):
+        self.assertNotIn("FALLBACK", auth.get_client.__doc__ or "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
