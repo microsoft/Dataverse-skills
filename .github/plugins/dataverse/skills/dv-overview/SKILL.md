@@ -130,7 +130,7 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Routing:** the table shows what each surface does; the *how to choose* principle (soft defaults, not a fixed order) is Hard Rule 2. MCP tools not in your list? Load `dv-connect`.
 
-**Volume guidance:** CLI `dataverse data create/query/count` for one-off commands; MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; Web API for `$apply` aggregation.
+**Volume guidance:** CLI `dataverse data create/query/count` for one-off commands; MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; SDK `fetchxml()` for aggregation.
 
 **SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
 
