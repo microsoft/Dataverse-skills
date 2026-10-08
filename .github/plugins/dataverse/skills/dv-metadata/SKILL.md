@@ -172,24 +172,16 @@ created = client.tables.add_columns(
 )
 ```
 
-**Web API approach (needed for column types the SDK doesn't support — e.g., currency with precision, memo with custom max length):**
+**Set constraints — pass a dict spec** instead of a bare type string (keys: `max_length`, `min_value`, `max_value`, `precision`, `format`, `required`, `display_name`); works on `create` and `add_columns`, no raw Web API:
 
 ```python
-# Currency column
-attribute = {
-    "@odata.type": "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
-    "SchemaName": "new_amount",
-    "DisplayName": {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-                    "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                          "Label": "Amount", "LanguageCode": 1033}]},
-    "RequiredLevel": {"Value": "None"},
-    "MinValue": 0,
-    "MaxValue": 1000000000,
-    "Precision": 2,
-    "PrecisionSource": 2
-}
-# POST to /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')/Attributes
+client.tables.add_columns("new_ProjectBudget", {
+    "new_Amount":  {"type": "money", "min_value": 0, "max_value": 1000000000, "precision": 2},
+    "new_Comment": {"type": "memo", "max_length": 2000, "display_name": "Comment"},
+})
 ```
+
+Change an existing column in place with `update_column(table, col, spec)` or `update_columns(table, {col: spec})` — same keys; all specs are validated before any write.
 
 ---
 
