@@ -90,7 +90,7 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 
 Three entry points, one shared sign-in:
 - **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache. That sign-in serves CLI, MCP proxy, **and** `scripts/auth.py` via `msal-extensions`.
-- **`scripts/auth.py`** is the Python/SDK auth entry point. Order: service principal → shared CLI cache → device-code. Use `get_client(skill)` (SDK) or `get_plugin_headers(skill, get_token())` (raw Web API) — both stamp attribution.
+- **`scripts/auth.py`** — Python/SDK auth (service principal → shared CLI cache → device-code). Prefer **`get_client(skill)`** (SDK); `get_plugin_headers(skill, get_token())` is the **fallback for SDK gaps** — both stamp attribution.
 - **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution`, `dv-admin`, and `erp-xpp`.
 
 **Telemetry attribution (keep it deterministic):** every request carries a closed-schema `app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>` context so the server sees which skill routed each OData call. It is baked in — `get_client(skill)` and `get_plugin_headers(skill, ...)` stamp it on the SDK and raw-HTTP paths; the Dataverse CLI auto-stamps `DataverseCli/<ver>` + the command, and you add the skill with `--context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"` (the CLI wraps it in parentheses itself — do not pre-wrap). Never modify, omit, or free-form this context — it is a closed schema (allowlisted skill/agent, no PII).
