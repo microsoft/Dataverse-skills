@@ -516,6 +516,20 @@ class PluginVersionAttribution(_AuthTestBase):
             headers["User-Agent"],
         )
 
+    def test_jetbrains_host_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.17.0",
+            "DATAVERSE_PLUGIN_AGENT": "codex",
+            "DATAVERSE_PLUGIN_HOST": "jetbrains",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.17.0;skill=dv-connect;agent=codex;host=jetbrains",
+            headers["User-Agent"],
+        )
+
 
 class AgentAttributionFailOpen(_AuthTestBase):
     def test_recognized_agent_passes_through(self):
@@ -546,6 +560,37 @@ class AgentAttributionFailOpen(_AuthTestBase):
             self.assertTrue(auth._CONTEXT_RE.match(ctx))
             self.assertIn("agent=unknown", ctx)
             self.assertIn("skill=dv-query", ctx)
+
+    def test_recognized_host_passes_through(self):
+        for good in ("jetbrains", "vscode", "cli"):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_HOST": good}, clear=True):
+                self.assertEqual(auth._current_host(), good)
+
+    def test_unrecognized_host_coerced_to_unknown_not_raised(self):
+        # IDE misdetection ('pycharm', 'rider', 'intellij', ...) must never raise --
+        # attribution can't gate the user's data op. Coerce to unknown.
+        for bad in ("pycharm", "rider", "intellij", "emacs", ""):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_HOST": bad}, clear=True):
+                self.assertEqual(auth._current_host(), "unknown")
+
+    def test_missing_host_defaults_to_unknown(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(auth._current_host(), "unknown")
+
+    def test_context_string_includes_host_and_stays_valid(self):
+        env = {"DATAVERSE_PLUGIN_HOST": "jetbrains", "DATAVERSE_PLUGIN_AGENT": "codex",
+               "DATAVERSE_PLUGIN_VERSION": "1.17.0"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            ctx = auth._operation_context_str("dv-query")
+            self.assertTrue(auth._CONTEXT_RE.match(ctx))
+            self.assertIn("host=jetbrains", ctx)
+
+    def test_bad_host_coerced_in_context_string(self):
+        env = {"DATAVERSE_PLUGIN_HOST": "not a host!"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            ctx = auth._operation_context_str("dv-query")
+            self.assertTrue(auth._CONTEXT_RE.match(ctx))
+            self.assertIn("host=unknown", ctx)
 
 
 class SilentChainReasons(_AuthTestBase):

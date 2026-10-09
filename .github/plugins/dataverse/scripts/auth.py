@@ -837,6 +837,11 @@ _ALLOWED_AGENTS = frozenset({
     "claude-code", "copilot", "cursor", "codex", "gemini-cli",
     "antigravity-cli", "unknown",
 })
+# IDE / surface the install runs under, for telemetry host attribution. Closed
+# allowlist; dv-connect writes DATAVERSE_PLUGIN_HOST into .env when it detects one.
+_ALLOWED_HOSTS = frozenset({
+    "jetbrains", "vscode", "cli", "unknown",
+})
 # Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
 _CONTEXT_RE = re.compile(
     r"^[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+(;[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+)*$"
@@ -911,6 +916,18 @@ def _current_agent():
     return agent if agent in _ALLOWED_AGENTS else "unknown"
 
 
+def _current_host():
+    """Return the attribution host (IDE surface), fail-open.
+
+    Mirrors _current_agent. dv-connect writes DATAVERSE_PLUGIN_HOST into .env when
+    it can detect the surface (e.g. "jetbrains" on a JetBrains catalog / -a junie
+    install, "vscode" in VS Code). An unrecognized or absent value coerces to
+    "unknown" so attribution can never gate the user's data operation.
+    """
+    host = os.environ.get("DATAVERSE_PLUGIN_HOST", "unknown")
+    return host if host in _ALLOWED_HOSTS else "unknown"
+
+
 def _validate_skill(skill):
     if skill not in _ALLOWED_SKILLS:
         raise ValueError(f"Unknown skill '{skill}'; allowed: {_ALLOWED_SKILLS}")
@@ -920,25 +937,29 @@ def _validate_skill(skill):
 def _operation_context_str(skill):
     """Assemble the closed-schema attribution string, fail-open.
 
-    agent/version are already coerced to allow-listed / charset-safe values, so
-    the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
+    agent/host/version are already coerced to allow-listed / charset-safe values,
+    so the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
     mismatch it degrades to a minimal safe context instead of raising, so a bad
     attribution value can never block the call. `skill` is a plugin-authored
     literal validated strictly by the public entry points.
     """
-    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
+    ctx_str = (
+        f"app=dataverse-skills/{_plugin_version()};skill={skill};"
+        f"agent={_current_agent()};host={_current_host()}"
+    )
     if not _CONTEXT_RE.match(ctx_str):
         safe_skill = skill if skill in _ALLOWED_SKILLS else "unknown"
-        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown"
+        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown;host=unknown"
     return ctx_str
 
 
 def _build_operation_context(skill):
     """Build the operation_context for the SDK.
 
-    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and _ALLOWED_AGENTS
-    reach the string; agent/version are coerced (never passed through raw), so
-    nothing un-allow-listed is written to HTTP headers or server-side telemetry.
+    SECURITY: Only closed-schema values from _ALLOWED_SKILLS, _ALLOWED_AGENTS, and
+    _ALLOWED_HOSTS reach the string; agent/host/version are coerced (never passed
+    through raw), so nothing un-allow-listed is written to HTTP headers or
+    server-side telemetry.
     """
     ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
