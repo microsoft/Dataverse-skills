@@ -305,7 +305,7 @@ Enter `USER_URL`, restart Gemini, and verify with `gemini mcp list`.
 Register through Antigravity's native CLI:
 
 ```
-agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli;host={DATAVERSE_PLUGIN_HOST}" dataverse-{orgname} npx -y @microsoft/dataverse@latest mcp {USER_URL}
+agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli" dataverse-{orgname} npx -y @microsoft/dataverse@latest mcp {USER_URL}
 ```
 
 Append `--preview` only when the user explicitly selected Preview. Restart
@@ -374,13 +374,13 @@ This is the `SERVER_NAME`.
 Construct the command based on `CLAUDE_SCOPE` and whether the user chose GA or Preview endpoint. **Always pass `-e DATAVERSE_OPERATION_CONTEXT="…"`** so the stdio proxy attaches plugin attribution to outbound requests (same role as the `env` block in the Copilot / Cursor JSON configs):
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code;host={DATAVERSE_PLUGIN_HOST}" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "{USER_URL}" {ENDPOINT_FLAG}
 ```
 
 When running on Windows without WSL, wrap the `npx` call into `cmd //c` and omit the quotes around the URL:
 
 ```
-claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code;host={DATAVERSE_PLUGIN_HOST}" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
+claude mcp add --scope {CLAUDE_SCOPE} {SERVER_NAME} -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp {USER_URL} {ENDPOINT_FLAG}"
 ```
 
 Where:
@@ -391,9 +391,9 @@ Where:
 - `{DATAVERSE_PLUGIN_VERSION}` comes from `.env` (set in dv-connect Step 3)
 
 **Example commands:**
-- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code;host={DATAVERSE_PLUGIN_HOST}" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
-- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code;host={DATAVERSE_PLUGIN_HOST}" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
-- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code;host={DATAVERSE_PLUGIN_HOST}" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
+- GA endpoint with user scope: `claude mcp add --scope user dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com"`
+- Preview endpoint with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- npx -y @microsoft/dataverse@latest mcp "https://orgbc9a965c.crm10.dynamics.com" --preview`
+- GA endpoint on Windows with project scope: `claude mcp add --scope project dataverse-orgbc9a965c -t stdio -e DATAVERSE_OPERATION_CONTEXT="app=dataverse-skills/1.5.0;skill=mcp-direct;agent=claude-code" -- cmd //c "npx -y @microsoft/dataverse@latest mcp https://orgbc9a965c.crm10.dynamics.com"`
 
 Store this command as `CLAUDE_COMMAND` for use in step 8.
 
@@ -431,7 +431,7 @@ This is the `SERVER_NAME`.
          "command": "npx",
          "args": ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"],
          "env": {
-           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=cursor;host={DATAVERSE_PLUGIN_HOST}"
+           "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=cursor"
          }
        }
      }
@@ -477,7 +477,7 @@ This is the `SERVER_NAME`.
    args = ["-y", "@microsoft/dataverse@latest", "mcp", "{USER_URL}"]
 
    [mcp_servers.{SERVER_NAME}.env]
-   DATAVERSE_OPERATION_CONTEXT = "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=codex;host={DATAVERSE_PLUGIN_HOST}"
+   DATAVERSE_OPERATION_CONTEXT = "app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=codex"
    ```
 
    Append `"--preview"` to the `args` array if the user chose the Preview endpoint in step 4.

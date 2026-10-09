@@ -28,7 +28,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` and `DATAVERSE_PLUGIN_HOST` (detected per Step 3) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected per Step 3, including the `/host` suffix if applicable) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -165,8 +165,10 @@ agent_host = {
     "antigravity": "antigravity-cli",
 }.get(tool_type, "unknown")
 
-# Telemetry host (closed allowlist: jetbrains, vscode, cli, unknown). A JetBrains install path (aia/agents) or `-a junie` -> "jetbrains"; TERM_PROGRAM=vscode -> "vscode".
-plugin_host = "<jetbrains | vscode | cli | unknown>"
+# IDE surface appended to agent as "/<host>" when known (jetbrains/vscode/cli): JetBrains = a JetBrains install path (aia/agents) or `-a junie`; else leave empty.
+plugin_host = "<jetbrains | vscode | cli, or empty if unknown>"
+if plugin_host:
+    agent_host = f"{agent_host}/{plugin_host}"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
@@ -174,7 +176,6 @@ with open(".env", "w") as f:
     f.write(f"MCP_CLIENT_ID={mcp_client_id}\n")
     f.write(f"DATAVERSE_PLUGIN_VERSION={plugin_version}\n")
     f.write(f"DATAVERSE_PLUGIN_AGENT={agent_host}\n")
-    f.write(f"DATAVERSE_PLUGIN_HOST={plugin_host}\n")
     f.write(f"SOLUTION_NAME={solution_name}\n")
     f.write(f"PUBLISHER_PREFIX=\n")  # filled in when solution is created
     f.write(f"PAC_AUTH_PROFILE=nonprod\n")
@@ -260,7 +261,7 @@ If MCP is not configured, follow [mcp-configuration.md](references/mcp-configura
 **Plugin attribution for MCP:** This plugin uses the **stdio proxy** transport (`npx @microsoft/dataverse mcp <url>`). When registering it, include `DATAVERSE_OPERATION_CONTEXT` in the env block so the CLI appends it to its User-Agent on requests to `/api/mcp`. Build the value from `.env`:
 
 ```
-DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent={DATAVERSE_PLUGIN_AGENT};host={DATAVERSE_PLUGIN_HOST}
+DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent={DATAVERSE_PLUGIN_AGENT}
 ```
 
 For Claude Code (`claude mcp add -t stdio`), pass it via `-e DATAVERSE_OPERATION_CONTEXT=...`. For JSON/TOML hosts, add it to the server's environment block.

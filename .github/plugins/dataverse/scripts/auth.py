@@ -837,10 +837,11 @@ _ALLOWED_AGENTS = frozenset({
     "claude-code", "copilot", "cursor", "codex", "gemini-cli",
     "antigravity-cli", "unknown",
 })
-# IDE / surface the install runs under, for telemetry host attribution. Closed
-# allowlist; dv-connect writes DATAVERSE_PLUGIN_HOST into .env when it detects one.
+# IDE / surface the install runs under. When known, it is appended to the agent
+# value as a "/<host>" suffix (e.g. "codex/jetbrains") so the marker lives inside
+# the always-present agent field rather than a separate, mostly-empty key.
 _ALLOWED_HOSTS = frozenset({
-    "jetbrains", "vscode", "cli", "unknown",
+    "jetbrains", "vscode", "cli",
 })
 # Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
 _CONTEXT_RE = re.compile(
@@ -905,27 +906,20 @@ def _resolve_manifest_version():
 
 
 def _current_agent():
-    """Return the attribution agent, fail-open.
+    """Return the attribution agent, with an optional "/<host>" suffix, fail-open.
 
-    An unrecognized host string (LLM host misdetection: 'github-copilot' vs
-    'copilot', 'claude', 'windsurf', ...) is coerced to "unknown" rather than
-    raised -- telemetry attribution must never gate the user's data operation.
-    Strict validation stays on the .env WRITE path (dv-connect guidance).
+    dv-connect writes DATAVERSE_PLUGIN_AGENT into .env. It is normally a bare agent
+    (e.g. "codex"); on a detected IDE surface it carries a host suffix
+    (e.g. "codex/jetbrains"). Both halves are validated against closed allowlists;
+    anything unrecognized is coerced/dropped rather than raised -- telemetry
+    attribution must never gate the user's data operation.
     """
-    agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
-    return agent if agent in _ALLOWED_AGENTS else "unknown"
-
-
-def _current_host():
-    """Return the attribution host (IDE surface), fail-open.
-
-    Mirrors _current_agent. dv-connect writes DATAVERSE_PLUGIN_HOST into .env when
-    it can detect the surface (e.g. "jetbrains" on a JetBrains catalog / -a junie
-    install, "vscode" in VS Code). An unrecognized or absent value coerces to
-    "unknown" so attribution can never gate the user's data operation.
-    """
-    host = os.environ.get("DATAVERSE_PLUGIN_HOST", "unknown")
-    return host if host in _ALLOWED_HOSTS else "unknown"
+    raw = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
+    base, sep, host = raw.partition("/")
+    base = base if base in _ALLOWED_AGENTS else "unknown"
+    if sep and host in _ALLOWED_HOSTS:
+        return f"{base}/{host}"
+    return base
 
 
 def _validate_skill(skill):
@@ -937,19 +931,17 @@ def _validate_skill(skill):
 def _operation_context_str(skill):
     """Assemble the closed-schema attribution string, fail-open.
 
-    agent/host/version are already coerced to allow-listed / charset-safe values,
-    so the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
-    mismatch it degrades to a minimal safe context instead of raising, so a bad
-    attribution value can never block the call. `skill` is a plugin-authored
-    literal validated strictly by the public entry points.
+    agent/version are already coerced to allow-listed / charset-safe values (the
+    agent may carry a validated "/<host>" suffix), so the result satisfies
+    _CONTEXT_RE. The final check is a defensive net: on any mismatch it degrades to
+    a minimal safe context instead of raising, so a bad attribution value can never
+    block the call. `skill` is a plugin-authored literal validated strictly by the
+    public entry points.
     """
-    ctx_str = (
-        f"app=dataverse-skills/{_plugin_version()};skill={skill};"
-        f"agent={_current_agent()};host={_current_host()}"
-    )
+    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
     if not _CONTEXT_RE.match(ctx_str):
         safe_skill = skill if skill in _ALLOWED_SKILLS else "unknown"
-        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown;host=unknown"
+        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown"
     return ctx_str
 
 
@@ -960,10 +952,19 @@ def _build_operation_context(skill):
     _ALLOWED_HOSTS reach the string; agent/host/version are coerced (never passed
     through raw), so nothing un-allow-listed is written to HTTP headers or
     server-side telemetry.
+
+    Forward-compatible, fail-open: an older installed SDK may not yet accept the
+    agent "/<host>" suffix and would raise. In that case we strip the suffix and
+    retry with the bare agent, so attribution degrades gracefully and never gates
+    the data operation.
     """
     ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
-    return OperationContext(user_agent_context=ctx_str)
+    try:
+        return OperationContext(user_agent_context=ctx_str)
+    except ValueError:
+        base_ctx = re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_-]+", r"\1", ctx_str)
+        return OperationContext(user_agent_context=base_ctx)
 
 
 def get_client(skill, **kwargs):
