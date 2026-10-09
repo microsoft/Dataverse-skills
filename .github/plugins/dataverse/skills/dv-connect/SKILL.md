@@ -17,7 +17,7 @@ One-step, idempotent Dataverse connection. Each step checks if it's already done
 
 ## Step 0: Detect existing setup (run this first)
 
-Before touching anything, check whether this workspace is already connected to a Dataverse environment. Repeating setup on an already-configured workspace overwrites `.env`, re-registers MCP, and wastes time.
+Check whether this workspace is already connected -- repeating setup on a configured workspace overwrites `.env`, re-registers MCP, and wastes time.
 
 Gemini supports GA only. If Preview is requested, explain and stop before setup shortcuts.
 
@@ -28,7 +28,7 @@ Run these checks in order. If **all four pass**, skip straight to Step 7 (final 
 3. **Both auth surfaces match `.env`** — `dataverse auth who` shows a profile whose `Environment Url` matches `DATAVERSE_URL`, AND `pac org who` against a PAC profile for the same URL succeeds. (DV CLI auth covers Connect / Data / Query / Metadata / MCP / Python; PAC auth covers `dv-solution` and `dv-admin`. Both are front-loaded at connect time so neither prompts later.)
 4. **Python SDK is importable and current** — `python -c "from PowerPlatform.Dataverse.client import DataverseClient; import pandas; from importlib.metadata import version; v=version('PowerPlatform-Dataverse-Client'); assert int(v.split('.')[0])>=1, f'SDK {v} is outdated, need >=1.0.0'"` exits 0
 
-**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected host, per Step 3) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
+**If all pass:** First ensure `.env` has valid attribution — set `DATAVERSE_PLUGIN_VERSION` to the loaded manifest `version` and add `DATAVERSE_PLUGIN_AGENT` (detected per Step 3, including the `/host` suffix if applicable) if absent or a stale `unknown`/placeholder. Confirm the detected setup (URL, profile, MCP server), and jump to Step 7. Do not otherwise rewrite `.env`, re-register MCP, or re-run `pip install`.
 
 **If any check fails:** Proceed through the normal flow (Steps 1–7), but still use each step's own skip condition. A partially-configured workspace doesn't need a full redo — e.g., if only `.env` and MCP are missing but tools and auth are fine, start at Step 2 or Step 3.
 
@@ -48,7 +48,7 @@ Check each tool independently -- report all missing tools at once. See [tools-se
 | .NET SDK | `dotnet --version` |
 | Azure CLI | `az --version` |
 
-.NET SDK is needed for PAC CLI but NOT for the Dataverse CLI (the npm package bundles its own runtime). Node.js powers the Dataverse CLI npm package (`@microsoft/dataverse`), which is used as the MCP proxy and for scripted data plane actions. Azure CLI is used as a fallback for environment discovery when PAC CLI isn't available (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI is not needed for connecting — it's used later for ALM/CI/CD scenarios (see `dv-solution`).
+.NET SDK is needed for PAC CLI, not the Dataverse CLI (its npm package bundles a runtime). Node.js powers that CLI (`@microsoft/dataverse`) -- the MCP proxy and scripted data-plane. Azure CLI is a fallback for env discovery when PAC is absent (see [mcp-configuration.md](references/mcp-configuration.md) Step 3b). GitHub CLI isn't needed to connect -- it's used later for ALM/CI-CD (see `dv-solution`).
 
 If any tool is missing, install it (see [tools-setup.md](references/tools-setup.md)), then verify. If `winget` installs a tool but it's not in PATH, ask the user to restart the terminal.
 
@@ -164,6 +164,11 @@ agent_host = {
     "codex": "codex", "gemini": "gemini-cli",
     "antigravity": "antigravity-cli",
 }.get(tool_type, "unknown")
+
+# IDE surface appended to agent as "/<host>" when known (jetbrains/vscode/cli): JetBrains = a JetBrains install path (aia/agents) or `-a junie`; else leave empty.
+plugin_host = "<jetbrains | vscode | cli, or empty if unknown>"
+if plugin_host:
+    agent_host = f"{agent_host}/{plugin_host}"
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")

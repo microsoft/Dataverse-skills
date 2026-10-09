@@ -516,16 +516,35 @@ class PluginVersionAttribution(_AuthTestBase):
             headers["User-Agent"],
         )
 
+    def test_jetbrains_host_suffix_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.17.0",
+            "DATAVERSE_PLUGIN_AGENT": "codex/jetbrains",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.17.0;skill=dv-connect;agent=codex/jetbrains",
+            headers["User-Agent"],
+        )
+
 
 class AgentAttributionFailOpen(_AuthTestBase):
     def test_recognized_agent_passes_through(self):
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "cursor"}, clear=True):
             self.assertEqual(auth._current_agent(), "cursor")
 
-    def test_unrecognized_agent_coerced_to_unknown_not_raised(self):
-        # LLM host misdetection ('github-copilot', 'claude', 'windsurf', ...) must
-        # never raise -- telemetry can't gate the user's data op. Coerce to unknown.
-        for bad in ("github-copilot", "claude", "vscode", "windsurf", ""):
+    def test_unsafe_agent_coerced_to_unknown_not_raised(self):
+        # A value with spaces / PII punctuation / separators can never raise --
+        # telemetry can't gate the user's data op. Coerce to unknown.
+        for bad in ("has space", "a@b.com", "x!y", "a;b", ""):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_unrecognized_base_agent_coerced_to_unknown(self):
+        # The base agent stays enumerated: an unrecognized base coerces to unknown.
+        for bad in ("windsurf", "github-copilot", "some-future-agent"):
             with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
                 self.assertEqual(auth._current_agent(), "unknown")
 
@@ -546,6 +565,64 @@ class AgentAttributionFailOpen(_AuthTestBase):
             self.assertTrue(auth._CONTEXT_RE.match(ctx))
             self.assertIn("agent=unknown", ctx)
             self.assertIn("skill=dv-query", ctx)
+
+    def test_agent_host_suffix_passes_through(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains"}, clear=True):
+            self.assertEqual(auth._current_agent(), "codex/jetbrains")
+
+    def test_surface_suffix_not_enumerated(self):
+        # The surface suffix is not enumerated -- any charset-safe surface on a
+        # recognized base passes through unchanged (no code change per new IDE).
+        for good in ("codex/jetbrains", "codex/pycharm", "copilot/vscode"):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": good}, clear=True):
+                self.assertEqual(auth._current_agent(), good)
+
+    def test_unrecognized_base_keeps_safe_surface(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "windsurf/jetbrains"}, clear=True):
+            self.assertEqual(auth._current_agent(), "unknown/jetbrains")
+
+    def test_unsafe_surface_suffix_dropped(self):
+        for bad in ("codex/bad surface", "codex/", "codex/a@b"):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "codex")
+
+    def test_bare_agent_has_no_suffix(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "codex"}, clear=True):
+            self.assertEqual(auth._current_agent(), "codex")
+
+    def test_context_string_includes_agent_host_and_stays_valid(self):
+        env = {"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains", "DATAVERSE_PLUGIN_VERSION": "1.17.0"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            ctx = auth._operation_context_str("dv-query")
+            self.assertTrue(auth._CONTEXT_RE.match(ctx))
+            self.assertIn("agent=codex/jetbrains", ctx)
+
+    def test_build_operation_context_strips_suffix_when_sdk_rejects(self):
+        # An older installed SDK that rejects the "<agent>/<surface>" suffix must not
+        # break the op: auth.py strips the suffix and retries with the bare agent.
+        try:
+            from PowerPlatform.Dataverse.core import config as sdk_config
+        except Exception as exc:  # SDK not importable here -> can't exercise SDK path
+            self.skipTest(f"Dataverse SDK not importable: {exc}")
+        real_oc = sdk_config.OperationContext
+        seen = []
+
+        def fake_oc(user_agent_context):
+            seen.append(user_agent_context)
+            agent_val = user_agent_context.split("agent=", 1)[1].split(";", 1)[0]
+            if "/" in agent_val:
+                raise ValueError("old SDK rejects agent/surface suffix")
+            return real_oc(user_agent_context=user_agent_context)
+
+        env = {"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains", "DATAVERSE_PLUGIN_VERSION": "1.17.0"}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(sdk_config, "OperationContext", fake_oc):
+            auth._build_operation_context("dv-query")
+
+        self.assertEqual(len(seen), 2)
+        self.assertIn("agent=codex/jetbrains", seen[0])
+        self.assertIn("agent=codex", seen[1])
+        self.assertNotIn("/jetbrains", seen[1])
 
 
 class SilentChainReasons(_AuthTestBase):
