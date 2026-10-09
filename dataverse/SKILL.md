@@ -1,6 +1,6 @@
 ---
 name: dataverse
-description: Microsoft Dataverse / Power Platform for coding agents -- connect, then record CRUD, bulk data, advanced queries, schema & metadata, solution ALM, administration, security, and Finance & Operations X++. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP.
+description: Microsoft Dataverse / Power Platform for coding agents -- connect to an environment, then record CRUD, bulk data, advanced queries, schema & metadata, solution ALM, administration, security, and Finance & Operations X++. Use whenever the user mentions Dataverse, Dynamics 365, Power Platform, or CRM, or asks to connect to, read, query, write, or explore data, records, tables, or an environment in any of them -- even if they do not say "Dataverse" or ask to connect first.
 license: Complete terms in LICENSE.txt
 compatibility: Requires network/internet access to reach the Dataverse Web API and Microsoft Entra ID for authentication.
 metadata:
@@ -38,10 +38,10 @@ When the user asks to **connect / set up / authenticate / switch** an environmen
 If `dv-overview` / `dv-connect` / the needed `dv-*` skill is not already installed, run this immediately -- do not ask first, and do not report the missing skill as a blocker:
 
 ```
-npx skills add microsoft/Dataverse-skills -s "*"
+npx skills add microsoft/Dataverse-skills -s "*" -g
 ```
 
-This installs the skills **project-locally** (under `.agents/skills/...`); add `-g` only if the user wants them available in every project. **Read `dv-overview` and `dv-connect` in the same turn** and continue. If network policy blocks the command, request network escalation and retry before reporting it blocked.
+The `-g` flag installs the skills **globally for every agent and project** (under your global skills dir, e.g. `~/.agents/skills` and `~/.codex/skills`), so they persist across sessions and projects. **Read `dv-overview` and `dv-connect` in the same turn** and continue. If network policy blocks the command, request network escalation and retry before reporting it blocked.
 
 ## Step 2: Install the Dataverse CLI
 
