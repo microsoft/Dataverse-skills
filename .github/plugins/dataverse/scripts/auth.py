@@ -837,16 +837,14 @@ _ALLOWED_AGENTS = frozenset({
     "claude-code", "copilot", "cursor", "codex", "gemini-cli",
     "antigravity-cli", "unknown",
 })
-# IDE / surface the install runs under. When known, it is appended to the agent
-# value as a "/<host>" suffix (e.g. "codex/jetbrains") so the marker lives inside
-# the always-present agent field rather than a separate, mostly-empty key.
-_ALLOWED_HOSTS = frozenset({
-    "jetbrains", "vscode", "cli",
-})
 # Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
 _CONTEXT_RE = re.compile(
     r"^[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+(;[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+)*$"
 )
+# Charset for the optional "<agent>/<surface>" suffix. The IDE surface is not
+# enumerated -- it only needs to be charset-safe (no spaces/PII), so a new surface
+# needs no code change.
+_SAFE_VALUE_RE = re.compile(r"[a-zA-Z0-9_.-]+")
 
 
 _PLUGIN_VERSION_CACHE = None
@@ -906,19 +904,20 @@ def _resolve_manifest_version():
 
 
 def _current_agent():
-    """Return the attribution agent, with an optional "/<host>" suffix, fail-open.
+    """Return the attribution agent, with an optional "/<surface>" suffix, fail-open.
 
-    dv-connect writes DATAVERSE_PLUGIN_AGENT into .env. It is normally a bare agent
-    (e.g. "codex"); on a detected IDE surface it carries a host suffix
-    (e.g. "codex/jetbrains"). Both halves are validated against closed allowlists;
-    anything unrecognized is coerced/dropped rather than raised -- telemetry
-    attribution must never gate the user's data operation.
+    dv-connect writes DATAVERSE_PLUGIN_AGENT -- a bare agent (e.g. "codex") or, on a
+    detected IDE surface, "<agent>/<surface>" (e.g. "codex/jetbrains"). The base is
+    validated against the agent allowlist; the surface suffix only needs to be
+    charset-safe (it is not enumerated, so a new surface needs no code change).
+    Anything unrecognized is coerced/dropped rather than raised -- attribution must
+    never gate the data operation.
     """
     raw = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
-    base, sep, host = raw.partition("/")
+    base, sep, surface = raw.partition("/")
     base = base if base in _ALLOWED_AGENTS else "unknown"
-    if sep and host in _ALLOWED_HOSTS:
-        return f"{base}/{host}"
+    if sep and _SAFE_VALUE_RE.fullmatch(surface):
+        return f"{base}/{surface}"
     return base
 
 
@@ -929,14 +928,12 @@ def _validate_skill(skill):
 
 
 def _operation_context_str(skill):
-    """Assemble the closed-schema attribution string, fail-open.
+    """Assemble the attribution string, fail-open.
 
-    agent/version are already coerced to allow-listed / charset-safe values (the
-    agent may carry a validated "/<host>" suffix), so the result satisfies
-    _CONTEXT_RE. The final check is a defensive net: on any mismatch it degrades to
-    a minimal safe context instead of raising, so a bad attribution value can never
-    block the call. `skill` is a plugin-authored literal validated strictly by the
-    public entry points.
+    agent/version are already allow-listed / charset-safe (the agent may carry a
+    "<agent>/<surface>" suffix), so the result satisfies _CONTEXT_RE. The final
+    check is a defensive net: on any mismatch it degrades to a minimal safe context
+    instead of raising, so a bad attribution value can never block the call.
     """
     ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
     if not _CONTEXT_RE.match(ctx_str):
@@ -946,24 +943,18 @@ def _operation_context_str(skill):
 
 
 def _build_operation_context(skill):
-    """Build the operation_context for the SDK.
+    """Build the operation_context for the SDK, fail-open.
 
-    SECURITY: Only closed-schema values from _ALLOWED_SKILLS, _ALLOWED_AGENTS, and
-    _ALLOWED_HOSTS reach the string; agent/host/version are coerced (never passed
-    through raw), so nothing un-allow-listed is written to HTTP headers or
-    server-side telemetry.
-
-    Forward-compatible, fail-open: an older installed SDK may not yet accept the
-    agent "/<host>" suffix and would raise. In that case we strip the suffix and
-    retry with the bare agent, so attribution degrades gracefully and never gates
-    the data operation.
+    An older installed SDK may not yet accept the "<agent>/<surface>" suffix and
+    would raise. In that case strip the suffix and retry with the bare agent, so
+    attribution degrades gracefully and never gates the data operation.
     """
     ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
     try:
         return OperationContext(user_agent_context=ctx_str)
     except ValueError:
-        base_ctx = re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_-]+", r"\1", ctx_str)
+        base_ctx = re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_.-]+", r"\1", ctx_str)
         return OperationContext(user_agent_context=base_ctx)
 
 

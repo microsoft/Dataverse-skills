@@ -535,10 +535,16 @@ class AgentAttributionFailOpen(_AuthTestBase):
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "cursor"}, clear=True):
             self.assertEqual(auth._current_agent(), "cursor")
 
-    def test_unrecognized_agent_coerced_to_unknown_not_raised(self):
-        # LLM host misdetection ('github-copilot', 'claude', 'windsurf', ...) must
-        # never raise -- telemetry can't gate the user's data op. Coerce to unknown.
-        for bad in ("github-copilot", "claude", "vscode", "windsurf", ""):
+    def test_unsafe_agent_coerced_to_unknown_not_raised(self):
+        # A value with spaces / PII punctuation / separators can never raise --
+        # telemetry can't gate the user's data op. Coerce to unknown.
+        for bad in ("has space", "a@b.com", "x!y", "a;b", ""):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_unrecognized_base_agent_coerced_to_unknown(self):
+        # The base agent stays enumerated: an unrecognized base coerces to unknown.
+        for bad in ("windsurf", "github-copilot", "some-future-agent"):
             with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
                 self.assertEqual(auth._current_agent(), "unknown")
 
@@ -564,16 +570,21 @@ class AgentAttributionFailOpen(_AuthTestBase):
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains"}, clear=True):
             self.assertEqual(auth._current_agent(), "codex/jetbrains")
 
-    def test_unrecognized_host_suffix_is_dropped(self):
-        # IDE misdetection ('pycharm', 'rider', ...) drops the suffix, keeping the
-        # base agent -- attribution must never gate the user's data op.
-        for bad in ("pycharm", "rider", "intellij", ""):
-            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": f"codex/{bad}"}, clear=True):
-                self.assertEqual(auth._current_agent(), "codex")
+    def test_surface_suffix_not_enumerated(self):
+        # The surface suffix is not enumerated -- any charset-safe surface on a
+        # recognized base passes through unchanged (no code change per new IDE).
+        for good in ("codex/jetbrains", "codex/pycharm", "copilot/vscode"):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": good}, clear=True):
+                self.assertEqual(auth._current_agent(), good)
 
-    def test_unrecognized_base_agent_coerced_but_host_kept(self):
+    def test_unrecognized_base_keeps_safe_surface(self):
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "windsurf/jetbrains"}, clear=True):
             self.assertEqual(auth._current_agent(), "unknown/jetbrains")
+
+    def test_unsafe_surface_suffix_dropped(self):
+        for bad in ("codex/bad surface", "codex/", "codex/a@b"):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "codex")
 
     def test_bare_agent_has_no_suffix(self):
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "codex"}, clear=True):
@@ -587,8 +598,8 @@ class AgentAttributionFailOpen(_AuthTestBase):
             self.assertIn("agent=codex/jetbrains", ctx)
 
     def test_build_operation_context_strips_suffix_when_sdk_rejects(self):
-        # An older installed SDK that rejects the agent "/host" suffix must not break
-        # the op: auth.py strips the suffix and retries with the bare agent.
+        # An older installed SDK that rejects the "<agent>/<surface>" suffix must not
+        # break the op: auth.py strips the suffix and retries with the bare agent.
         try:
             from PowerPlatform.Dataverse.core import config as sdk_config
         except Exception as exc:  # SDK not importable here -> can't exercise SDK path
@@ -600,7 +611,7 @@ class AgentAttributionFailOpen(_AuthTestBase):
             seen.append(user_agent_context)
             agent_val = user_agent_context.split("agent=", 1)[1].split(";", 1)[0]
             if "/" in agent_val:
-                raise ValueError("old SDK rejects agent/host suffix")
+                raise ValueError("old SDK rejects agent/surface suffix")
             return real_oc(user_agent_context=user_agent_context)
 
         env = {"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains", "DATAVERSE_PLUGIN_VERSION": "1.17.0"}
