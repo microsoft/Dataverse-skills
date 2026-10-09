@@ -79,7 +79,7 @@ When the user says "top N" without giving a ranking, pick a sensible sort (e.g. 
 
 Do this only when the user wants in-agent Dataverse **tools** (MCP) or **bulk / analytics** via the Python SDK. Neither is required for CLI reads.
 
-- **MCP:** set `MCP_CLIENT_ID` in `.env` (Copilot `aebc6443-996d-45c2-90f0-388ff96faa56`; Claude / Cursor / Codex `0c412cc3-0dd6-449b-987f-05b053db9457`), register `npx @microsoft/dataverse mcp <url>` in the agent's MCP config (`.mcp.json` for Copilot, `claude mcp add` for Claude, `~/.cursor/mcp.json` for Cursor, `~/.codex/config.toml` for Codex), then allowlist with `python scripts/enable-mcp-client.py`. The agent must restart before MCP tools load. Tenant admin consent gates **MCP registration only** -- CLI reads may proceed from the authenticated profile while consent is pending.
+- **MCP:** set `MCP_CLIENT_ID` in `.env` (Copilot `aebc6443-996d-45c2-90f0-388ff96faa56`; Claude / Cursor / Codex `0c412cc3-0dd6-449b-987f-05b053db9457`), register `npx @microsoft/dataverse mcp <url>` in the agent's MCP config (`.mcp.json` for Copilot, `claude mcp add` for Claude, `~/.cursor/mcp.json` for Cursor, `~/.codex/config.toml` for Codex), then allowlist with `dataverse mcp allow <MCP_CLIENT_ID>` (or `python scripts/enable-mcp-client.py` if `dv-connect` fetched it). The agent must restart before MCP tools load. Tenant admin consent gates **MCP registration only** -- CLI reads may proceed from the authenticated profile while consent is pending.
 - **Python SDK:** `pip install --upgrade PowerPlatform-Dataverse-Client python-dotenv azure-identity msal msal-extensions requests pandas`.
 
 ## Connection states (report precisely -- do not conflate)
@@ -95,6 +95,6 @@ Never claim MCP is connected just because CLI auth succeeded.
 
 Set `DATAVERSE_PLUGIN_HOST=jetbrains` in `.env`; `scripts/auth.py` stamps `host=jetbrains` into the operation-context so Dataverse telemetry attributes the traffic to JetBrains. Use the **verified** plugin version in any attribution context (read it from the plugin manifest) -- never guess it.
 
-## Bundled scripts
+## Helper scripts
 
-`scripts/auth.py` (auth + attribution) and `scripts/enable-mcp-client.py` (MCP allowlist) ship with this tile. A skills-only install (`npx skills add`) may not include them -- confirm the file exists before running it, and if it is missing, retrieve the official copy per `dv-connect/references/helper-scripts.md`. Do not imply `auth.py` ran if Python is absent.
+`scripts/auth.py` (auth + attribution) and `scripts/enable-mcp-client.py` (MCP allowlist) are **not bundled with this tile** -- the `dv-connect` skill fetches them from canonical (`microsoft/Dataverse-skills`) into the project `scripts/` directory at connect-time. Only the Python SDK path and the script-based MCP allowlist need them; CLI reads do not. If a task needs `scripts/auth.py` and it is absent, run `dv-connect` first. Do not imply `auth.py` ran if Python is absent.
