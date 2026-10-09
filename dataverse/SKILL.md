@@ -11,15 +11,11 @@ metadata:
 
 # Microsoft Dataverse
 
-## Overview
-
-Entry point for working with Microsoft Dataverse (Power Platform / Dynamics 365) from a coding agent. This skill introduces Dataverse, installs the full set of specialist skills, and connects your environment (CLI auth + MCP server). After setup, the agent routes to the specialist skill that fits the task.
-
-Dataverse work spans several capabilities, each a dedicated skill once installed:
+Entry point for working with Microsoft Dataverse (Power Platform / Dynamics 365) from a coding agent. It installs the specialist Dataverse skills, connects the environment, and routes each request to the right skill.
 
 | Need | Skill |
 | --- | --- |
-| Connect, authenticate, configure MCP, verify / troubleshoot the environment | `dv-connect` |
+| Connect, authenticate, configure MCP, verify / troubleshoot | `dv-connect` |
 | Record CRUD, bulk create/update/upsert, CSV / FK-ordered import | `dv-data` |
 | Reads & analytics -- OData, QueryBuilder, FetchXML, DataFrames | `dv-query` |
 | Schema -- tables, columns, relationships, forms, views | `dv-metadata` |
@@ -28,80 +24,77 @@ Dataverse work spans several capabilities, each a dedicated skill once installed
 | Security & access -- roles, users, business units | `dv-security` |
 | Finance & Operations X++ -- author, build, deploy | `erp-xpp` |
 
-**Execute the steps in order.** Each is idempotent -- skip it if it's already done.
+## How to use this skill (read first -- act, do not stall)
 
-## Step 1: Install the full Dataverse skill set
+When the user asks to **connect / set up / authenticate / switch** an environment, or to **read / query / write** Dataverse data:
 
-Install the specialist `dv-*` skills from the canonical repository so the agent can route to them:
+1. **Act now, in this turn.** Work through the steps below immediately. Do **not** stop or report a blocker because the specialist skills, the Dataverse CLI, Python, or MCP tools are missing -- **installing and authenticating them IS the task**, not a reason to stop.
+2. **Do not re-ask for what you were given.** If the request already contains the environment URL, use it.
+3. **A Dataverse CLI profile is enough** to authenticate AND answer data queries. The MCP server and Python SDK are **optional** -- never require them for a connect or a simple read.
+4. If a cached or stale skill path fails to resolve, find the active `dataverse` skill and continue from it.
+
+## Step 1: Install the specialist skills (run now)
+
+If `dv-overview` / `dv-connect` / the needed `dv-*` skill is not already installed, run this immediately -- do not ask first, and do not report the missing skill as a blocker:
 
 ```
 npx skills add microsoft/Dataverse-skills -s "*"
 ```
 
-Add `-g` to install globally across every project. This makes `dv-connect`, `dv-data`, `dv-query`, `dv-metadata`, `dv-solution`, `dv-admin`, `dv-security`, and `erp-xpp` available as routable skills. Once installed, defer to `dv-connect` for the full, per-agent setup matrix and troubleshooting; the steps below are the essential path.
+This installs the skills **project-locally** (under `.agents/skills/...`); add `-g` only if the user wants them available in every project. **Read `dv-overview` and `dv-connect` in the same turn** and continue. If network policy blocks the command, request network escalation and retry before reporting it blocked.
 
-## Step 2: Install tools
+## Step 2: Install the Dataverse CLI
 
 | Tool | Check | Install |
 | --- | --- | --- |
-| Node.js | `node --version` | required for the Dataverse CLI + MCP proxy |
+| Node.js | `node --version` | prerequisite for the CLI |
 | Dataverse CLI | `npm list -g @microsoft/dataverse` | `npm install -g @microsoft/dataverse@latest` (only if missing) |
-| Python 3 | `python --version` | required for the `dv-data` / `dv-query` SDK paths |
 
-Then install the Python dependencies used by the bundled scripts and the data/query skills:
+**Python is optional.** It is needed only for the Python SDK paths (`dv-data` / `dv-query` bulk + analytics) and `scripts/auth.py`. If Python is absent, continue with the CLI, note that the SDK path was skipped, and do not install an interpreter unless the task needs it.
 
-```
-pip install --upgrade PowerPlatform-Dataverse-Client python-dotenv azure-identity msal msal-extensions requests pandas
-```
-
-## Step 3: Authenticate
-
-The Dataverse CLI holds the token in a shared cache that the MCP server and the Python SDK both reuse -- one sign-in covers all three:
+## Step 3: Authenticate (CLI)
 
 ```
-dataverse auth create --environment <your-environment-url>            # interactive (WAM / browser)
-dataverse auth create --environment <your-environment-url> --deviceCode   # headless / SSH / remote
+dataverse auth create --environment <your-environment-url>
 ```
 
-Record `DATAVERSE_URL` and `TENANT_ID` in a project `.env`. If an admin-consent error appears, share the exact consent URL the CLI prints -- do not synthesize one.
+If interactive auth produces no prompt (a restricted or headless host), stop it and retry with `--deviceCode`, then share the device code with the user. Record `DATAVERSE_URL` and `TENANT_ID` in a project `.env`. If an admin-consent error appears, share the exact consent URL the CLI prints -- never synthesize one.
 
-## Step 4: Register the MCP server
-
-The MCP server is the `@microsoft/dataverse` stdio proxy. Set `MCP_CLIENT_ID` in `.env` by agent:
-
-- **GitHub Copilot** -> `aebc6443-996d-45c2-90f0-388ff96faa56`
-- **Claude / Cursor / Codex** -> `0c412cc3-0dd6-449b-987f-05b053db9457` (all use the npx stdio proxy, which authenticates as the Dataverse CLI app)
-
-Register the server in the agent's MCP config (e.g. `.mcp.json` for Copilot, `claude mcp add` for Claude, `~/.cursor/mcp.json` for Cursor, `~/.codex/config.toml` for Codex), pointing at:
+## Step 4: Verify, then serve the request
 
 ```
-npx @microsoft/dataverse mcp <your-environment-url>
+dataverse auth who       # confirms the profile + environment
+dataverse org who        # confirms the data plane
 ```
 
-Then allowlist the client for the environment:
+Once the profile targets the right environment, **you are connected for CLI data work** -- route to the specialist skill and answer the request now. Example read:
 
 ```
-python scripts/enable-mcp-client.py
+dataverse data query --sql "SELECT TOP 10 firstname, lastname FROM contact WHERE lastname LIKE 'A%' ORDER BY lastname, firstname" --json
 ```
 
-## Step 5: Telemetry attribution (JetBrains)
+When the user says "top N" without giving a ranking, pick a sensible sort (e.g. alphabetical) and state which you used.
 
-Inside a JetBrains IDE, tag Dataverse calls with `host=jetbrains`:
+## Step 5 (optional): MCP server + Python SDK
 
-- Write `DATAVERSE_PLUGIN_HOST=jetbrains` into the project `.env`.
-- `scripts/auth.py` reads it and stamps `host=jetbrains` into the operation-context on every call, so Dataverse telemetry attributes the traffic to JetBrains.
+Do this only when the user wants in-agent Dataverse **tools** (MCP) or **bulk / analytics** via the Python SDK. Neither is required for CLI reads.
 
-## Step 6: Verify
+- **MCP:** set `MCP_CLIENT_ID` in `.env` (Copilot `aebc6443-996d-45c2-90f0-388ff96faa56`; Claude / Cursor / Codex `0c412cc3-0dd6-449b-987f-05b053db9457`), register `npx @microsoft/dataverse mcp <url>` in the agent's MCP config (`.mcp.json` for Copilot, `claude mcp add` for Claude, `~/.cursor/mcp.json` for Cursor, `~/.codex/config.toml` for Codex), then allowlist with `python scripts/enable-mcp-client.py`. The agent must restart before MCP tools load. Tenant admin consent gates **MCP registration only** -- CLI reads may proceed from the authenticated profile while consent is pending.
+- **Python SDK:** `pip install --upgrade PowerPlatform-Dataverse-Client python-dotenv azure-identity msal msal-extensions requests pandas`.
 
-```
-dataverse org who            # prints the signed-in user + environment
-python scripts/auth.py --check   # confirms the data plane is reachable
-```
+## Connection states (report precisely -- do not conflate)
 
-If both succeed, you're connected. Route to the specialist skill for the task (`dv-data`, `dv-query`, `dv-metadata`, ...); run `dv-connect` for deeper setup, environment switching, or connection troubleshooting.
+- **CLI authenticated** -- `dataverse auth who` shows the intended URL + user.
+- **Data-plane reachable** -- a real read succeeds (e.g. a small `dataverse data query`).
+- **MCP configured** -- client allowlisted, GA validation passes, host config points at the URL (a Preview `403` is expected when GA is valid).
+- **MCP loaded** -- the agent was restarted and now exposes the Dataverse tools.
+
+Never claim MCP is connected just because CLI auth succeeded.
+
+## Telemetry attribution (JetBrains)
+
+Set `DATAVERSE_PLUGIN_HOST=jetbrains` in `.env`; `scripts/auth.py` stamps `host=jetbrains` into the operation-context so Dataverse telemetry attributes the traffic to JetBrains. Use the **verified** plugin version in any attribution context (read it from the plugin manifest) -- never guess it.
 
 ## Bundled scripts
 
-- `scripts/auth.py` -- shared authentication + telemetry attribution. Reads `.env`, reuses the Dataverse CLI token cache (via MSAL), and stamps the operation-context (`app`, `skill`, `agent`, `host`).
-- `scripts/enable-mcp-client.py` -- allowlists the agent's MCP client ID for the environment.
-- `scripts/requirements.txt` -- pinned Python dependencies for the scripts above.
+`scripts/auth.py` (auth + attribution) and `scripts/enable-mcp-client.py` (MCP allowlist) ship with this tile. A skills-only install (`npx skills add`) may not include them -- confirm the file exists before running it, and if it is missing, retrieve the official copy per `dv-connect/references/helper-scripts.md`. Do not imply `auth.py` ran if Python is absent.
