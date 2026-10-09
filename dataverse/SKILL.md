@@ -1,6 +1,6 @@
 ---
 name: dataverse
-description: Microsoft Dataverse / Power Platform for coding agents -- connect to an environment, then record CRUD, bulk data, queries & analytics (pandas DataFrames, Jupyter notebooks), schema & metadata, solution ALM, administration, security, Python-SDK / Web-API app development, and Finance & Operations X++. Use whenever the user mentions Dataverse, Dynamics 365, Power Platform, or CRM, or asks to connect to, read, query, analyze, visualize, write, build an app or notebook against, or explore data, records, tables, or an environment in any of them -- even if they do not say "Dataverse" or ask to connect first.
+description: Microsoft Dataverse / Power Platform for coding agents -- connect to an environment, then record CRUD, bulk data, queries & analytics (pandas DataFrames, Jupyter notebooks), schema & metadata, solution ALM, administration, security, plug-in / custom-API / .NET (IOrganizationService) and Python-SDK / Web-API development, and Finance & Operations X++. Use whenever the user mentions Dataverse, Dynamics 365, Power Platform, or CRM, or asks to connect to, read, query, analyze, write, build an app / notebook / plugin / custom API against, register components on, or explore data, records, tables, entities, or an environment in any of them -- even if they do not say "Dataverse" or ask to connect first.
 license: Complete terms in LICENSE.txt
 compatibility: Requires network/internet access to reach the Dataverse Web API and Microsoft Entra ID for authentication.
 metadata:
