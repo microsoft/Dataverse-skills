@@ -984,12 +984,15 @@ def _emit_raw_fallback_hint():
     if _RAW_FALLBACK_HINT_EMITTED or os.environ.get("DATAVERSE_SUPPRESS_FALLBACK_HINT"):
         return
     _RAW_FALLBACK_HINT_EMITTED = True
-    print(
-        "[dataverse-skills] get_plugin_headers() is the raw Web API FALLBACK. "
-        "Prefer get_client() (SDK) for record CRUD, queries, bulk delete, batching, "
-        "and metadata; use raw HTTP only for genuine gaps (unbound actions, global option sets).",
-        file=sys.stderr,
-    )
+    try:
+        print(
+            "[dataverse-skills] get_plugin_headers() is the raw Web API FALLBACK. "
+            "Prefer get_client() (SDK) for record CRUD, queries, bulk delete, batching, "
+            "and metadata; use raw HTTP only for genuine gaps (unbound actions, global option sets).",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass  # best-effort diagnostic; must never break header construction
 
 
 def get_plugin_headers(skill, token=None):

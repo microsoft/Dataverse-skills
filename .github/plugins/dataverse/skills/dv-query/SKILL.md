@@ -263,10 +263,10 @@ for r in client.records.list(
 
 ## Advanced query patterns (raw Web API)
 
-`$apply` aggregation and N:N `$expand` on the OData path are raw-only. Note the SDK **does** cover most aggregation/joins — `client.query.sql()` (INNER/LEFT JOIN, GROUP BY, COUNT/SUM/AVG) and `client.query.fetchxml()` (aggregate + link-entity). Reach for raw Web API only for the `$apply` transform and N:N `$expand`. See [`references/web-api-advanced.md`](references/web-api-advanced.md) for full code samples.
+The raw OData `$apply` transform is the one pattern with no SDK method. The SDK **does** cover aggregation/joins — `client.query.sql()` (INNER/LEFT JOIN, GROUP BY, COUNT/SUM/AVG) and `client.query.fetchxml()` (aggregate + link-entity) — and N:N `$expand` reads via `client.records.list(<table>, expand=["<n:n_nav>"])` or `client.query.builder(<table>).expand(...)`. Reach for raw Web API only for the `$apply` transform. See [`references/web-api-advanced.md`](references/web-api-advanced.md) for full code samples.
 
 **Quick reference:**
-- **`$expand` on N:N relationships:** `GET /<entitySet>?$expand=<n:n_nav>($select=...)` — single page only; follow `@odata.nextLink` for >5,000 results.
+- **`$expand` on N:N relationships:** prefer SDK `client.records.list(<table>, expand=["<n:n_nav>"])` / `builder().expand()`. Raw form: `GET /<entitySet>?$expand=<n:n_nav>($select=...)` — single page only; follow `@odata.nextLink` for >5,000 results.
 - **`$apply` for aggregations:** runs server-side, returns grouped results in one call. Patterns: `groupby((col),aggregate(metric with sum as total))`, `aggregate($count as count)`, `aggregate(amount with average as avg)`. 50K source-record limit.
 - **Cross-table aggregation:** `$apply` only works within one entity set. Prefer `client.query.sql()` (INNER/LEFT JOIN + GROUP BY) or `fetchxml()` link-entity; else pull each table via `client.query.builder(t).select(...).execute().to_dataframe()` → `pd.merge()` → `groupby()`. Always pass `select`; without it transfers 10-20x more data.
 

@@ -38,6 +38,8 @@ with urllib.request.urlopen(req, timeout=150) as resp:
 **For aggregation ("total by group", "top N", "count/sum/avg per category"), the SDK is the path** — `client.query.fetchxml()` runs server-side aggregates (count/sum/avg/min/max), group-by, and joins with no raw HTTP:
 
 ```python
+import os, sys
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
 from auth import get_client
 client = get_client("dv-query")
 
