@@ -13,7 +13,7 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
 **PyPI package:** `PowerPlatform-Dataverse-Client` (this is the only official one — do not use `dataverse-api` or other unofficial packages)
-**Status:** GA (`1.0.0`, Production/Stable)
+**Status:** GA (`1.1.0`, Production/Stable)
 
 ## Skill boundaries
 
@@ -56,7 +56,7 @@ import requests                        # WRONG for SDK-supported ops
 - Record writes: create, update, delete
 - Record reads within write workflows (e.g., lookup resolution) — for standalone queries see **dv-query**
 - Upsert (with alternate key support)
-- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
+- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`, bulk delete (`records.delete(table, [ids])` runs the server-side BulkDelete action), multi-operation batching (`client.batch`)
 - File column uploads (chunked for files >128MB)
 - Context manager with HTTP connection pooling
 
@@ -67,7 +67,6 @@ Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modi
 - N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
-- DeleteMultiple, general OData batching
 
 ### Dataverse CLI data examples (copy-paste ready)
 
@@ -188,7 +187,12 @@ client.records.update("new_ticket", "<record-guid>",
 ## Delete a Record
 
 ```python
+# Single record
 client.records.delete("new_ticket", "<record-guid>")
+
+# Bulk delete — pass a list of ids; runs the server-side BulkDelete action (one async job, not N calls)
+job_id = client.records.delete("new_ticket", [id1, id2, id3])
+# use_bulk_delete=False deletes each id sequentially instead
 ```
 
 ---
