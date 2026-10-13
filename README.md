@@ -46,6 +46,26 @@ The per-marketplace installs below are alternatives for agents that have a dedic
 
 ### GitHub Copilot
 
+The plugin is listed in the official [copilot-plugins](https://github.com/github/copilot-plugins) marketplace.
+
+**VS Code**
+
+1. Open the Extensions view and search for `@agentPlugins`, or open **Agent Customizations** from the gear menu in the Chat view and select **Plugins**.
+2. Search for **Dataverse** and install `dataverse`.
+
+VS Code includes the `copilot-plugins` marketplace by default.
+
+**Copilot CLI**
+
+The CLI registers only `awesome-copilot` by default, so add the official marketplace once, then install:
+
+```bash
+copilot plugin marketplace add github/copilot-plugins
+copilot plugin install dataverse@copilot-plugins
+```
+
+The plugin is also listed in `awesome-copilot`, so this works without adding a marketplace:
+
 ```bash
 /plugin install dataverse@awesome-copilot
 ```
