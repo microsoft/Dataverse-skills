@@ -195,4 +195,4 @@ It compares your branch to `main` and flags common mistakes — e.g., adding a n
 - Updating links or references
 - Refactors that preserve every routing trigger and behavior (e.g., splitting a long body into `references/`, deduplicating tables, rewording a description while preserving the same triggers)
 
-**Note:** No need to update the `version` field in the [awesome-copilot marketplace](https://github.com/github/awesome-copilot/blob/main/plugins/external.json). The entry there tracks the default branch of this repo, so version updates propagate automatically. The `version` field in awesome-copilot is cosmetic-only.
+**Note:** No need to update the `version` field in the [awesome-copilot marketplace](https://github.com/github/awesome-copilot/blob/main/plugins/external.json) or the [copilot-plugins marketplace](https://github.com/github/copilot-plugins/blob/main/.github/plugin/marketplace.json). Both entries track the default branch of this repo, so version updates propagate automatically. The `version` field in awesome-copilot is cosmetic-only.
