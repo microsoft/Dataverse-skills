@@ -64,7 +64,7 @@ import requests                        # WRONG for SDK-supported ops
 
 Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
+- N:N record association — CLI `dataverse data associate`. There is no `client.records.associate`; a lookup (1:N, e.g. contact → parent account) is not a gap — use `dataverse data associate` or `client.records.update` (see [Link existing records](#link-existing-records-lookup))
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 
@@ -162,6 +162,18 @@ print(f"Created: {guid}")
 | Custom: `new_AccountId` | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
 | System polymorphic: `customerid` | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
 | System: `parentcustomerid` | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
+
+### Link existing records (lookup)
+
+To link records that already exist, update the child's lookup with the real IDs returned by create — do not hand-build a `$ref` request:
+
+```python
+client.records.update("contact", contact_id, {
+    "parentcustomerid_account@odata.bind": f"/accounts({account_id})",
+})
+```
+
+CLI: `dataverse data associate` (example above) works for lookups as well as N:N.
 
 ### Find the Navigation Property Name
 
