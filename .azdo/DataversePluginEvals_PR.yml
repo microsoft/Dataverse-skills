@@ -4,8 +4,8 @@
 # Pull request evaluation gate for the Dataverse skills plugin.
 #
 # This file only declares when the gate runs. The evaluation itself (test
-# corpus, agent model, runner version and secrets) is defined in the template
-# referenced below, so changes to the evaluation do not require changes here.
+# corpus, agent, model and runner) is defined in the template referenced
+# below, so changes to the evaluation do not require changes here.
 
 trigger:
   branches:
