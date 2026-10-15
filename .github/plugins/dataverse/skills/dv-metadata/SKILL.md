@@ -154,7 +154,7 @@ created = client.tables.add_columns(
 print(created)  # ['new_Description', 'new_Amount', 'new_Active']
 ```
 
-Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
+Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets). `"money"` is a `"decimal"` alias, **not** currency ([currency-columns](references/currency-columns.md)).
 
 **Choice (picklist) column via SDK:**
 
@@ -164,24 +164,20 @@ from enum import IntEnum
 class BudgetStatus(IntEnum):
     DRAFT = 100000000
     APPROVED = 100000001
-    REJECTED = 100000002
 
-created = client.tables.add_columns(
-    "new_ProjectBudget",
-    {"new_Status": BudgetStatus},
-)
+created = client.tables.add_columns("new_ProjectBudget", {"new_Status": BudgetStatus})
 ```
 
 **Set constraints — pass a dict spec** instead of a bare type string (keys: `max_length`, `min_value`, `max_value`, `precision`, `format`, `required`, `display_name`); works on `create` and `add_columns`, no raw Web API:
 
 ```python
 client.tables.add_columns("new_ProjectBudget", {
-    "new_Amount":  {"type": "money", "min_value": 0, "max_value": 1000000000, "precision": 2},
+    "new_Amount":  {"type": "decimal", "min_value": 0, "max_value": 1000000000, "precision": 2},
     "new_Comment": {"type": "memo", "max_length": 2000, "display_name": "Comment"},
 })
 ```
 
-Change an existing column in place with `update_column(table, col, spec)` or `update_columns(table, {col: spec})` — same keys; all specs are validated before any write.
+Change an existing column with `update_column(table, col, spec)` or `update_columns(table, {col: spec})` — same keys, validated before any write.
 
 ---
 
