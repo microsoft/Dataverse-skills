@@ -154,7 +154,7 @@ created = client.tables.add_columns(
 print(created)  # ['new_Description', 'new_Amount', 'new_Active']
 ```
 
-Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
+Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets). `"money"` is only an alias for `"decimal"` and does **not** create a currency column — for currency/money/cost columns see [references/currency-columns.md](references/currency-columns.md).
 
 **Choice (picklist) column via SDK:**
 
@@ -176,7 +176,7 @@ created = client.tables.add_columns(
 
 ```python
 client.tables.add_columns("new_ProjectBudget", {
-    "new_Amount":  {"type": "money", "min_value": 0, "max_value": 1000000000, "precision": 2},
+    "new_Amount":  {"type": "decimal", "min_value": 0, "max_value": 1000000000, "precision": 2},
     "new_Comment": {"type": "memo", "max_length": 2000, "display_name": "Comment"},
 })
 ```
