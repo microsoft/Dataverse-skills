@@ -49,7 +49,7 @@ If no MCP tool is found, check for an existing CLI profile — it's the fastest 
 dataverse auth who
 ```
 
-If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect" or "set up" requests, run `dv-connect` regardless — it configures MCP, SDK, and PAC.
+If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect", "set up", or "verify connection" requests, run `dv-connect` regardless.
 
 If no CLI profile exists, check workspace init:
 
