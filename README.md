@@ -171,6 +171,12 @@ The plugin is designed around a least-privilege model — it cannot exceed the p
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 
+## Evaluation
+
+Pull requests targeting `main` run automated dry-run evaluations in addition to the repository's static checks. During the evaluation-pipeline migration, both the existing and replacement gates run against the exact pull-request revision.
+
+The evaluation corpus and orchestration are maintained in Microsoft engineering infrastructure rather than shipped as part of this public plugin repository. Contributors do not need access to that infrastructure: run `python .github/evals/static_checks.py` locally, exercise the changed skill with a representative prompt, and use the checks reported on the pull request as the authoritative evaluation result.
+
 ## Contributing
 
 We welcome contributions — new skills, improvements to existing ones, and bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and local-development instructions.
