@@ -140,6 +140,14 @@ Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
 select an environment and register the Dataverse MCP server with `agy mcp add`;
 verify it with `agy mcp list` after restarting.
 
+### Neotask
+
+Install from [Neotask Construct](https://construct.neotask.ai/p/microsoft-dataverse):
+
+```bash
+neotask construct install microsoft-dataverse
+```
+
 ## Verify the install
 
 After installation, ask your agent:
