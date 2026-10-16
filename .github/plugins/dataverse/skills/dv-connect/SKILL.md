@@ -164,6 +164,8 @@ agent_host = {
     "codex": "codex", "gemini": "gemini-cli",
     "antigravity": "antigravity-cli",
 }.get(tool_type, "unknown")
+ide = "<jetbrains if a JetBrains install, else empty; see references/helper-scripts.md>"
+agent_host += f"/{ide}" if ide else ""
 
 with open(".env", "w") as f:
     f.write(f"DATAVERSE_URL={dataverse_url}\n")
