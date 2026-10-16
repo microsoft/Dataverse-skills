@@ -285,7 +285,10 @@ def check_auth_patterns(name, text):
                 f"use sys.path.insert + 'from auth import'"
             )
 
-        # EVAL-AUTH-02: get_token/urllib blocks must justify why SDK cannot be used
+        # EVAL-AUTH-02: get_token/urllib blocks must justify why the raw fallback
+        # is used. Accurate fallback framing (unbound action / SDK gap / fallback)
+        # is accepted so authors need NOT write a false "SDK does not support X"
+        # claim just to pass this gate -- that forcing produced stale claims.
         uses_raw_http = ("get_token" in block or "urllib.request" in block)
         if uses_raw_http:
             has_justification = any(
@@ -295,12 +298,18 @@ def check_auth_patterns(name, text):
                     "SDK can't",
                     "SDK does not support",
                     "WRONG",
+                    "fallback",
+                    "unbound action",
+                    "no SDK method",
+                    "SDK gap",
+                    "last resort",
+                    "global option set",
                 ]
             )
             if not has_justification:
                 failures.append(
                     f"EVAL-AUTH-02 [{label}] uses get_token/urllib without justification "
-                    f"comment -- add '# SDK cannot/does not support <reason>' to the import line"
+                    f"comment -- add a reason (e.g. '# fallback: unbound action, no SDK method')"
                 )
 
     return failures
@@ -1215,6 +1224,41 @@ def check_cli_attribution(name, text):
 
 
 # ---------------------------------------------------------------------------
+# CAT-2b  Raw-fallback nudge guard
+# ---------------------------------------------------------------------------
+
+def check_fallback_nudge(repo_root):
+    """EVAL-AUTH-03: the shipped auth.py get_plugin_headers must stay framed as
+    the raw Web API FALLBACK that steers callers to the SDK (get_client).
+
+    get_plugin_headers is the single chokepoint for every hand-rolled urllib
+    request (it sets the ``Python-urllib`` User-Agent). Keeping its docstring
+    framed as a last-resort fallback -- naming get_client as the default -- is
+    what nudges an agent toward the SDK. This guards that framing against a
+    silent regression back to neutral/peer wording.
+    """
+    auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
+    try:
+        auth_text = auth_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, UnicodeDecodeError) as error:
+        return [f"EVAL-AUTH-03 [auth.py] cannot read: {error}"]
+    m = re.search(
+        r"def get_plugin_headers\([^)]*\):\s*\"\"\"(.*?)\"\"\"",
+        auth_text,
+        re.DOTALL,
+    )
+    if not m:
+        return ["EVAL-AUTH-03 [auth.py] get_plugin_headers docstring not found"]
+    doc = m.group(1)
+    if "FALLBACK" not in doc or "get_client" not in doc:
+        return [
+            "EVAL-AUTH-03 [auth.py] get_plugin_headers docstring must frame it as the "
+            "raw Web API FALLBACK and steer to get_client (the SDK)"
+        ]
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -1278,6 +1322,7 @@ def main():
     all_failures.extend(check_manifest_assets(repo_root))
     all_failures.extend(check_antigravity_plugin(repo_root))
     all_failures.extend(check_gemini_extension(repo_root))
+    all_failures.extend(check_fallback_nudge(repo_root))
 
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
