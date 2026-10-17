@@ -22,21 +22,20 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 1. **ERP MCP** for simple, interactive reads/writes. The Dataverse CLI ships an ERP MCP proxy — `dataverse mcp <erpUrl>` auto-routes to the ERP MCP endpoint when the URL host is an ERP host. One-time client allow-list via `dataverse mcp allow <appId> --erp --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"`. Setup is in `dv-connect`.
 
-2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD:
+2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD. Reads (**dv-query**):
    ```bash
    dataverse data query  --target erp --table <EntitySet> --select "..." [--cross-company] [--top 100] --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
    dataverse data get    --target erp --table <EntitySet> --key "<composite>" --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
    dataverse data count  --target erp --table <EntitySet> [--filter "..."] --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-   dataverse data create --target erp --table <EntitySet> --data '{...}' --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-   dataverse data update --target erp --table <EntitySet> --key "<composite>" --data '{...}' --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-   dataverse data delete --target erp --table <EntitySet> --key "<composite>" [--no-confirm] --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
    dataverse data describe --target erp --table <EntitySet> --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
    ```
    ERP URL is auto-discovered from the active auth profile — no separate connection step. `--json` is supported on read commands for script consumption.
 
+   Writes (`data create`, `data update`, `data delete` with `--target erp`), including previews of a write the user will run themselves: load **dv-data**. Its `references/erp-writes.md` holds the command templates, the composite-key format and the attribution; they are deliberately not repeated here.
+
 3. **`dataverse api invoke --target erp`** for ERP Custom Services (`/api/services/<group>/<service>/<operation>`) — these are the "unbound action" surface (ERP OData has no truly unbound actions; global ops live under `/api/services/`). Discovery uses `dataverse api list --target erp --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"` and `dataverse api describe --target erp --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"`. Add the same context to `invoke`. Use `erp:ServiceGroup/Service/Operation` syntax or pass `--service-group`/`--service` separately.
 
-4. **`dataverse erp batch list|cancel`** for ERP batch jobs on the linked ERP instance. Add `--context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`.
+4. **ERP batch jobs** (`dataverse erp batch list|cancel`) on the linked ERP instance: load **dv-admin**, which owns the options, ordering and attribution.
 
 5. **PAC CLI X++ lifecycle** for source models and deployable packages: `pac package init --package-type erp`, `pac tool xpp install`, `pac package compile --package-type erp`, `pac package deploy --package-type erp`, and `pac package db-sync`. Use **erp-xpp**.
 
