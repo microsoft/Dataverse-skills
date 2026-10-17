@@ -1,6 +1,6 @@
 ---
 name: dv-admin
-description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, manage retention policies, or list/cancel ERP batch jobs.
+description: Environment-level Dataverse administration — bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the 37 allowlisted PPAC toggles. Use when the user wants to clean up data at scale, configure audit, change environment settings, manage retention policies, or list/cancel ERP (Finance and Operations / F&O) batch jobs.
 ---
 
 # Skill: Environment Admin — Bulk Delete, Retention, Org Settings, OrgDB, Recycle Bin
