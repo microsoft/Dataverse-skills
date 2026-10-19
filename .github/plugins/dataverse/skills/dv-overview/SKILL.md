@@ -11,7 +11,7 @@ Load this skill first for any Dataverse work — it holds the cross-cutting cont
 
 ## What This Plugin Covers
 
-Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
+Dataverse / Power Platform skills serve builders, agent developers, data scientists, environment admins, and business users. Agents load them automatically from intent; users describe tasks without naming skills.
 
 | Area | Skill |
 | --- | --- |
@@ -21,6 +21,7 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
 | Finance and Operations X++ — author, build, deploy, DB sync, verify | `erp-xpp` |
+| ERP developer SQL — temporary credentials, sqlcmd | `erp-sql` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 
