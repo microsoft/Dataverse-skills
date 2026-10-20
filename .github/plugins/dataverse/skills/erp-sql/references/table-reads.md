@@ -62,7 +62,10 @@ Each command can open a new connection and encounter a different outbound IP.
 ## Output and query limits
 
 The preview deliberately uses the proven sqlcmd text path: `-h -1 -s "|" -W`
-with encryption, batch-error exit codes, and finite timeouts. Never combine
+with explicit UTF-8 output (`-f o:65001`), encryption, batch-error exit codes,
+and finite timeouts. SQL subprocess output is decoded strictly as UTF-8;
+invalid bytes cause a sanitized error instead of silently replacing characters.
+This avoids depending on the Windows console's legacy output code page. Never combine
 `-h -1` with `-y 0`; the local sqlcmd rejects that combination. Do not assume
 ordinary stdout is JSON or add a JSON parser to the text preview.
 

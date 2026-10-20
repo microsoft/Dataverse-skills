@@ -153,16 +153,21 @@ def diagnostic(output):
 def run_command(command, label, *, env=None, timeout=120):
     try:
         result = subprocess.run(
-            command, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", env=env, timeout=timeout, check=False,
+            command, capture_output=True, env=env, timeout=timeout, check=False,
             stdin=subprocess.DEVNULL,
         )
+        # Decode on this thread: Windows subprocess reader threads can swallow decoding errors.
+        errors = "strict" if label == "sqlcmd" else "replace"
+        stdout = result.stdout.decode("utf-8", errors=errors)
+        stderr = result.stderr.decode("utf-8", errors=errors)
     except subprocess.TimeoutExpired:
         raise ConnectionFailure(f"{label} timed out; output withheld.") from None
+    except UnicodeDecodeError:
+        raise ConnectionFailure(f"{label} returned invalid UTF-8; check output encoding. Output withheld.") from None
     except OSError:
         raise ConnectionFailure(f"{label} could not start; check its installation.") from None
     if result.returncode:
-        output = result.stdout + "\n" + result.stderr
+        output = stdout + "\n" + stderr
         if env and env.get("SQLCMDPASSWORD"):
             output = output.replace(env["SQLCMDPASSWORD"], "<redacted>")
         if label == "sqlcmd":
@@ -171,7 +176,7 @@ def run_command(command, label, *, env=None, timeout=120):
                 raise firewall_error
         detail = diagnostic(output)
         raise ConnectionFailure(f"{label} failed (exit {result.returncode}): {detail}.")
-    output = result.stdout
+    output = stdout
     if env and env.get("SQLCMDPASSWORD"):
         output = output.replace(env["SQLCMDPASSWORD"], "<redacted>")
     return output
@@ -259,7 +264,7 @@ def execute_sql(sqlcmd, credentials, statement):
     command = [
         sqlcmd, "-S", credentials["servername"], "-d", credentials["databasename"],
         "-U", credentials["sqljitusername"], "-N", "-b", "-l", "30", "-t", "30",
-        "-h", "-1", "-s", "|", "-W", "-w", "65535", "-x", "-Q", statement,
+        "-h", "-1", "-s", "|", "-W", "-w", "65535", "-f", "o:65001", "-x", "-Q", statement,
     ]
     try:
         login_retries = 0

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -170,7 +171,7 @@ class ContractTests(unittest.TestCase):
 
     def test_failed_command_and_timeout_do_not_leak_output(self):
         secret = credentials()["sqljitpassword"]
-        failed = subprocess.CompletedProcess(["fake"], 1, secret, "AADSTS50173 " + secret)
+        failed = subprocess.CompletedProcess(["fake"], 1, secret.encode(), ("AADSTS50173 " + secret).encode())
         with mock.patch.object(sql.subprocess, "run", return_value=failed):
             with self.assertRaises(sql.ConnectionFailure) as raised:
                 sql.run_command(["fake"], "JIT")
@@ -204,7 +205,7 @@ class ContractTests(unittest.TestCase):
                 f"40615 Client with IP address '1.1.1.1' is not allowed. "
                 f"secret={secret}"
             )
-            failed = subprocess.CompletedProcess(["sqlcmd"], 1, "", output)
+            failed = subprocess.CompletedProcess(["sqlcmd"], 1, b"", output.encode())
             with mock.patch.object(sql.subprocess, "run", return_value=failed):
                 with self.assertRaises(sql.SqlFirewallFailure) as raised:
                     sql.run_command(["sqlcmd"], "sqlcmd", env={"SQLCMDPASSWORD": secret})
@@ -485,6 +486,7 @@ class TableReadTests(unittest.TestCase):
         command = run.call_args.args[0]
         for flag in ("-N", "-b", "-h", "-W", "-x"):
             self.assertIn(flag, command)
+        self.assertEqual(command[command.index("-f") + 1], "o:65001")
         self.assertNotIn("-y", command)
         self.assertNotIn("-P", command)
         self.assertNotIn("SQLCMDPASSWORD", run.call_args.kwargs["env"])
@@ -492,7 +494,7 @@ class TableReadTests(unittest.TestCase):
     def test_sql_diagnostics_expose_codes_not_secret_text(self):
         for number, expected in (("208", "object not found"), ("229", "permission denied"), ("102", "syntax error")):
             secret = "do-not-print-this"
-            failed = subprocess.CompletedProcess(["sqlcmd"], 1, "", f"Msg {number}, Level 16, State 1\n{secret}")
+            failed = subprocess.CompletedProcess(["sqlcmd"], 1, b"", f"Msg {number}, Level 16, State 1\n{secret}".encode())
             with self.subTest(number=number), mock.patch.object(sql.subprocess, "run", return_value=failed):
                 with self.assertRaises(sql.ConnectionFailure) as raised:
                     sql.run_command(["sqlcmd"], "sqlcmd", env={"SQLCMDPASSWORD": secret})
@@ -501,10 +503,44 @@ class TableReadTests(unittest.TestCase):
         self.assertIn("incompatible", sql.diagnostic("Sqlcmd: The -h and the -y 0 options are mutually exclusive."))
 
     def test_successful_query_output_also_redacts_password(self):
-        result = subprocess.CompletedProcess(["sqlcmd"], 0, "value|test-secret\n", "")
+        result = subprocess.CompletedProcess(["sqlcmd"], 0, b"value|test-secret\n", b"")
         with mock.patch.object(sql.subprocess, "run", return_value=result):
             output = sql.run_command(["sqlcmd"], "sqlcmd", env={"SQLCMDPASSWORD": "test-secret"})
         self.assertEqual(output, "value|<redacted>\n")
+
+    def test_sql_utf8_survives_real_subprocess_boundary(self):
+        expected = "1|caf\u00e9|\u6771\u4eac|\U0001f600\n"
+        command = [
+            sys.executable, "-c",
+            f"import sys; sys.stdout.buffer.write(bytes.fromhex('{expected.encode('utf-8').hex()}'))",
+        ]
+        self.assertEqual(sql.run_command(command, "sqlcmd"), expected)
+
+    def test_non_utf8_sql_output_fails_without_leaking_bytes(self):
+        for stream in ("stdout", "stderr"):
+            with self.subTest(stream=stream):
+                command = [
+                    sys.executable, "-c",
+                    f"import sys; sys.{stream}.buffer.write(b'private-test-value\\x82')",
+                ]
+                with self.assertRaisesRegex(sql.ConnectionFailure, "invalid UTF-8") as raised:
+                    sql.run_command(command, "sqlcmd")
+                self.assertNotIn("private-test-value", str(raised.exception))
+
+    def test_execute_sql_requests_utf8_from_a_legacy_codepage_process(self):
+        real_run = subprocess.run
+        expected = "1|caf\u00e9\n"
+
+        def launch_fake_sqlcmd(command, **kwargs):
+            encoding = "utf-8" if "-f" in command and command[command.index("-f") + 1] == "o:65001" else "cp437"
+            payload = expected.encode(encoding).hex()
+            return real_run([
+                sys.executable, "-c",
+                f"import sys; sys.stdout.buffer.write(bytes.fromhex('{payload}'))",
+            ], **kwargs)
+
+        with mock.patch.object(sql.subprocess, "run", side_effect=launch_fake_sqlcmd):
+            self.assertEqual(sql.execute_sql("sqlcmd", credentials(), "SELECT 1;"), expected)
 
 
 if __name__ == "__main__":
