@@ -456,6 +456,8 @@ def connect(args):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+    sys.stderr.reconfigure(encoding="utf-8", errors="strict")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--discover-ip", action="store_true", help="Discover public IP only; no JIT grant or SQL connection")
     parser.add_argument("--environment")

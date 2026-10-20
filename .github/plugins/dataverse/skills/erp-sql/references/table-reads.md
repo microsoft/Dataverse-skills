@@ -65,7 +65,10 @@ The preview deliberately uses the proven sqlcmd text path: `-h -1 -s "|" -W`
 with explicit UTF-8 output (`-f o:65001`), encryption, batch-error exit codes,
 and finite timeouts. SQL subprocess output is decoded strictly as UTF-8;
 invalid bytes cause a sanitized error instead of silently replacing characters.
-This avoids depending on the Windows console's legacy output code page. Never combine
+The helper's CLI also configures stdout and stderr as UTF-8, including redirected
+output; launchers do not need to override Python's encoding. Consumers of captured
+output must decode it as UTF-8. This avoids depending on the Windows console's
+legacy output code page. Never combine
 `-h -1` with `-y 0`; the local sqlcmd rejects that combination. Do not assume
 ordinary stdout is JSON or add a JSON parser to the text preview.
 

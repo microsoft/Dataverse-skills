@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -541,6 +542,54 @@ class TableReadTests(unittest.TestCase):
 
         with mock.patch.object(sql.subprocess, "run", side_effect=launch_fake_sqlcmd):
             self.assertEqual(sql.execute_sql("sqlcmd", credentials(), "SELECT 1;"), expected)
+
+    def test_cli_prints_unicode_preview_and_errors_from_legacy_stdout(self):
+        expected = "caf\u00e9|\u6771\u4eac|\U0001f600"
+        for fail in (False, True):
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as directory:
+                driver = Path(directory) / "cli_output_test.py"
+                driver.write_text(f"""
+import sys
+from unittest import mock
+
+sys.path.insert(0, {str(SCRIPT.parent)!r})
+import connect as sql
+
+assert sys.stdout.encoding == "cp1252"
+assert sys.stderr.encoding == "cp1252"
+expected = {ascii(expected)}
+sys.argv = [
+    "connect.py", "--environment", {URL!r}, "--confirm-environment", {URL!r},
+    "--client-ip", {IP!r}, "--reason", "Output regression test",
+    "--role", "Reader", "--table", "dbo.BATCH", "--top", "1",
+]
+
+def local_connect(args):
+    if {fail!r}:
+        raise sql.ConnectionFailure(expected)
+    with mock.patch.object(sql, "execute_sql", side_effect=[
+        "dbo|BATCH|123\\n", "RECID|bigint\\nCAPTION|nvarchar\\n",
+        "1\\n", "1|" + expected + "\\n",
+    ]):
+        sql.read_table("sqlcmd", {{}}, args.table, args.top)
+
+with mock.patch.object(sql, "connect", side_effect=local_connect):
+    sys.exit(sql.main())
+""", encoding="ascii")
+                result = subprocess.run(
+                    [sys.executable, str(driver)], capture_output=True, timeout=30,
+                    env={**os.environ, "PYTHONIOENCODING": "cp1252:strict", "PYTHONUTF8": "0"},
+                )
+                stdout = result.stdout.decode("utf-8")
+                stderr = result.stderr.decode("utf-8")
+                self.assertEqual(result.returncode, int(fail), stderr)
+                if fail:
+                    self.assertEqual(stderr.strip(), "ERROR: " + expected)
+                    self.assertEqual(stdout, "")
+                else:
+                    self.assertIn("1|" + expected, stdout)
+                    self.assertIn("Table: [dbo].[BATCH]", stdout)
+                    self.assertEqual(stderr, "")
 
 
 if __name__ == "__main__":
