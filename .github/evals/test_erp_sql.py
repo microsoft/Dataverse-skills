@@ -60,6 +60,7 @@ class ContractTests(unittest.TestCase):
             {"sqljitexpiration": "2099-01-01T00:00:00"},
             {"sqljitexpiration": "invalid"}, {"servername": "host;bad"},
             {"sqljitpassword": ""}, {"sqljitusername": None},
+            {"ipaddress": "2606:4700:4700::1111"},
         ):
             with self.subTest(changes=changes), self.assertRaises(sql.ConnectionFailure):
                 sql.validate_credentials(credentials(**changes), IP, "Reader")
@@ -92,6 +93,7 @@ class ContractTests(unittest.TestCase):
             "8.8.8.9/29", "8.8.8.8-8.8.8.9-8.8.8.10", "8.8.8.8,8.8.8.9",
             "10.0.0.0/24", "9.255.255.255-10.0.0.1", "224.0.0.0/24",
             "2606:4700:4700::1111-2606:4700:4700::1112", "8.8.8.8-::1", "0.0.0.0/0",
+            "2606:4700:4700::1111", "::ffff:8.8.8.8", "2606:4700:4700::/120",
         ):
             with self.subTest(value=value), mock.patch.object(sql, "run_command") as run:
                 with self.assertRaises(sql.ConnectionFailure):
@@ -138,7 +140,7 @@ class ContractTests(unittest.TestCase):
         response.__enter__.return_value.read.assert_called_once_with(1025)
 
     def test_ip_discovery_rejects_bad_responses(self):
-        for body in (b"x" * 1025, b"not json", b'{"ip":"127.0.0.1"}', b"[]"):
+        for body in (b"x" * 1025, b"not json", b'{"ip":"127.0.0.1"}', b'{"ip":"2606:4700:4700::1111"}', b"[]"):
             response = mock.MagicMock()
             response.__enter__.return_value.read.return_value = body
             with self.subTest(body=body[:40]), mock.patch.object(sql, "urlopen", return_value=response):
@@ -356,6 +358,45 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaises(sql.ConnectionFailure):
                 sql.connect(self.args(confirm_environment="https://wrong.crm.dynamics.com"))
             run.assert_not_called()
+
+    def test_ipv6_stops_before_commands_or_grant(self):
+        with mock.patch.object(sql, "run_command") as run, mock.patch.object(sql, "request_credentials") as grant:
+            with self.assertRaisesRegex(sql.ConnectionFailure, "IPv4"):
+                sql.connect(self.args(client_ip="2606:4700:4700::1111"))
+            run.assert_not_called()
+            grant.assert_not_called()
+
+    def test_current_odbc_help_passes_preflight_and_retains_tls_flags(self):
+        value = credentials()
+        org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
+        with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+                with mock.patch.object(sql, "run_command", side_effect=[
+                    "Microsoft (R) SQL Server Command Line Tool\n[-N[s|m|o] Encrypt Connection]",
+                    json.dumps(org), "AxDB|temporary_reader\n",
+                ]) as run, mock.patch.object(sql, "request_credentials", return_value=value) as grant:
+                    with mock.patch.object(sql.time, "sleep"), redirect_stdout(io.StringIO()):
+                        sql.connect(self.args())
+        grant.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertIn("-N", command)
+        self.assertNotIn("-No", command)
+        self.assertNotIn("-C", command)
+        self.assertEqual(value, {})
+
+    def test_unsupported_sqlcmd_help_stops_before_grant(self):
+        for help_text in (
+            "sqlcmd (Go)\n-N Encrypt Connection",
+            "SQL Server Command Line Tool\n-N",
+            "SQL Server Command Line Tool\n-N[true|false|disable] Encrypt Connection",
+        ):
+            with self.subTest(help_text=help_text), mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
+                with mock.patch.object(sql, "run_command", return_value=help_text) as run:
+                    with mock.patch.object(sql, "request_credentials") as grant:
+                        with self.assertRaisesRegex(sql.ConnectionFailure, "ODBC"):
+                            sql.connect(self.args())
+                run.assert_called_once()
+                grant.assert_not_called()
 
     def test_preflight_must_succeed_before_grant(self):
         help_text = "SQL Server Command Line Tool\n-N Encrypt Connection"

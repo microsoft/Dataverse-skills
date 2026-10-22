@@ -37,13 +37,18 @@ dataverse org who --environment <dataverse-url> --json --context "app=dataverse-
 ```
 
 3. Require `OrgUrl` to match the confirmed URL, a linked `ErpUrl`, and `ErpDeploymentType` equal to `OnlineDev`. Stop on missing linkage, another deployment type, expired authentication, or a mismatch. Use **dv-connect** to repair Dataverse CLI authentication if needed; do not require a separate PAC sign-in for this workflow.
-4. Locate Python, the Dataverse CLI, and **sqlcmd (ODBC)**. Run `sqlcmd -?` to check the installed variant and its flags. This helper uses the ODBC `-N` encryption flag; do not silently substitute another variant's syntax.
+4. Locate Python, the Dataverse CLI, and **sqlcmd (ODBC)**. Run `sqlcmd -?` to check the installed variant and its flags. Recognize both legacy `-N Encrypt Connection` and current `-N[s|m|o] Encrypt Connection` help formats. This helper uses the ODBC `-N` encryption flag (mandatory encryption); do not silently substitute another variant's syntax, select optional encryption, or bypass certificate validation.
 5. Ask for the **public egress IP or explicitly approved IPv4 range/CIDR of the machine running sqlcmd**. Ranges are limited to 256 addresses, all public. Show both endpoints and the total address count for approval; a range allows every address between its endpoints. CIDRs must be network-aligned and include their full address span (not only usable host addresses). Never infer an authorized NAT pool from a private gateway, a few observed IPs, or a guessed subnet. If the user requests IP discovery or does not know the IP, explain that the helper contacts `https://api.ipify.org?format=json` without credentials, then obtain permission and run `scripts/connect.py --discover-ip` with Python. This mode only prints the validated public IP; it does not contact Dataverse, request credentials, or connect SQL. Do not use the environment server's IP. A VPN/proxy can change egress, and HTTP proxy egress may differ from SQL egress; confirm the result with the user before allowlisting it.
 6. **Explicitly ask the user: "What is the reason for this JIT SQL access request?"** Use `ask_user` when available with a free-text reason field and **no default or suggested answer**. Explain that their text will be recorded as `sqljitreason`. Wait for a meaningful, non-empty user response; if they decline or leave it blank, stop before requesting credentials. Do not derive a reason from the task, supply a generic justification, or reuse a previous request's reason without asking. If the user already explicitly supplied a reason for this specific request, repeat their exact text for confirmation instead of asking them to retype it.
 7. **Ask for the access type using `ask_user` with enum values `Reader` and `Writer`**, defaulting the form to `Reader` but waiting for the user's response. Explain that Writer grants write capability even though this helper's probe is read-only. If the choice is absent or declined, stop; never silently select a role.
 8. Show the target, linked ERP URL, **selected access type**, client IP, **user-provided reason verbatim**, and proposed SQL (`SELECT DB_NAME(), SUSER_SNAME()`). For a table read, also disclose the table, schema inspection, row count, and preview limit. Obtain explicit approval for the JIT/firewall change, connection probe, and requested reads. Pass that exact reason to `--reason` (and therefore `sqljitreason`), without rewriting it. Environment confirmation or acceptance of an agent-generated reason does not satisfy the user-provided reason requirement.
 
 ## Discover the contract, not the password
+
+**IPv4 only:** the approved SQL firewall scope must be a public IPv4 address or
+bounded IPv4 range/CIDR. Azure SQL firewall endpoints do not accept IPv6.
+Reject IPv6 before requesting credentials; do not substitute an IPv4 address
+without the user's approval. IP discovery also validates that its result is IPv4.
 
 The following **metadata reads** are safe to display:
 
@@ -70,7 +75,7 @@ subprocess.run(
     [
         sys.executable, "<resolved-erp-sql-skill-directory>/scripts/connect.py",
         "--environment", "<confirmed-dataverse-url>",
-        "--client-ip", "<approved-public-ip-or-IPv4-range-or-CIDR>",
+        "--client-ip", "<approved-public-IPv4-or-IPv4-range-or-CIDR>",
         "--reason", "<verbatim-user-provided-access-reason>",
         "--role", "<user-selected-Reader-or-Writer>",
         "--confirm-environment", "<confirmed-dataverse-url>",

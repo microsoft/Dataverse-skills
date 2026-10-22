@@ -65,7 +65,7 @@ def public_ip(value):
 
 
 def ip_scope(value):
-    """Resolve an approved address or bounded IPv4 range without widening it."""
+    """Resolve an approved IPv4 address or bounded range without widening it."""
     value = value.strip()
     try:
         if "/" in value:
@@ -76,10 +76,10 @@ def ip_scope(value):
             start = ipaddress.IPv4Address(first.strip())
             end = ipaddress.IPv4Address(last.strip())
         else:
-            address = ipaddress.ip_address(public_ip(value))
+            address = ipaddress.IPv4Address(public_ip(value))
             return address, address
     except ValueError:
-        raise ConnectionFailure("Supply a public IP, ordered IPv4 start-end range, or aligned IPv4 CIDR.") from None
+        raise ConnectionFailure("Supply a public IPv4 address, ordered IPv4 start-end range, or aligned IPv4 CIDR; IPv6 is not supported.") from None
     size = int(end) - int(start) + 1
     if not 1 <= size <= 256:
         raise ConnectionFailure("Approved IPv4 ranges must contain 1 to 256 addresses.")
@@ -104,7 +104,7 @@ def discover_public_ip():
     if len(body) > 1024:
         raise ConnectionFailure("Public IP service returned an oversized response.")
     data = read_json(body, "Public IP service")
-    return public_ip(required_string(data, "ip"))
+    return canonical_ip_scope(public_ip(required_string(data, "ip")))
 
 
 def environment_url(value):
@@ -427,7 +427,7 @@ def connect(args):
     if missing := [name for name, path in tools.items() if path is None]:
         raise ConnectionFailure("Missing tools: " + ", ".join(missing))
     sqlcmd_help = run_command([tools["sqlcmd"], "-?"], "sqlcmd variant check")
-    if "SQL Server Command Line Tool" not in sqlcmd_help or not re.search(r"-N\s+Encrypt Connection", sqlcmd_help):
+    if "SQL Server Command Line Tool" not in sqlcmd_help or not re.search(r"-N(?:\[s\|m\|o\])?\s+Encrypt Connection", sqlcmd_help):
         raise ConnectionFailure("This helper requires sqlcmd (ODBC) with the -N encryption flag.")
     load_env()
     context = _operation_context_str("erp-sql")
@@ -459,9 +459,9 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
     sys.stderr.reconfigure(encoding="utf-8", errors="strict")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--discover-ip", action="store_true", help="Discover public IP only; no JIT grant or SQL connection")
+    parser.add_argument("--discover-ip", action="store_true", help="Discover public IPv4 only; no JIT grant or SQL connection")
     parser.add_argument("--environment")
-    parser.add_argument("--client-ip", help="Approved public IP or IPv4 range/CIDR (maximum 256 addresses)")
+    parser.add_argument("--client-ip", help="Approved public IPv4 address or IPv4 range/CIDR (maximum 256 addresses; IPv6 unsupported)")
     parser.add_argument("--reason")
     parser.add_argument("--role", choices=("Reader", "Writer"), help="Explicitly approved JIT access type")
     parser.add_argument("--confirm-environment")
