@@ -6,6 +6,8 @@ On Unified Operations environments, ERP is provisioned on top of the same Datave
 
 The same skills (`dv-connect`, `dv-query`, `dv-data`) cover both targets — the routing differs by which tool the agent reaches for, not which skill. Batch administration uses `dv-admin`, and X++ development uses `erp-xpp`.
 
+Explicit requests for temporary developer-database SQL credentials, a direct sqlcmd connection, or a physical-table read within that SQL workflow use **erp-sql**; ordinary ERP record reads stay in **dv-query**.
+
 ## Detecting ERP context
 
 The user's request involves ERP when any of the following is true:
