@@ -14,6 +14,8 @@ Guards the #108 invariants:
   - the interactive tier is host-gated (workspace / browser / device-code);
   - a configured service principal is terminal (no interactive fallback -- CI
     must fail fast).
+  - a configured certificate credential is terminal and preserves password and
+    SNI options.
 """
 
 import os
@@ -47,6 +49,14 @@ class _FakeClientSecret:
 
     def get_token(self, *scopes, **kwargs):
         return _AccessToken("sp-token", 9999999999)
+
+
+class _FakeCertificate:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def get_token(self, *scopes, **kwargs):
+        return _AccessToken("certificate-token", 9999999999)
 
 
 class _FakeAzureCli:
@@ -109,6 +119,7 @@ def _install_azure_fakes():
     azure_identity = types.ModuleType("azure.identity")
     azure_identity.CredentialUnavailableError = _CredUnavailable
     azure_identity.ClientSecretCredential = _FakeClientSecret
+    azure_identity.CertificateCredential = _FakeCertificate
     azure_identity.AzureCliCredential = _FakeAzureCli
     azure_identity.InteractiveBrowserCredential = _FakeInteractiveBrowser
     azure_identity.DeviceCodeCredential = _FakeDeviceCode
@@ -341,6 +352,41 @@ class GetCredentialShape(_AuthTestBase):
                 cred = auth._get_credential()
         self.assertIsInstance(cred, _FakeClientSecret)  # terminal, no fallback wrapper
 
+    def test_certificate_is_terminal_and_preserves_options(self):
+        with tempfile.NamedTemporaryFile(suffix=".pfx") as certificate:
+            env = {
+                "TENANT_ID": "t",
+                "DATAVERSE_URL": "https://x.crm.dynamics.com",
+                "CLIENT_ID": "cid",
+                "CLIENT_CERTIFICATE_PATH": certificate.name,
+                "CLIENT_CERTIFICATE_PASSWORD": "cert-pass",
+                "CLIENT_SEND_CERTIFICATE_CHAIN": "1",
+            }
+            with mock.patch.object(auth, "load_env", lambda: None):
+                with mock.patch.dict(os.environ, env, clear=True):
+                    cred = auth._get_credential()
+
+        self.assertIsInstance(cred, _FakeCertificate)
+        self.assertEqual(cred.kwargs["certificate_path"], certificate.name)
+        self.assertEqual(cred.kwargs["password"], "cert-pass")
+        self.assertTrue(cred.kwargs["send_certificate_chain"])
+
+    def test_secret_without_client_id_warns_and_falls_back(self):
+        env = {
+            "TENANT_ID": "t",
+            "DATAVERSE_URL": "https://x.crm.dynamics.com",
+            "CLIENT_SECRET": "sec",
+        }
+        with mock.patch.object(auth, "load_env", lambda: None):
+            with mock.patch.object(auth, "_build_shared_msal_cache", lambda: None):
+                with mock.patch("builtins.print") as print_mock:
+                    with mock.patch.dict(os.environ, env, clear=True):
+                        cred = auth._get_credential()
+
+        self.assertIsInstance(cred, auth._FallbackCredential)
+        messages = " ".join(str(call.args[0]) for call in print_mock.call_args_list)
+        self.assertIn("CLIENT_SECRET is set without CLIENT_ID", messages)
+
     def test_no_sp_builds_fallback_with_azure_cli_tier(self):
         env = {"TENANT_ID": "t", "DATAVERSE_URL": "https://x.crm.dynamics.com"}
         with mock.patch.object(auth, "load_env", lambda: None):
@@ -419,17 +465,87 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
 
 
 class PluginVersionAttribution(_AuthTestBase):
-    def test_reads_from_env_in_deployed_layout(self):
-        # In the DEPLOYED layout dv-connect copies auth.py to <project>/scripts/,
-        # away from the plugin manifest, so _plugin_version reads the env var that
-        # dv-connect refreshes on connect -- not a manifest path relative to
-        # __file__. Assert the env var is the source of truth.
+    def test_reads_from_env_when_set(self):
+        auth._PLUGIN_VERSION_CACHE = None
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.11.0"}, clear=True):
             self.assertEqual(auth._plugin_version(), "1.11.0")
 
-    def test_defaults_to_unknown_when_env_absent(self):
+    def test_resolves_from_manifest_when_env_absent(self):
+        # npx/registry installs ship no manifest and leave DATAVERSE_PLUGIN_VERSION
+        # "unknown"; auth.py then resolves from the canonical manifest. From the repo
+        # root the local .claude-plugin/plugin.json is found without a network call.
+        auth._PLUGIN_VERSION_CACHE = None
         with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertRegex(auth._plugin_version(), r"^\d+\.\d+\.\d+")
+
+    def test_unknown_when_env_absent_and_manifest_unreachable(self):
+        import tempfile
+        auth._PLUGIN_VERSION_CACHE = None
+        cwd = os.getcwd()
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch("urllib.request.urlopen", side_effect=OSError("no network")):
+            try:
+                os.chdir(tempfile.gettempdir())
+                self.assertEqual(auth._plugin_version(), "unknown")
+            finally:
+                os.chdir(cwd)
+
+    def test_antigravity_agent_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.14.0",
+            "DATAVERSE_PLUGIN_AGENT": "antigravity-cli",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.14.0;skill=dv-connect;agent=antigravity-cli",
+            headers["User-Agent"],
+        )
+
+    def test_gemini_agent_is_emitted_in_operation_context(self):
+        env = {
+            "DATAVERSE_PLUGIN_VERSION": "1.15.0",
+            "DATAVERSE_PLUGIN_AGENT": "gemini-cli",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            headers = auth.get_plugin_headers("dv-connect")
+
+        self.assertIn(
+            "app=dataverse-skills/1.15.0;skill=dv-connect;agent=gemini-cli",
+            headers["User-Agent"],
+        )
+
+
+class AgentAttributionFailOpen(_AuthTestBase):
+    def test_recognized_agent_passes_through(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": "cursor"}, clear=True):
+            self.assertEqual(auth._current_agent(), "cursor")
+
+    def test_unrecognized_agent_coerced_to_unknown_not_raised(self):
+        # LLM host misdetection ('github-copilot', 'claude', 'windsurf', ...) must
+        # never raise -- telemetry can't gate the user's data op. Coerce to unknown.
+        for bad in ("github-copilot", "claude", "vscode", "windsurf", ""):
+            with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_AGENT": bad}, clear=True):
+                self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_missing_agent_defaults_to_unknown(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(auth._current_agent(), "unknown")
+
+    def test_bad_version_coerced_to_unknown(self):
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.5 beta (x)"}, clear=True):
             self.assertEqual(auth._plugin_version(), "unknown")
+
+    def test_context_string_never_raises_and_stays_valid(self):
+        # Even with a garbage agent/version, the assembled context is coerced to a
+        # _CONTEXT_RE-valid string rather than raising.
+        env = {"DATAVERSE_PLUGIN_AGENT": "not a host!", "DATAVERSE_PLUGIN_VERSION": "@@@"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            ctx = auth._operation_context_str("dv-query")
+            self.assertTrue(auth._CONTEXT_RE.match(ctx))
+            self.assertIn("agent=unknown", ctx)
+            self.assertIn("skill=dv-query", ctx)
 
 
 class SilentChainReasons(_AuthTestBase):
@@ -593,6 +709,59 @@ class WorkspaceCacheDecision(_AuthTestBase):
     def test_opt_out_is_none_even_headless(self):
         for val in ("off", "false", "0", "no", "none", "OFF"):
             self.assertIsNone(self._decide({"DATAVERSE_TOKEN_CACHE_DIR": val}, browser=False), msg=val)
+
+
+class GetPluginHeadersFallbackNudge(unittest.TestCase):
+    """The raw-Web-API fallback nudge on get_plugin_headers (the urllib chokepoint).
+
+    get_plugin_headers sets the ``Python-urllib`` User-Agent, so it is the single
+    funnel for every hand-rolled raw HTTP call. The nudge frames it as a fallback
+    and steers callers to the SDK (get_client) -- these tests guard that behavior.
+    """
+
+    def setUp(self):
+        auth._RAW_FALLBACK_HINT_EMITTED = False
+        os.environ.pop("DATAVERSE_SUPPRESS_FALLBACK_HINT", None)
+
+    def _call_capture(self, n=1):
+        import io
+        buf, old = io.StringIO(), sys.stderr
+        sys.stderr = buf
+        try:
+            headers = None
+            for _ in range(n):
+                headers = auth.get_plugin_headers("dv-data", "tok")
+        finally:
+            sys.stderr = old
+        return headers, buf.getvalue()
+
+    def test_docstring_frames_as_fallback(self):
+        doc = auth.get_plugin_headers.__doc__ or ""
+        self.assertIn("FALLBACK", doc)
+        self.assertIn("get_client", doc)
+
+    def test_hint_fires_exactly_once(self):
+        _, err = self._call_capture(n=3)
+        self.assertEqual(err.count("[dataverse-skills]"), 1)
+        self.assertIn("Prefer get_client", err)
+
+    def test_hint_suppressed_by_env(self):
+        os.environ["DATAVERSE_SUPPRESS_FALLBACK_HINT"] = "1"
+        try:
+            _, err = self._call_capture(n=1)
+        finally:
+            os.environ.pop("DATAVERSE_SUPPRESS_FALLBACK_HINT", None)
+        self.assertEqual(err, "")
+
+    def test_call_not_broken(self):
+        headers, _ = self._call_capture(n=1)
+        self.assertTrue(
+            headers["User-Agent"].startswith("Python-urllib (app=dataverse-skills/")
+        )
+        self.assertEqual(headers["Authorization"], "Bearer tok")
+
+    def test_get_client_docstring_stays_clean(self):
+        self.assertNotIn("FALLBACK", auth.get_client.__doc__ or "")
 
 
 if __name__ == "__main__":

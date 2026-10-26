@@ -5,7 +5,8 @@ version bump in the PR matches what the structural changes require.
 Rules:
   - A removed or renamed skill directory requires a MAJOR bump.
   - A new skill directory requires a MINOR bump (or MAJOR).
-  - Modifications only (prose, code fixes) can be PATCH.
+    - Any other canonical package change requires at least a PATCH bump.
+    - Versions must increase; downgrades are rejected.
 
 Usage:
     python .github/evals/version_bump_check.py [--base main]
@@ -24,6 +25,7 @@ import sys
 from pathlib import Path
 
 SKILLS_REL = ".github/plugins/dataverse/skills"
+PACKAGE_REL = ".github/plugins/dataverse"
 VERSION_FILE_REL = ".github/plugins/dataverse/.claude-plugin/plugin.json"
 
 BUMP_RANK = {"none": 0, "patch": 1, "minor": 2, "major": 3}
@@ -78,7 +80,14 @@ def get_head_version(repo_root):
     path = repo_root / VERSION_FILE_REL
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8")).get("version")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    version = data.get("version")
+    return version if isinstance(version, str) else None
 
 
 def list_skills_at(ref, skills_rel):
@@ -103,6 +112,11 @@ def required_bump(added, removed):
     if added:
         return "minor"
     return "patch"
+
+
+def package_changed(base_ref):
+    """Return whether canonical package content differs from the base ref."""
+    return bool(run_git(["diff", "--name-only", base_ref, "--", PACKAGE_REL]))
 
 
 def main():
@@ -144,18 +158,26 @@ def main():
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(2)
 
+    if new < old:
+        print(
+            f"FAILED -- plugin version must not decrease\n"
+            f"  base ({base_ref}):  {base_version}\n"
+            f"  head (current):  {head_version}"
+        )
+        sys.exit(1)
+
     declared = classify_bump(old, new)
 
     base_skills = list_skills_at(base_ref, SKILLS_REL)
     head_skills = list_head_skills(repo_root)
     added = head_skills - base_skills
     removed = base_skills - head_skills
+    canonical_package_changed = package_changed(base_ref)
 
     required = required_bump(added, removed)
 
-    # If nothing structural changed and declared is 'none', that's fine (PR may
-    # not need a bump at all — e.g., doc-only changes outside skills/).
-    if required == "patch" and declared == "none":
+    # Changes outside the published package do not require a release bump.
+    if required == "patch" and declared == "none" and not canonical_package_changed:
         print("PASSED -- no version bump needed (no structural skill changes)")
         sys.exit(0)
 
@@ -194,10 +216,10 @@ def main():
         print(
             f"\nWARN -- declared {declared.upper()} bump but no structural skill "
             f"changes detected.\n"
-            f"       Verify this is intentional (e.g., auth pattern change, "
-            f"renamed required section,\n"
-            f"       or other breaking change not reflected in skill directory "
-            f"structure)."
+            f"       Verify this is intentional (e.g., a new capability within "
+            f"an existing skill,\n"
+            f"       an auth pattern change, or another change not reflected in "
+            f"skill directory structure)."
         )
 
     sys.exit(0)

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-platform-intro) through natural language. The plugin teaches AI coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — for everything from designing data models and answering CRM questions to deploying solutions across environments.
+Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/data-platform-intro) and linked Dynamics 365 Finance and Operations environments through natural language. The plugin teaches AI coding agents to drive the Dataverse MCP server, Dataverse CLI, Python SDK, and PAC CLI — from designing data models and answering CRM questions to deploying Dataverse solutions and Finance and Operations deployable packages.
 
 | Skill | What it does |
 |---|---|
@@ -11,6 +11,7 @@ Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us
 | **dv-data** | Single-record CRUD plus bulk import — CSV loads, multi-table imports with foreign-key dependencies, upsert by alternate key, and AI-generated sample data. |
 | **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
 | **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
+| **erp-xpp** | Handles the Finance and Operations X++ lifecycle: model and metadata authoring, matching SDK installation, compile/build, deployable package deployment, database synchronization, and verification of custom services/APIs, runnable X++ classes, and public OData data entities. |
 | **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
 | **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
 | **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
@@ -22,6 +23,26 @@ Browse [`.github/plugins/dataverse/skills/`](.github/plugins/dataverse/skills/) 
 A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, or Power Platform plans, or via the free [Power Apps Developer Plan](https://learn.microsoft.com/en-us/power-platform/developer/plan).
 
 ## Install
+
+### Quick install — any agent, incl. JetBrains (npx)
+
+One command installs **all** Dataverse skills and lets you choose which agent(s) to add them to:
+
+```bash
+npx skills add microsoft/Dataverse-skills -s "*"
+```
+
+- `-s "*"` installs every Dataverse skill (skips the per-skill prompt).
+- You'll be prompted to pick which **agent(s)** to install into (Codex, GitHub Copilot, Claude Code, Cursor, …).
+- Add `-g` to install **globally** so the skills are available in every project on your machine:
+
+```bash
+npx skills add microsoft/Dataverse-skills -s "*" -g
+```
+
+This is the recommended path for **JetBrains IDEs (PyCharm, Rider)** via Codex or Claude, and works with any agent that reads local skills. After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
+
+The per-marketplace installs below are alternatives for agents that have a dedicated plugin listing.
 
 ### GitHub Copilot
 
@@ -35,28 +56,58 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 /plugin install dataverse@claude-plugins-official
 ```
 
+### Gemini CLI
+
+Install the extension from the public repository. Gemini CLI selects the
+generic extension archive attached to the latest GitHub Release:
+
+```bash
+gemini extensions install https://github.com/microsoft/Dataverse-skills --skip-settings
+gemini extensions config dataverse DATAVERSE_URL --scope workspace
+```
+
+Enter the Dataverse environment URL when the configuration command prompts.
+The value is stored in local Gemini extension settings and is not committed to
+the repository. Restart Gemini after installation, then verify discovery:
+
+```text
+/extensions list
+/skills list
+```
+
+```bash
+gemini mcp list
+```
+
+Update or uninstall the extension with:
+
+```bash
+gemini extensions update dataverse
+gemini extensions uninstall dataverse
+```
+
+The release archive is generated from `.github/plugins/dataverse/` when a new
+plugin version reaches `main`; the repository does not track a second skills or
+scripts tree.
+
 ### Codex
 
-**Codex app**
+**Codex app and ChatGPT**
 
-1. Open **Plugins → Add marketplace**.
-2. Set **Source** to `https://github.com/microsoft/Dataverse-skills.git`.
-3. Leave **Git ref** and **Sparse paths** empty.
-4. Click **Add marketplace**, then browse the **dataverse-skills** marketplace, open `dataverse`, and select **Install plugin**.
+1. Open **Plugins**.
+2. Search for **Microsoft Dataverse** in the OpenAI plugin directory.
+3. Open the `dataverse` plugin and select **Install**.
 
 **Codex CLI**
 
-Add the marketplace (first time only), then browse `/plugins` and install `dataverse`:
+Install directly from the OpenAI-curated marketplace:
 
 ```bash
-codex plugin marketplace add microsoft/Dataverse-skills
+codex plugin add dataverse@openai-curated
 ```
 
-Update to the latest release:
-
-```bash
-codex plugin marketplace upgrade dataverse-skills
-```
+Alternatively, run `/plugins`, search for **Microsoft Dataverse**, and install
+`dataverse` from the `openai-curated` marketplace.
 
 ### Cursor
 
@@ -74,13 +125,28 @@ codex plugin marketplace upgrade dataverse-skills
 
 The listing is published at [cursor.com/marketplace/microsoft-dataverse](https://cursor.com/marketplace/microsoft-dataverse).
 
+### Google Antigravity
+
+Install the native plugin directly from its canonical directory in this repository:
+
+```bash
+agy plugin install https://github.com/microsoft/Dataverse-skills/tree/main/.github/plugins/dataverse
+```
+
+If the Gemini extension is already installed, import the same plugin with
+`agy plugin import gemini` instead.
+
+Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
+select an environment and register the Dataverse MCP server with `agy mcp add`;
+verify it with `agy mcp list` after restarting.
+
 ## Verify the install
 
 After installation, ask your agent:
 
 > "Connect to Dataverse"
 
-The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server registered with your agent, and `pac auth list` should show your active environment.
+The `dv-connect` skill walks through tool checks, authentication, and MCP registration. When it finishes, you should see a `dataverse-<orgname>` MCP server (or Gemini's bundled `dataverse` server), and `pac auth list` should show your active environment.
 
 ## Try these prompts
 
@@ -90,6 +156,7 @@ After the connect flow finishes, describe what you want — the plugin picks MCP
 - *"Import this CSV into the contacts table"*
 - *"Create a customer feedback table with name, rating, and comment columns"*
 - *"Pull the schema and pack it into a solution"*
+- *"Create a runnable X++ class, compile it, and deploy its Finance and Operations package"*
 - *"Bulk delete activities older than 2024"*
 - *"Add a teammate to the sales team on the dev environment"*
 

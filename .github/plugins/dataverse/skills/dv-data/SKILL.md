@@ -1,17 +1,19 @@
 ---
 name: dv-data
-description: Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.
+description: Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables, or plan or perform Finance and Operations (ERP) record writes and DMF package imports.
 ---
 
 # Skill: Data — Create, Update, Delete, and Bulk Import
 
-> **This skill uses Python exclusively.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
+> **This skill uses Python and the Dataverse CLI.** Do not use Node.js, JavaScript, or any other language for Dataverse scripting. If you are about to run `npm install` or write a `.js` file, STOP — you are going off-rails. See the overview skill's Hard Rules.
+
+**ERP exception, including planning-only requests:** load **dv-overview**, then read [`references/erp-writes.md`](references/erp-writes.md). ERP writes and DMF imports do not use the Dataverse SDK guidance below. A request not to execute operations still permits loading skills and reading local references.
 
 Use the official Microsoft Power Platform Dataverse Client Python SDK for all data write operations.
 
 **Official SDK:** https://github.com/microsoft/PowerPlatform-DataverseClient-Python
 **PyPI package:** `PowerPlatform-Dataverse-Client` (this is the only official one — do not use `dataverse-api` or other unofficial packages)
-**Status:** GA (`1.0.0`, Production/Stable)
+**Status:** GA (`1.1.0`, Production/Stable)
 
 ## Skill boundaries
 
@@ -24,13 +26,15 @@ Use the official Microsoft Power Platform Dataverse Client Python SDK for all da
 
 ---
 
-## Choosing MCP vs the SDK for writes
+## Choosing MCP, CLI, or SDK for writes
 
-**If MCP tools are available** (`create_record`, `update_record`, `delete_record`), they are the quickest path for a **small, interactive** set of writes — they batch up to 25 records per call, no script needed. The SDK is the default when the task needs bulk writes beyond 25 (it holds rows in memory for large batches), data transformation, retry logic, CSV import, or SDK-only operations (upsert — MCP has no upsert tool). Sequential MCP tool calls are not "multi-step logic" — MCP handles those fine. Pick the surface that fits the volume and shape of the work; neither order is mandated.
+**CLI fast path:** If `dataverse auth who` shows an active profile, CLI commands (`data create/update/delete/upsert/associate/upload`) work immediately — no `.env`, `auth.py`, or pip needed. SDK and bulk operations still need workspace setup.
+
+**If MCP tools are available** (`create_record`, `update_record`, `delete_record`), they are the quickest path for a **small, interactive** set of writes — up to 25 records per call, no script needed. **The Dataverse CLI** (`dataverse data create/update/upsert/delete`) handles single-record writes, associate/disassociate, and file uploads as headless one-liners. **The SDK** is the default for bulk writes beyond 25, data transformation, retry logic, CSV import, or SDK-only operations (upsert with alternate keys — MCP has no upsert tool). Pick the surface that fits the volume and shape of the work.
 
 ## When you script a write, use the SDK — not hand-rolled HTTP
 
-The MCP-vs-SDK choice is capability-based (above; and see the overview's **Tool Capabilities** / Hard Rule 2). This section is narrower: **once you've decided to write via a script**, use the SDK for anything in its "supports" list rather than hand-rolled `urllib`/`requests` — the SDK carries the auth, paging, and retry those re-implement. For the rare operation the SDK doesn't cover, use the `dataverse api` escape hatch — not hand-rolled `urllib`.
+The MCP/CLI/SDK choice is capability-based (above; and see the overview's **Tool Capabilities** / Hard Rule 2). This section is narrower: **once you've decided to write via a script**, use the SDK for anything in its "supports" list rather than hand-rolled `urllib`/`requests` — the SDK carries the auth, paging, and retry those re-implement. For the rare operation the SDK doesn't cover, use the `dataverse api` escape hatch — not hand-rolled `urllib`.
 
 **Correct import** (always preceded by `sys.path.insert` in a full script — see Setup below):
 ```
@@ -52,7 +56,7 @@ import requests                        # WRONG for SDK-supported ops
 - Record writes: create, update, delete
 - Record reads within write workflows (e.g., lookup resolution) — for standalone queries see **dv-query**
 - Upsert (with alternate key support)
-- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`
+- Bulk operations: `CreateMultiple`, `UpdateMultiple`, `UpsertMultiple`, bulk delete (`records.delete(table, [ids])` runs the server-side BulkDelete action), multi-operation batching (`client.batch`)
 - File column uploads (chunked for files >128MB)
 - Context manager with HTTP connection pooling
 
@@ -63,7 +67,42 @@ Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modi
 - N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
-- DeleteMultiple, general OData batching
+
+### Dataverse CLI data examples (copy-paste ready)
+
+All `dataverse` commands take `--context` for skill attribution (global flag).
+
+```bash
+# Create a record (--table is the EntitySet name)
+dataverse data create --table accounts --data '{"name":"Contoso"}' --return --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Update by GUID
+dataverse data update --table accounts --id <guid> --data '{"name":"Contoso (updated)"}' --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Upsert by alternate key (idempotent — safe to re-run)
+dataverse data upsert --table accounts --key "accountnumber='ACC-001'" --data '{"name":"Contoso Ltd"}' --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Delete (--no-confirm skips the prompt)
+dataverse data delete --table accounts --id <guid> --no-confirm --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Associate two records (N:N or lookup)
+dataverse data associate --table accounts --id <guid> --relationship contact_customer_accounts --related contacts --related-id <contact-guid> --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Disassociate (N:N — pass --related-id; clear a lookup — omit --related-id)
+dataverse data disassociate --table accounts --id <guid> --relationship contact_customer_accounts --related-id <contact-guid> --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Upload a file to a file column (--table takes LogicalName, not EntitySet)
+dataverse data upload --table account --id <guid> --column new_document --file report.pdf --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Describe entity schema (attributes, relationships, actions)
+dataverse data describe --table account --include all --json --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Invoke a discovered custom API by name (use 'api list' to find names)
+dataverse api invoke <CustomApiName> --target dataverse --param Input=value --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+
+# Raw API escape hatch for built-in actions (--target is required)
+dataverse api request --target dataverse --path "/api/data/v9.2/WhoAmI" --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
+```
 
 ---
 
@@ -148,7 +187,12 @@ client.records.update("new_ticket", "<record-guid>",
 ## Delete a Record
 
 ```python
+# Single record
 client.records.delete("new_ticket", "<record-guid>")
+
+# Bulk delete — pass a list of ids; runs the server-side BulkDelete action (one async job, not N calls)
+job_id = client.records.delete("new_ticket", [id1, id2, id3])
+# use_bulk_delete=False deletes each id sequentially instead
 ```
 
 ---
@@ -161,7 +205,7 @@ guids = client.records.create("new_ticket", records)
 print(f"Created {len(guids)} records")
 ```
 
-Volume guidance: MCP `create_record` batches up to 25 records per call. SDK `CreateMultiple` for larger bulk.
+Volume guidance: CLI `dataverse data create` for one-off records. MCP `create_record` batches up to 25 per call. SDK `CreateMultiple` for larger bulk.
 
 **Important:** The SDK sends all records in a single POST to `CreateMultiple`. It does **not** chunk automatically. Dataverse has no fixed record count limit — the constraints are payload size and request timeout (SDK default: 120s for POST). For larger datasets, you **must** chunk in your script. The `bulk_upsert` and `bulk_create` helpers below use adaptive chunking: start at 1,000, double on success (up to 4,000), halve on payload/timeout failure, and cap at the last successful size. Tables with few columns can handle larger chunks than tables with many columns.
 
@@ -223,8 +267,9 @@ client.records.upsert("account", [
 
 | Volume | Tool | Why |
 |---|---|---|
-| 1–10 records | MCP `create_record` | Simple, no script |
-| 10+ records | SDK `client.records.create(table, list)` | Uses CreateMultiple; chunk large datasets (start at 1K, adapt) |
+| 1 record | CLI `dataverse data create` or MCP `create_record` | No script needed |
+| 2–25 records | MCP `create_record` | Batches up to 25 per call |
+| 25+ records | SDK `client.records.create(table, list)` | Uses CreateMultiple; chunk large datasets (start at 1K, adapt) |
 
 ```python
 import csv, os, sys

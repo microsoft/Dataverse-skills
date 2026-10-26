@@ -21,7 +21,7 @@ description: Environment-level Dataverse administration — bulk delete, retenti
 | **Python SDK — recyclebinconfigs** | Recycle bin on/off + retention days | CREATE/PATCH `recyclebinconfigs` entity record |
 | **Python SDK — settingdefinition + organizationsettings** | App-level / plan-level security role toggles | Look up `settingdefinition` by `uniquename` → CREATE or PATCH `organizationsettings` row with `value` |
 
-ERP batch admin: see [`references/erp-batch.md`](references/erp-batch.md).
+ERP batch admin: see [`references/erp-batch.md`](references/erp-batch.md). Planning-only ERP requests may read skills/references, but make no environment calls or file writes.
 
 Do NOT write Python scripts for operations PAC CLI can handle. Do NOT mix mechanisms (e.g., don't hand-PATCH an org column that PAC CLI already covers).
 
@@ -310,4 +310,3 @@ The four rules in the safety callout at the top of this file cover the irreversi
 - For OrgDB settings, warn that incorrect values can break environment features.
 - For recycle bin cleanup interval changes, warn that reducing the interval permanently deletes recycled records sooner.
 - For recycle bin enable/disable specifically: always set `isreadyforrecyclebin` explicitly (true on enable, false on disable), and drain any in-flight `ProcessRecycleBin` async jobs before any second toggle. Omitting these can produce `EntityBinUpdateAction called for entity <x> which is not enabled for RecycleBin` on unrelated platform operations.
-

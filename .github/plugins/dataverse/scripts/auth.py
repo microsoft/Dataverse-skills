@@ -5,14 +5,16 @@ Auth chain (silent tiers first; interactive only when every silent tier is
 unavailable, so a working path wins without stranding the user -- issue #108):
   1. Service principal (CLIENT_ID + CLIENT_SECRET in .env) -- non-interactive,
      terminal (CI fails fast; no interactive fallback when SP is configured).
-  2. Shared Dataverse CLI token cache -- silent, no prompt, populated by
+  2. Certificate (CLIENT_ID + CLIENT_CERTIFICATE_PATH in .env) -- non-interactive,
+     terminal (CI fails fast; no interactive fallback when configured).
+  3. Shared Dataverse CLI token cache -- silent, no prompt, populated by
      `dataverse auth create` (see dv-connect Step 2). Uses the same MSAL v3
      cache the `@microsoft/dataverse` stdio MCP proxy reads. Probed at build
      time against both the tenant-specific and `organizations` authority so an
      authority mismatch falls through instead of hard-failing.
-  3. Azure CLI (`az login`) -- silent, scoped to TENANT_ID; skipped when az is
+  4. Azure CLI (`az login`) -- silent, scoped to TENANT_ID; skipped when az is
      absent or not logged in.
-  4. Interactive (host-gated, last): workspace-cache device-code when
+  5. Interactive (host-gated, last): workspace-cache device-code when
      DATAVERSE_TOKEN_CACHE_DIR is set (ephemeral hosts); else a system-browser
      InteractiveBrowserCredential on a desktop host (beats the CA device-code
      block, and uses the browser not the MSAL broker so it sidesteps the macOS
@@ -50,6 +52,9 @@ Reads from .env in the repo root (parent of scripts/) or current working directo
     TENANT_ID          — required
     CLIENT_ID          — optional, enables service principal auth
     CLIENT_SECRET      — optional, enables service principal auth
+    CLIENT_CERTIFICATE_PATH — optional, enables certificate auth (.pfx or .pem)
+    CLIENT_CERTIFICATE_PASSWORD — optional, decrypts a password-protected certificate
+    CLIENT_SEND_CERTIFICATE_CHAIN — optional, set to 1 for SNI authentication
     DATAVERSE_TOKEN_CACHE_DIR — optional; on ephemeral hosts (ChatGPT web / Codex
                          sandbox) where $HOME is wiped between turns, set this to a
                          workspace-relative dir (e.g. .dataverse) so the device-code
@@ -73,6 +78,54 @@ _DATAVERSE_CLI_CLIENT_ID = "0c412cc3-0dd6-449b-987f-05b053db9457"
 # previous auth.py before the shared-cache change.
 _AUTH_RECORD_PATH = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".IdentityService" / "dataverse_cli_auth_record.json"
 
+# Cross-workspace config so returning users skip the full dv-connect dance.
+_USER_CONFIG_DIR = Path(os.environ.get("LOCALAPPDATA") or Path.home()) / ".dataverse-skills"
+_USER_CONFIG_PATH = _USER_CONFIG_DIR / "config.json"
+
+
+def _load_user_config():
+    """Load DATAVERSE_URL and TENANT_ID from user-level config when .env is absent."""
+    if not _USER_CONFIG_PATH.exists():
+        return
+    try:
+        import json
+        cfg = json.loads(_USER_CONFIG_PATH.read_text(encoding="utf-8"))
+        loaded = []
+        for key in ("DATAVERSE_URL", "TENANT_ID"):
+            val = cfg.get(key)
+            if val and not os.environ.get(key):
+                os.environ.setdefault(key, val)
+                loaded.append(key)
+        if loaded:
+            print(
+                f"NOTE: loaded {', '.join(loaded)} from {_USER_CONFIG_PATH} "
+                f"(no .env found). Target: {cfg.get('DATAVERSE_URL', '?')}",
+                flush=True,
+            )
+    except Exception:
+        pass
+
+
+def _save_user_config():
+    """Persist URL and tenant to user-level config for cross-workspace reuse."""
+    import json
+    url = os.environ.get("DATAVERSE_URL")
+    tenant = os.environ.get("TENANT_ID")
+    if not url or not tenant:
+        return
+    try:
+        _USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(_USER_CONFIG_DIR, 0o700)
+        except Exception:
+            pass
+        _USER_CONFIG_PATH.write_text(
+            json.dumps({"DATAVERSE_URL": url, "TENANT_ID": tenant}, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
 
 def load_env():
     """Load key=value pairs from .env into os.environ (does not overwrite existing vars).
@@ -82,6 +135,10 @@ def load_env():
       2. The current working directory
     This ensures ``cd scripts && python auth.py`` works the same as
     ``python scripts/auth.py`` from the repo root.
+
+    Falls back to user-level config (~/.dataverse-skills/config.json) when .env
+    is absent, so returning users on ephemeral-workspace hosts (ChatGPT desktop
+    app, Codex) skip the full dv-connect setup.
     """
     script_dir = Path(__file__).resolve().parent
     candidates = [script_dir.parent / ".env", Path(".env")]
@@ -92,6 +149,8 @@ def load_env():
             if line and not line.startswith("#") and "=" in line:
                 key, _, value = line.partition("=")
                 os.environ.setdefault(key.strip(), value.strip())
+    if not os.environ.get("DATAVERSE_URL") or not os.environ.get("TENANT_ID"):
+        _load_user_config()
 
 
 _credential = None
@@ -602,9 +661,9 @@ def _get_credential():
     Return a TokenCredential, creating one on first call.
 
     The credential is cached for the lifetime of the process. Resolution
-    order: service principal (terminal) -> silent chain (shared DataverseCLI
-    cache, then az CLI) -> single host-gated interactive tier, used only when
-    every silent tier is unavailable (issue #108).
+    order: service principal or certificate (terminal) -> silent chain (shared
+    DataverseCLI cache, then az CLI) -> single host-gated interactive tier,
+    used only when every silent tier is unavailable (issue #108).
     """
     global _credential
     if _credential is not None:
@@ -616,6 +675,8 @@ def _get_credential():
     dataverse_url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
     client_id = os.environ.get("CLIENT_ID")
     client_secret = os.environ.get("CLIENT_SECRET")
+    certificate_path = os.environ.get("CLIENT_CERTIFICATE_PATH")
+    certificate_password = os.environ.get("CLIENT_CERTIFICATE_PASSWORD")
 
     if not tenant_id or not dataverse_url:
         missing = [k for k, v in [("TENANT_ID", tenant_id), ("DATAVERSE_URL", dataverse_url)] if not v]
@@ -624,15 +685,14 @@ def _get_credential():
         sys.exit(1)
 
     try:
-        from azure.identity import AzureCliCredential, ClientSecretCredential
+        from azure.identity import (
+            AzureCliCredential,
+            CertificateCredential,
+            ClientSecretCredential,
+        )
     except ImportError:
         print("ERROR: azure-identity not installed. Run: pip install --upgrade azure-identity", flush=True)
         sys.exit(1)
-
-    # Warn if only one of CLIENT_ID / CLIENT_SECRET is set
-    if bool(client_id) != bool(client_secret):
-        print("WARNING: Only one of CLIENT_ID / CLIENT_SECRET is set. Both are required for", flush=True)
-        print("  service principal auth. Falling back to shared cache / az / interactive.", flush=True)
 
     # Tier 1: Service principal. Terminal -- CI must fail fast, never fall to an
     # interactive prompt that would hang an unattended run.
@@ -644,12 +704,72 @@ def _get_credential():
         )
         return _credential
 
+    # Tier 2: Certificate-based service principal. Terminal for the same reason.
+    if client_id and certificate_path:
+        path = Path(certificate_path)
+        if not path.exists():
+            print(
+                f"ERROR: CLIENT_CERTIFICATE_PATH does not exist: {certificate_path}",
+                flush=True,
+            )
+            sys.exit(1)
+        if not path.is_file() or not os.access(path, os.R_OK):
+            print(
+                f"ERROR: CLIENT_CERTIFICATE_PATH is not a readable file: {certificate_path}",
+                flush=True,
+            )
+            sys.exit(1)
+
+        try:
+            _credential = CertificateCredential(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                certificate_path=str(path),
+                password=certificate_password,
+                send_certificate_chain=(
+                    os.environ.get("CLIENT_SEND_CERTIFICATE_CHAIN") == "1"
+                ),
+            )
+        except ValueError as exc:
+            print(
+                "ERROR: Could not load CLIENT_CERTIFICATE_PATH. Verify the "
+                "certificate format and CLIENT_CERTIFICATE_PASSWORD.",
+                flush=True,
+            )
+            print(f"  {exc}", flush=True)
+            sys.exit(1)
+        return _credential
+
+    if client_id and not client_secret and not certificate_path:
+        print(
+            "WARNING: CLIENT_ID is set without CLIENT_SECRET or "
+            "CLIENT_CERTIFICATE_PATH.",
+            flush=True,
+        )
+        print(
+            "  Falling back to shared cache / device code flow.",
+            flush=True,
+        )
+
+    if not client_id and (client_secret or certificate_path):
+        configured = (
+            "CLIENT_SECRET" if client_secret else "CLIENT_CERTIFICATE_PATH"
+        )
+        print(
+            f"WARNING: {configured} is set without CLIENT_ID.",
+            flush=True,
+        )
+        print(
+            "  Falling back to shared cache / device code flow.",
+            flush=True,
+        )
+
     # No service principal -> silent tiers, then a single host-gated interactive
     # tier used ONLY if every silent tier is unavailable (issue #108: never
     # strand, and never prompt when a silent path works).
     silent_tiers = []
 
-    # Tier 2: Shared DataverseCLI MSAL cache (populated by `dataverse auth
+    # Tier 3: Shared DataverseCLI MSAL cache (populated by `dataverse auth
     # create`; same client ID as the @microsoft/dataverse MCP proxy). Probed at
     # build time so it is only selected when it actually yields a token.
     shared = _build_shared_msal_cache()
@@ -657,7 +777,7 @@ def _get_credential():
         app, accounts = shared
         silent_tiers.append(("shared-cache", _MsalSharedCacheCredential(app, accounts)))
 
-    # Tier 3: Azure CLI (`az login`). Scoped to TENANT_ID; AzureCliCredential
+    # Tier 4: Azure CLI (`az login`). Scoped to TENANT_ID; AzureCliCredential
     # raises CredentialUnavailableError when az is absent / not logged in, so it
     # is free when unused and a high-value silent win when present.
     silent_tiers.append(("azure-cli", AzureCliCredential(tenant_id=tenant_id)))
@@ -710,11 +830,12 @@ def get_token(scope=None):
 
 _ALLOWED_SKILLS = frozenset({
     "dv-overview", "dv-connect", "dv-data", "dv-query",
-    "dv-metadata", "dv-solution", "dv-admin", "dv-security",
+    "dv-metadata", "dv-solution", "dv-admin", "dv-security", "erp-xpp",
     "unknown",
 })
 _ALLOWED_AGENTS = frozenset({
-    "claude-code", "copilot", "cursor", "codex", "unknown",
+    "claude-code", "copilot", "cursor", "codex", "gemini-cli",
+    "antigravity-cli", "unknown",
 })
 # Strict format: key=value pairs, semicolon-separated. No spaces, no PII.
 _CONTEXT_RE = re.compile(
@@ -722,23 +843,72 @@ _CONTEXT_RE = re.compile(
 )
 
 
+_PLUGIN_VERSION_CACHE = None
+
+
 def _plugin_version():
     """Return the plugin version for telemetry attribution.
 
-    Sourced from DATAVERSE_PLUGIN_VERSION, which dv-connect writes into .env from
-    the live plugin manifest on every connect (Step 0 / Step 3). The deployed
-    layout copies this file to <project>/scripts/auth.py -- away from the plugin
-    manifest -- so a manifest path relative to __file__ is unreliable here; the
-    env var, refreshed at connect, is the source of truth.
+    Primary source is DATAVERSE_PLUGIN_VERSION, which dv-connect writes into .env
+    from the live plugin manifest on marketplace / plugin installs. npx and the
+    JetBrains registry install skill folders only (no manifest), so the env var is
+    often "unknown" there; in that case resolve the version from the canonical
+    manifest (local if reachable, else fetched once and cached).
+
+    Fail-open: a value that would break the closed-schema context string is
+    coerced to "unknown", so attribution can never block the operation.
     """
-    return os.environ.get("DATAVERSE_PLUGIN_VERSION", "unknown")
+    env_version = os.environ.get("DATAVERSE_PLUGIN_VERSION", "").strip()
+    if env_version and env_version != "unknown":
+        return env_version if re.fullmatch(r"[a-zA-Z0-9_./-]+", env_version) else "unknown"
+    ver = _resolve_manifest_version()
+    return ver if re.fullmatch(r"[a-zA-Z0-9_./-]+", ver or "") else "unknown"
+
+
+def _resolve_manifest_version():
+    """Resolve the plugin version from the canonical manifest, cached per process.
+
+    Tries a local manifest (present on repo-clone / plugin installs), then fetches
+    it from GitHub (npx / registry installs ship no manifest). Network and parse
+    failures degrade to "unknown" -- this never raises.
+    """
+    global _PLUGIN_VERSION_CACHE
+    if _PLUGIN_VERSION_CACHE is not None:
+        return _PLUGIN_VERSION_CACHE
+    import json
+
+    version = "unknown"
+    for manifest in (".claude-plugin/plugin.json",
+                     ".github/plugins/dataverse/.claude-plugin/plugin.json"):
+        try:
+            with open(manifest, encoding="utf-8") as fh:
+                version = json.load(fh).get("version") or version
+            break
+        except (OSError, ValueError):
+            continue
+    if version == "unknown":
+        try:
+            import urllib.request
+            url = ("https://raw.githubusercontent.com/microsoft/Dataverse-skills/"
+                   "main/.github/plugins/dataverse/.claude-plugin/plugin.json")
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                version = json.load(resp).get("version") or "unknown"
+        except Exception:
+            version = "unknown"
+    _PLUGIN_VERSION_CACHE = version
+    return version
 
 
 def _current_agent():
+    """Return the attribution agent, fail-open.
+
+    An unrecognized host string (LLM host misdetection: 'github-copilot' vs
+    'copilot', 'claude', 'windsurf', ...) is coerced to "unknown" rather than
+    raised -- telemetry attribution must never gate the user's data operation.
+    Strict validation stays on the .env WRITE path (dv-connect guidance).
+    """
     agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
-    if agent not in _ALLOWED_AGENTS:
-        raise ValueError(f"Unknown agent '{agent}'; allowed: {_ALLOWED_AGENTS}")
-    return agent
+    return agent if agent in _ALLOWED_AGENTS else "unknown"
 
 
 def _validate_skill(skill):
@@ -747,24 +917,30 @@ def _validate_skill(skill):
     return skill
 
 
-def _build_operation_context(skill):
-    """Build and validate the operation_context string.
+def _operation_context_str(skill):
+    """Assemble the closed-schema attribution string, fail-open.
 
-    Returns an OperationContext object for the SDK.  The string is validated
-    both here (via allowlists) and inside OperationContext.__post_init__
-    (via regex + control-char check).
-
-    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and
-    _ALLOWED_AGENTS are used.  Never pass user-provided or free-form
-    strings into operation_context — it is written to HTTP headers and
-    server-side telemetry logs.
+    agent/version are already coerced to allow-listed / charset-safe values, so
+    the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
+    mismatch it degrades to a minimal safe context instead of raising, so a bad
+    attribution value can never block the call. `skill` is a plugin-authored
+    literal validated strictly by the public entry points.
     """
     ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
     if not _CONTEXT_RE.match(ctx_str):
-        raise ValueError(
-            f"operation_context failed format validation: {ctx_str!r}. "
-            "Must be semicolon-separated key=value pairs with no spaces or special characters."
-        )
+        safe_skill = skill if skill in _ALLOWED_SKILLS else "unknown"
+        ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown"
+    return ctx_str
+
+
+def _build_operation_context(skill):
+    """Build the operation_context for the SDK.
+
+    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and _ALLOWED_AGENTS
+    reach the string; agent/version are coerced (never passed through raw), so
+    nothing un-allow-listed is written to HTTP headers or server-side telemetry.
+    """
+    ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
     return OperationContext(user_agent_context=ctx_str)
 
@@ -794,11 +970,39 @@ def get_client(skill, **kwargs):
     )
 
 
-def get_plugin_headers(skill, token=None):
-    """Return HTTP headers for raw Web API calls, with plugin attribution.
+_RAW_FALLBACK_HINT_EMITTED = False
 
-    Use this for operations the SDK does not support (forms, views, $apply,
-    N:N $expand, unbound actions).
+
+def _emit_raw_fallback_hint():
+    """Emit a one-time, non-fatal hint that this is the raw Web API fallback.
+
+    Printed once per process to stderr so an agent is informed without polluting
+    stdout/data. The call still succeeds -- this only informs, it never blocks.
+    Set DATAVERSE_SUPPRESS_FALLBACK_HINT=1 to silence.
+    """
+    global _RAW_FALLBACK_HINT_EMITTED
+    if _RAW_FALLBACK_HINT_EMITTED or os.environ.get("DATAVERSE_SUPPRESS_FALLBACK_HINT"):
+        return
+    _RAW_FALLBACK_HINT_EMITTED = True
+    try:
+        print(
+            "[dataverse-skills] get_plugin_headers() is the raw Web API FALLBACK. "
+            "Prefer get_client() (SDK) for record CRUD, queries, bulk delete, batching, "
+            "and metadata; use raw HTTP only for genuine gaps (unbound actions, global option sets).",
+            file=sys.stderr,
+        )
+    except Exception:
+        pass  # best-effort diagnostic; must never break header construction
+
+
+def get_plugin_headers(skill, token=None):
+    """Return HTTP headers for a raw Web API call -- the FALLBACK path.
+
+    PREFER ``get_client(skill)`` (the SDK). The SDK covers all record CRUD,
+    queries (aggregation via ``client.query.fetchxml()``, N:N via
+    ``builder().expand()``), bulk delete, batching, and metadata. Reach for this
+    raw-HTTP helper ONLY for genuine SDK gaps -- unbound actions such as
+    ``PublishXml`` / ``AddSolutionComponent``, or global option sets.
 
     IMPORTANT: Do not modify the User-Agent context — it uses a closed
     schema (app/skill/agent) for safe server-side attribution.  Never
@@ -809,11 +1013,8 @@ def get_plugin_headers(skill, token=None):
     :returns: Headers dict with User-Agent and optional Authorization.
     """
     _validate_skill(skill)
-    ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
-    if not _CONTEXT_RE.match(ctx_str):
-        raise ValueError(
-            f"operation_context failed format validation: {ctx_str!r}."
-        )
+    _emit_raw_fallback_hint()
+    ctx_str = _operation_context_str(skill)
     headers = {"User-Agent": f"Python-urllib ({ctx_str})"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -893,6 +1094,136 @@ def _run_diagnose():
         print(f"Result: no silent tier -- the next call uses the '{kind}' interactive tier.")
 
 
+def _run_ping():
+    """Lightweight reachability check: token + one HTTP call, no SDK import.
+
+    Uses only stdlib (urllib) and the credential chain (which needs msal or
+    azure-identity -- at least one is typically installed globally even before
+    pip runs in a fresh workspace). Writes .env and copies auth.py to scripts/
+    if missing, so a successful ping makes the workspace ready for SDK use
+    after pip install.
+    """
+    import shutil
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    load_env()
+    url = os.environ.get("DATAVERSE_URL", "").rstrip("/")
+    tenant_id = os.environ.get("TENANT_ID")
+
+    if not url or not tenant_id:
+        print("PING FAILED: no DATAVERSE_URL or TENANT_ID (no .env, no user-level config).", flush=True)
+        sys.exit(1)
+
+    # Acquire a token via the credential chain (shared CLI cache, az, interactive).
+    # _get_credential needs azure-identity or msal; if neither is installed, fail cleanly.
+    try:
+        token = get_token()
+    except SystemExit:
+        print("PING FAILED: could not acquire a token (azure-identity or msal may not be installed).", flush=True)
+        sys.exit(1)
+
+    # One raw HTTP call to verify the org is reachable.
+    try:
+        req = Request(f"{url}/api/data/v9.2/WhoAmI")
+        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Accept", "application/json")
+        resp = urlopen(req, timeout=20)
+        resp.read()
+    except HTTPError as e:
+        print(f"PING FAILED: {url} returned HTTP {e.code}.", flush=True)
+        sys.exit(2)
+    except (URLError, OSError) as e:
+        reason = getattr(e, "reason", e)
+        print(f"PING FAILED: {url} unreachable ({reason}).", flush=True)
+        sys.exit(2)
+
+    # Workspace bootstrap: write .env and copy auth.py if missing.
+    workspace = Path.cwd()
+    env_path = workspace / ".env"
+    if not env_path.exists():
+        env_path.write_text(f"DATAVERSE_URL={url}\nTENANT_ID={tenant_id}\n", encoding="utf-8")
+    dest = workspace / "scripts" / "auth.py"
+    if not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).resolve(), dest)
+    gitignore = workspace / ".gitignore"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    for entry in (".env", ".dataverse/"):
+        if entry not in existing:
+            with open(gitignore, "a", encoding="utf-8") as f:
+                f.write(f"\n{entry}\n")
+
+    _save_user_config()
+    print(f"REACHABLE: {url}", flush=True)
+
+
+def _run_bootstrap(url):
+    """One-command workspace setup from a Dataverse org URL.
+
+    Probes the URL for tenant ID via WWW-Authenticate, writes .env, copies
+    auth.py to scripts/, and saves to user-level config. Uses only stdlib
+    (urllib) so it works before pip install.
+    """
+    import shutil
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    url = url.rstrip("/")
+    if not url.startswith("https://"):
+        print(f"ERROR: URL must start with https:// (got: {url})", flush=True)
+        sys.exit(1)
+
+    print(f"Probing {url} for tenant ID...", flush=True)
+    www_auth = ""
+    try:
+        req = Request(f"{url}/api/data/v9.2/", method="GET")
+        req.add_header("Accept", "application/json")
+        urlopen(req, timeout=20)
+        print("ERROR: Unexpected 200 from unauthenticated probe.", flush=True)
+        sys.exit(1)
+    except HTTPError as e:
+        www_auth = e.headers.get("WWW-Authenticate", "")
+    except URLError as e:
+        print(f"ERROR: Cannot reach {url}: {e.reason}", flush=True)
+        sys.exit(1)
+
+    match = re.search(r"login\.microsoftonline\.com/([^/,\s]+)", www_auth)
+    if not match:
+        print(f"ERROR: Could not discover tenant from {url}", flush=True)
+        print(f"  WWW-Authenticate: {www_auth[:200]}", flush=True)
+        sys.exit(1)
+    tenant_id = match.group(1)
+
+    workspace = Path.cwd()
+    env_path = workspace / ".env"
+    env_path.write_text(
+        f"DATAVERSE_URL={url}\nTENANT_ID={tenant_id}\n", encoding="utf-8",
+    )
+
+    scripts_dir = workspace / "scripts"
+    dest = scripts_dir / "auth.py"
+    if not dest.exists():
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(Path(__file__).resolve(), dest)
+
+    gitignore = workspace / ".gitignore"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    missing = [e for e in (".env", ".dataverse/") if e not in existing]
+    if missing:
+        with open(gitignore, "a", encoding="utf-8") as f:
+            f.write("\n" + "\n".join(missing) + "\n")
+
+    os.environ["DATAVERSE_URL"] = url
+    os.environ["TENANT_ID"] = tenant_id
+    _save_user_config()
+
+    print(f"BOOTSTRAPPED: {url} (tenant {tenant_id})", flush=True)
+    print(f"  .env: {env_path}", flush=True)
+    print(f"  user config: {_USER_CONFIG_PATH}", flush=True)
+    print("  Next: pip install deps (if needed), then: python scripts/auth.py --check", flush=True)
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -907,16 +1238,38 @@ if __name__ == "__main__":
         "this is the only proof of an actual connection. Exit 0 = reachable, 2 = not reachable.",
     )
     parser.add_argument(
+        "--ping",
+        action="store_true",
+        help="Lightweight reachability check using only stdlib + msal (no SDK import). "
+        "Loads user-level config or .env, acquires a token via the credential chain, makes "
+        "one raw HTTP call to verify the org is reachable. Exit 0 = reachable + prints the "
+        "org URL, 1 = no config or no token, 2 = token OK but org unreachable. Also writes "
+        ".env and copies auth.py to scripts/ if missing.",
+    )
+    parser.add_argument(
         "--diagnose",
         action="store_true",
         help="Print which credential tiers (service principal / shared cache / az CLI / "
         "interactive) are available, WITHOUT prompting. Use when auth hangs or fails to see "
         "why and which tier would serve the next call.",
     )
+    parser.add_argument(
+        "--bootstrap", metavar="URL",
+        help="One-shot setup: probe URL for tenant, write .env, copy auth.py to scripts/, "
+        "save to user-level config. Does not authenticate -- run --check after pip install.",
+    )
     args = parser.parse_args()
 
     if args.diagnose:
         _run_diagnose()
+        sys.exit(0)
+
+    if args.bootstrap:
+        _run_bootstrap(args.bootstrap)
+        sys.exit(0)
+
+    if args.ping:
+        _run_ping()
         sys.exit(0)
 
     if not args.check:
@@ -937,6 +1290,7 @@ if __name__ == "__main__":
         client = get_client("dv-connect")
         tables = client.tables.list(select=["LogicalName"])
         print(f"REACHABLE: {url} -- {len(tables)} non-private tables")
+        _save_user_config()
         sys.exit(0)
     except Exception as e:
         print(f"NOT REACHABLE: {url} -- {type(e).__name__}: {e}", flush=True)

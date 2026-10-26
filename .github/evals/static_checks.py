@@ -64,7 +64,7 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-       EVAL-VERSION-01  All six version fields match (5 files, 6 fields total)
+    EVAL-VERSION-01  All nine version fields match (7 files, 9 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
@@ -98,6 +98,27 @@ CAT-11 Deprecated SDK Read API Gate
        blocks are scanned (SKILL.md and references/), so prose deprecation notes
        are fine.
        EVAL-DEPRECATED-01  No python code block calls a deprecated read API
+
+CAT-12 CLI Attribution (--context)
+    Checks that every dataverse data-plane CLI command in a shell or
+    unlabeled fenced block (SKILL.md and references/) carries --context for
+    skill attribution. mcp (registration -e) and auth (token flow) exempt.
+    EVAL-CONTEXT-01  No dataverse data/api/org/env/erp example missing --context
+
+CAT-13 Antigravity Plugin
+    Checks the native manifest and host attribution required for direct
+    installation from the canonical plugin directory.
+    EVAL-ANTIGRAVITY-01  Native manifest matches canonical identity
+    EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
+    EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
+    EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
+
+CAT-14 Gemini Extension
+    Checks the canonical Gemini manifest, settings, MCP declaration,
+    attribution, package layout, and repository installation command.
+    EVAL-GEMINI-01  Manifest settings and MCP declaration are valid
+    EVAL-GEMINI-02  Canonical package is complete with a matching root manifest
+    EVAL-GEMINI-03  README installs from the public repository
 """
 
 import argparse
@@ -264,7 +285,10 @@ def check_auth_patterns(name, text):
                 f"use sys.path.insert + 'from auth import'"
             )
 
-        # EVAL-AUTH-02: get_token/urllib blocks must justify why SDK cannot be used
+        # EVAL-AUTH-02: get_token/urllib blocks must justify why the raw fallback
+        # is used. Accurate fallback framing (unbound action / SDK gap / fallback)
+        # is accepted so authors need NOT write a false "SDK does not support X"
+        # claim just to pass this gate -- that forcing produced stale claims.
         uses_raw_http = ("get_token" in block or "urllib.request" in block)
         if uses_raw_http:
             has_justification = any(
@@ -274,12 +298,18 @@ def check_auth_patterns(name, text):
                     "SDK can't",
                     "SDK does not support",
                     "WRONG",
+                    "fallback",
+                    "unbound action",
+                    "no SDK method",
+                    "SDK gap",
+                    "last resort",
+                    "global option set",
                 ]
             )
             if not has_justification:
                 failures.append(
                     f"EVAL-AUTH-02 [{label}] uses get_token/urllib without justification "
-                    f"comment -- add '# SDK cannot/does not support <reason>' to the import line"
+                    f"comment -- add a reason (e.g. '# fallback: unbound action, no SDK method')"
                 )
 
     return failures
@@ -572,16 +602,19 @@ SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All six version fields match across manifest files.
+    EVAL-VERSION-01: All nine version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The six version fields live in five files:
+    The nine version fields live in seven files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
       4. .github/plugins/dataverse/.github/plugin/plugin.json -- version
       5. .github/plugins/dataverse/.cursor-plugin/plugin.json -- version
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
+      7. .cursor-plugin/marketplace.json -- metadata.version
+      8. .cursor-plugin/marketplace.json -- plugins[0].version
+        9. .github/plugins/dataverse/gemini-extension.json -- version
     """
     failures = []
 
@@ -616,6 +649,21 @@ def check_version_consistency(repo_root):
             lambda d: d.get("version"),
             "version",
         ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: d.get("metadata", {}).get("version"),
+            "metadata.version",
+        ),
+        (
+            ".cursor-plugin/marketplace.json",
+            lambda d: (d.get("plugins") or [{}])[0].get("version"),
+            "plugins[0].version",
+        ),
+        (
+            ".github/plugins/dataverse/gemini-extension.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
     ]
 
     found = []
@@ -628,13 +676,22 @@ def check_version_consistency(repo_root):
             continue
         try:
             data = json.loads(full_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
+        except (OSError, json.JSONDecodeError) as e:
             failures.append(
                 f"EVAL-VERSION-01 [{rel_path}] invalid JSON: {e}"
             )
             continue
 
-        version = extractor(data)
+        if not isinstance(data, dict):
+            failures.append(
+                f"EVAL-VERSION-01 [{rel_path}] manifest root must be an object"
+            )
+            continue
+
+        try:
+            version = extractor(data)
+        except (AttributeError, IndexError, KeyError, TypeError):
+            version = None
         if version is None:
             failures.append(
                 f"EVAL-VERSION-01 [{rel_path}] missing '{field}' field"
@@ -644,7 +701,7 @@ def check_version_consistency(repo_root):
         found.append((rel_path, field, version))
 
         # EVAL-VERSION-02: semver format check
-        if not SEMVER_PATTERN.match(version):
+        if not isinstance(version, str) or not SEMVER_PATTERN.match(version):
             failures.append(
                 f"EVAL-VERSION-02 [{rel_path}] '{field}' = '{version}' "
                 f"does not match semver format x.y.z"
@@ -667,18 +724,25 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in four plugin.json manifests (one per
-# harness/marketplace format) and the plugins[0] entry of three marketplace.json
-# catalogs. All seven describe the same plugin and must match. The
+# The plugin description appears in seven plugin manifest fields (including
+# Codex's long description) and the plugins[0] entry of three marketplace.json
+# catalogs. All ten describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
 # describes the marketplace, not the plugin) and is deliberately excluded.
 _DESCRIPTION_SOURCES = [
+    (".github/plugins/dataverse/gemini-extension.json",
+     lambda d: d.get("description"), "description"),
+    (".github/plugins/dataverse/plugin.json",
+     lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.cursor-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.claude-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.codex-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
+    (".github/plugins/dataverse/.codex-plugin/plugin.json",
+     lambda d: (d.get("interface") or {}).get("longDescription"),
+     "interface.longDescription"),
     (".github/plugins/dataverse/.github/plugin/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugin/marketplace.json",
@@ -765,6 +829,258 @@ def check_manifest_assets(repo_root):
                 f"EVAL-ASSET-01 [{rel_path}] logo '{logo}' does not resolve to an "
                 f"existing file (expected at {_PLUGIN_ROOT}/{rel})"
             )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-13  Antigravity Plugin
+# ---------------------------------------------------------------------------
+
+
+def check_antigravity_plugin(repo_root):
+    """Validate the native manifest and Antigravity integration contract."""
+    failures = []
+    relative_path = ".github/plugins/dataverse/plugin.json"
+    manifest_path = repo_root / relative_path
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest file not found"]
+    except json.JSONDecodeError as error:
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] invalid JSON: {error}"]
+
+    canonical_path = repo_root / ".github/plugins/dataverse/.claude-plugin/plugin.json"
+    try:
+        canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError) as error:
+        return failures + [
+            f"EVAL-ANTIGRAVITY-01 [{canonical_path.relative_to(repo_root)}] "
+            f"cannot read canonical identity: {error}"
+        ]
+    expected = {
+        "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+        "name": canonical.get("name"),
+        "description": canonical.get("description"),
+    }
+    if manifest != expected:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] must contain only the "
+            "official schema, canonical name, and canonical description"
+        )
+
+    auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
+    try:
+        auth_text = auth_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, UnicodeDecodeError) as error:
+        return failures + [
+            f"EVAL-ANTIGRAVITY-02 [{auth_path.relative_to(repo_root)}] "
+            f"cannot read host allowlist: {error}"
+        ]
+    match = re.search(r"_ALLOWED_AGENTS\s*=\s*frozenset\(\{([^}]+)\}\)", auth_text)
+    allowed_agents = match.group(1) if match else ""
+    if '"antigravity-cli"' not in allowed_agents:
+        failures.append(
+            "EVAL-ANTIGRAVITY-02 [auth.py] _ALLOWED_AGENTS must include "
+            "'antigravity-cli'"
+        )
+
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    expected_install_path = (
+        "https://github.com/microsoft/Dataverse-skills/tree/main/"
+        ".github/plugins/dataverse"
+    )
+    if expected_install_path not in readme:
+        failures.append(
+            "EVAL-ANTIGRAVITY-03 [README.md] install command must target the "
+            "canonical plugin directory"
+        )
+
+    mcp_reference = (
+        repo_root
+        / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
+    ).read_text(encoding="utf-8")
+    normalized_mcp_reference = " ".join(mcp_reference.split())
+    for required_text in (
+        "agy mcp add",
+        "agy mcp list",
+        "Do not write `.agents/mcp_config.json`",
+        "~/.gemini/config/mcp_config.json",
+        "dataverse-{orgname}",
+        "agent=antigravity-cli",
+    ):
+        if required_text not in normalized_mcp_reference:
+            failures.append(
+                "EVAL-ANTIGRAVITY-04 [mcp-configuration.md] missing required "
+                f"Antigravity configuration token: {required_text}"
+            )
+
+    connect_text = (
+        repo_root / ".github/plugins/dataverse/skills/dv-connect/SKILL.md"
+    ).read_text(encoding="utf-8")
+    if '".agents/mcp_config.json"' in connect_text:
+        failures.append(
+            "EVAL-ANTIGRAVITY-04 [dv-connect/SKILL.md] must not add the "
+            "unsupported .agents/mcp_config.json path to .gitignore"
+        )
+
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-14  Gemini Extension
+# ---------------------------------------------------------------------------
+
+
+def check_gemini_extension(repo_root):
+    """Validate the generated Gemini extension contract."""
+    failures = []
+    relative_path = ".github/plugins/dataverse/gemini-extension.json"
+    manifest_path = repo_root / relative_path
+    try:
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest = json.loads(manifest_text)
+    except FileNotFoundError:
+        return [f"EVAL-GEMINI-01 [{relative_path}] manifest file not found"]
+    except json.JSONDecodeError as error:
+        return [f"EVAL-GEMINI-01 [{relative_path}] invalid JSON: {error}"]
+
+    if manifest.get("name") != "dataverse":
+        failures.append(f"EVAL-GEMINI-01 [{relative_path}] name must be 'dataverse'")
+
+    manifest_text_lower = manifest_text.lower()
+    if ".zip" in manifest_text_lower or "releases/latest/download" in manifest_text_lower:
+        failures.append(
+            f"EVAL-GEMINI-01 [{relative_path}] must not reference a release asset"
+        )
+
+    raw_settings = manifest.get("settings")
+    if not isinstance(raw_settings, list):
+        failures.append(f"EVAL-GEMINI-01 [{relative_path}] settings must be a list")
+        raw_settings = []
+    settings = {
+        setting.get("envVar"): setting
+        for setting in raw_settings
+        if isinstance(setting, dict)
+    }
+    environment = settings.get("DATAVERSE_URL")
+    if not environment or environment.get("sensitive") is not False:
+        failures.append(
+            f"EVAL-GEMINI-01 [{relative_path}] DATAVERSE_URL must be a "
+            "non-sensitive extension setting"
+        )
+
+    mcp_servers = manifest.get("mcpServers")
+    if not isinstance(mcp_servers, dict):
+        failures.append(f"EVAL-GEMINI-01 [{relative_path}] mcpServers must be an object")
+        mcp_servers = {}
+    server = mcp_servers.get("dataverse")
+    if not isinstance(server, dict):
+        server = {}
+    expected_args = [
+        "-y", "@microsoft/dataverse@latest", "mcp", "${DATAVERSE_URL}",
+    ]
+    if server.get("command") != "npx" or server.get("args") != expected_args:
+        failures.append(
+            f"EVAL-GEMINI-01 [{relative_path}] Dataverse MCP server must use "
+            f"command='npx' and args={expected_args!r}"
+        )
+
+    version = manifest.get("version")
+    expected_context = (
+        f"app=dataverse-skills/{version};skill=mcp-direct;agent=gemini-cli"
+    )
+    server_env = server.get("env")
+    if not isinstance(server_env, dict):
+        failures.append(
+            f"EVAL-GEMINI-01 [{relative_path}] Dataverse MCP env must be an object"
+        )
+        server_env = {}
+    actual_context = server_env.get("DATAVERSE_OPERATION_CONTEXT")
+    if actual_context != expected_context:
+        failures.append(
+            f"EVAL-GEMINI-01 [{relative_path}] DATAVERSE_OPERATION_CONTEXT "
+            f"must equal {expected_context!r}"
+        )
+
+    auth_text = (
+        repo_root / ".github/plugins/dataverse/scripts/auth.py"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"_ALLOWED_AGENTS\s*=\s*frozenset\(\{([^}]+)\}\)", auth_text)
+    allowed_agents = match.group(1) if match else ""
+    if '"gemini-cli"' not in allowed_agents:
+        failures.append(
+            "EVAL-GEMINI-02 [auth.py] _ALLOWED_AGENTS must include 'gemini-cli'"
+        )
+
+    for directory in ("skills", "scripts"):
+        if not (manifest_path.parent / directory).is_dir():
+            failures.append(
+                f"EVAL-GEMINI-02 canonical package is missing {directory}/"
+            )
+
+    root_manifest_path = repo_root / "gemini-extension.json"
+    try:
+        root_manifest = json.loads(root_manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        failures.append("EVAL-GEMINI-02 [gemini-extension.json] root manifest not found")
+    except json.JSONDecodeError as error:
+        failures.append(
+            f"EVAL-GEMINI-02 [gemini-extension.json] invalid JSON: {error}"
+        )
+    else:
+        for field in ("name", "version", "description"):
+            value = root_manifest.get(field)
+            if not isinstance(value, str) or not value.strip():
+                failures.append(
+                    f"EVAL-GEMINI-02 [gemini-extension.json] {field} must be a "
+                    "non-empty string"
+                )
+            elif value != manifest.get(field):
+                failures.append(
+                    f"EVAL-GEMINI-02 [gemini-extension.json] {field} must match "
+                    f"{relative_path}"
+                )
+
+    for duplicate in ("skills", "scripts"):
+        duplicate_path = repo_root / duplicate
+        if duplicate_path.exists() or duplicate_path.is_symlink():
+            failures.append(
+                f"EVAL-GEMINI-02 repository root duplicates canonical {duplicate}"
+            )
+
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
+    if "gemini extensions install https://github.com/microsoft/Dataverse-skills" not in readme:
+        failures.append(
+            "EVAL-GEMINI-03 [README.md] missing repository installation command"
+        )
+
+    connect_text = (
+        repo_root / ".github/plugins/dataverse/skills/dv-connect/SKILL.md"
+    ).read_text(encoding="utf-8")
+    mcp_text = (
+        repo_root
+        / ".github/plugins/dataverse/skills/dv-connect/references/mcp-configuration.md"
+    ).read_text(encoding="utf-8")
+    guidance_contracts = (
+        ("dv-connect/SKILL.md", connect_text, (
+            "gemini mcp list", "Gemini supports GA only",
+            '"gemini": "gemini-cli"', '"antigravity": "antigravity-cli"',
+        )),
+        ("mcp-configuration.md", mcp_text, (
+            "gemini extensions config dataverse DATAVERSE_URL",
+            "/api/mcp_preview", "Preview", "stop", "GA",
+        )),
+        ("README.md", readme, ("Gemini", "bundled `dataverse` server")),
+    )
+    for source_name, source, required_tokens in guidance_contracts:
+        normalized_source = " ".join(source.split())
+        for required_token in required_tokens:
+            if required_token not in normalized_source:
+                failures.append(
+                    f"EVAL-GEMINI-03 [{source_name}] connection guidance is "
+                    f"missing required token: {required_token}"
+                )
 
     return failures
 
@@ -865,6 +1181,84 @@ def check_token_budget(name, text, skill_dir):
 
 
 # ---------------------------------------------------------------------------
+# CAT-12  CLI Attribution (--context)
+# ---------------------------------------------------------------------------
+
+# Attributable data-plane verbs. mcp is attributed via the registration -e block
+# and auth is the pre-request token flow, so both are intentionally excluded.
+_CLI_CMD_RE = re.compile(r"^\s*dataverse\s+(data|api|org|env|erp)\s+\S+", re.MULTILINE)
+_CONTEXT_FLAG_RE = re.compile(r"--context\s+")
+
+# Shell-ish fence languages (plus unlabeled) that hold runnable CLI examples.
+# python blocks use the SDK, not the CLI, so they are excluded.
+_SHELL_FENCE_LANGS = {"", "bash", "sh", "shell", "shell-session", "console", "zsh"}
+_FENCE_LANG_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
+
+
+def check_cli_attribution(name, text):
+    """EVAL-CONTEXT-01: every dataverse data-plane CLI command in a shell fenced
+    block must carry --context for skill attribution.
+
+    Per CLAUDE.md verified-failure #3 and the telemetry convention, every
+    dataverse data/api/org/env/erp command should include --context. Scans
+    shell-ish and unlabeled fenced blocks (SKILL.md and references/), skipping
+    python (SDK) blocks. Joins backslash line continuations before checking.
+    mcp (registration -e) and auth (token flow) verbs are intentionally exempt.
+    """
+    failures = []
+    for i, m in enumerate(_FENCE_LANG_RE.finditer(text), start=1):
+        info = m.group(1).strip().lower()
+        lang = info.split(maxsplit=1)[0] if info else ""
+        if lang not in _SHELL_FENCE_LANGS:
+            continue
+        # Join backslash continuations into single logical lines
+        joined = m.group(2).replace("\\\n", " ")
+        for line in joined.splitlines():
+            if _CLI_CMD_RE.match(line) and not _CONTEXT_FLAG_RE.search(line):
+                cmd = line.strip()[:80]
+                failures.append(
+                    f"EVAL-CONTEXT-01 [{name} {lang or 'plain'}-block-{i}] CLI command "
+                    f"missing --context attribution: `{cmd}...`"
+                )
+    return failures
+
+
+# ---------------------------------------------------------------------------
+# CAT-2b  Raw-fallback nudge guard
+# ---------------------------------------------------------------------------
+
+def check_fallback_nudge(repo_root):
+    """EVAL-AUTH-03: the shipped auth.py get_plugin_headers must stay framed as
+    the raw Web API FALLBACK that steers callers to the SDK (get_client).
+
+    get_plugin_headers is the single chokepoint for every hand-rolled urllib
+    request (it sets the ``Python-urllib`` User-Agent). Keeping its docstring
+    framed as a last-resort fallback -- naming get_client as the default -- is
+    what nudges an agent toward the SDK. This guards that framing against a
+    silent regression back to neutral/peer wording.
+    """
+    auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
+    try:
+        auth_text = auth_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, UnicodeDecodeError) as error:
+        return [f"EVAL-AUTH-03 [auth.py] cannot read: {error}"]
+    m = re.search(
+        r"def get_plugin_headers\([^)]*\):\s*\"\"\"(.*?)\"\"\"",
+        auth_text,
+        re.DOTALL,
+    )
+    if not m:
+        return ["EVAL-AUTH-03 [auth.py] get_plugin_headers docstring not found"]
+    doc = m.group(1)
+    if "FALLBACK" not in doc or "get_client" not in doc:
+        return [
+            "EVAL-AUTH-03 [auth.py] get_plugin_headers docstring must frame it as the "
+            "raw Web API FALLBACK and steer to get_client (the SDK)"
+        ]
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -905,12 +1299,14 @@ def main():
         all_failures.extend(check_allowlist(name, text))
         all_failures.extend(check_token_budget(name, text, f.parent))
         all_failures.extend(check_deprecated_read_api(name, text))
+        all_failures.extend(check_cli_attribution(name, text))
 
-    # CAT-11 also covers reference files (Level 3), which teach the same read API
+    # CAT-11 + CAT-12 also cover reference files (Level 3): read API + CLI attribution
     for rf in sorted(skills_dir.glob("*/references/*.md")):
         rtext = rf.read_text(encoding="utf-8")
         rlabel = f"{rf.parent.parent.name}/references/{rf.name}"
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
+        all_failures.extend(check_cli_attribution(rlabel, rtext))
 
     # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
@@ -924,6 +1320,9 @@ def main():
     # Manifest description consistency + asset references
     all_failures.extend(check_description_consistency(repo_root))
     all_failures.extend(check_manifest_assets(repo_root))
+    all_failures.extend(check_antigravity_plugin(repo_root))
+    all_failures.extend(check_gemini_extension(repo_root))
+    all_failures.extend(check_fallback_nudge(repo_root))
 
     # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
@@ -946,7 +1345,7 @@ def main():
         print(
             f"PASSED -- {len(skill_files)} skill files, "
             f"{python_block_count} Python blocks, "
-            f"11 categories checked"
+            f"15 categories checked"
         )
 
 

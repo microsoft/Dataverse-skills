@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP; load this first for orientation. Specialist skills self-route via their own frontmatter triggers.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP; load this first for orientation. Specialist skills self-route via their own frontmatter triggers. Finance and Operations / F&O business-data requests also require this skill first, then dv-query for reads.
 ---
 
 # Skill: Overview — What to Use and When
@@ -20,6 +20,7 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data writes — record CRUD, bulk create/update/upsert, CSV/FK-ordered import, sample data | `dv-data` |
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
+| Finance and Operations X++ — author, build, deploy, DB sync, verify | `erp-xpp` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 
@@ -34,22 +35,30 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 
 ---
 
-## Hard Rules — Read These First
+## Hard Rules
 
-The safety rules (init state, auth, environment confirmation, no bespoke MSAL) are non-negotiable. The tool-selection guidance (Rules 1, 2, 4) is capability-based — strong defaults, not rigid mandates.
+Safety rules (init, auth, env confirmation) are non-negotiable. Tool selection (Rules 1, 2, 4) is capability-based.
 
-### 0. Check Init State Before Anything Else
+### 0. Check Init State First
 
-Before writing ANY code or creating ANY files, check if the workspace is initialized:
+Before writing ANY code or creating ANY files, **actively search your callable tools for any tool whose name or description contains `dataverse`** (tools may be registered under environment-specific names like `mcp__dataverse_<orgid>__read_query`, not just generic names). **If any Dataverse MCP tool is found, use it directly — skip the init check and all setup.** MCP auth is host-managed and does not need `.env` or `scripts/auth.py`. Never declare MCP unavailable based solely on the initially displayed tool list.
+
+If no MCP tool is found, check for an existing CLI profile — it's the fastest path for data operations:
+
+```bash
+dataverse auth who
+```
+
+If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect" or "set up" requests, run `dv-connect` regardless — it configures MCP, SDK, and PAC.
+
+If no CLI profile exists, check workspace init:
 
 ```bash
 ls .env scripts/auth.py 2>/dev/null
 ```
 
-- If BOTH exist: workspace is initialized. Proceed to the relevant task.
-- If EITHER is missing: **Automatically run the connect flow** (see the `dv-connect` skill). Do NOT ask the user whether to initialize — just do it. Do not create your own `.env`, `requirements.txt`, `.env.example`, or auth scripts. The `dv-connect` skill handles all of this.
-
-Do NOT create `requirements.txt`, `.env.example`, or scaffold files manually. The connect flow produces the correct file structure. Skipping it is the #1 cause of broken setups.
+- If BOTH exist: proceed to the task.
+- If EITHER is missing: run `python <plugin-scripts>/auth.py --ping`. If it prints `REACHABLE` (exit 0), the workspace is bootable without pip -- confirm the URL and proceed. If `--ping` fails, **run `dv-connect`**.
 
 ### 1. Python for scripting; the CLIs and MCP are first-class
 
@@ -80,9 +89,9 @@ No mandated tool order. Each surface has a capability profile; pick what fits th
 ### 3. Use Documented Auth Patterns
 
 Three entry points, one shared sign-in:
-- **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache under the DataverseCLI app registration. That single sign-in serves the CLI, the `@microsoft/dataverse` MCP proxy, **and** `scripts/auth.py` — which silently reuses the same cache via `msal-extensions` (the sanctioned MSAL API, not raw-file parsing), so Python scripts and the SDK don't prompt again.
-- **`scripts/auth.py`** is the auth entry point for all Python/SDK code. Its order: service principal (`CLIENT_ID` + `CLIENT_SECRET` in `.env`) → shared Dataverse CLI cache → device-code fallback. Use `get_client(skill)` (SDK) or `get_plugin_headers(skill, get_token())` (raw Web API) — both stamp the skill attribution; bare `get_token()` does not.
-- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution` and `dv-admin`.
+- **`dataverse auth create`** (Dataverse CLI) writes a shared MSAL token cache. That sign-in serves CLI, MCP proxy, **and** `scripts/auth.py` via `msal-extensions`.
+- **`scripts/auth.py`** — Python/SDK auth (service principal → shared CLI cache → device-code). Prefer **`get_client(skill)`** (SDK); `get_plugin_headers(skill, get_token())` is the **fallback for SDK gaps** — both stamp attribution.
+- **`pac auth create`** (PAC CLI) authenticates `pac` for `dv-solution`, `dv-admin`, and `erp-xpp`.
 
 **Telemetry attribution (keep it deterministic):** every request carries a closed-schema `app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>` context so the server sees which skill routed each OData call. It is baked in — `get_client(skill)` and `get_plugin_headers(skill, ...)` stamp it on the SDK and raw-HTTP paths; the Dataverse CLI auto-stamps `DataverseCli/<ver>` + the command, and you add the skill with `--context "app=dataverse-skills/<ver>;skill=<skill>;agent=<agent>"` (the CLI wraps it in parentheses itself — do not pre-wrap). Never modify, omit, or free-form this context — it is a closed schema (allowlisted skill/agent, no PII).
 
@@ -114,14 +123,14 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 | **Python SDK (`dv-data`)** | Scripted data writes, especially at volume. Record CRUD, upsert (alternate keys), bulk create/update/upsert (CreateMultiple/UpdateMultiple/UpsertMultiple), CSV import with lookup resolution, file column uploads (chunked >128MB) | global Option Sets, record association (`$ref`), `$apply` aggregation, table/column/relationship creation (use `dv-metadata`), custom action invocation |
 | **Python SDK (`dv-query`)** | Bulk reads and analytics. Multi-page record iteration, OData queries (select/filter/expand/orderby), QueryBuilder fluent API, GUID-free display (formatted values), `$expand` to resolve lookups, **aggregation and N:N joins via `client.query.fetchxml()`** (aggregate FetchXML + link-entity), pandas DataFrame handoff (`client.query.builder(...).execute().to_dataframe()`) for exports, Jupyter notebook snippets | OData `$apply` and N:N `$expand` on the **QueryBuilder** path — use `records.list(expand=...)` for N:N, or `fetchxml()` for aggregates (not raw `urllib`) |
 | **Dataverse CLI (`dataverse`)** | Headless data plane: `data` CRUD, `associate`/`disassociate` (N:N + `$ref`), `data upload`; `api request`/`invoke` (Web API escape hatch); `api list`/`describe` (Custom API discovery) | Metadata/schema (use SDK — `dv-metadata`), solution ALM (use PAC), forms/views; **blocked on ChatGPT web / Codex cloud** (no .NET runtime) — use the SDK |
-| **PAC CLI** | Solution export/import/pack/unpack, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), add solution components (`pac solution add-solution-component`) | Data CRUD, metadata creation (tables/columns/forms), listing solution components (no `list-components` — query `solutioncomponent` via SDK/CLI) |
+| **PAC CLI** | Solution export/import/pack/unpack, ERP X++ SDK install + package scaffold/compile/deploy/DB sync, environment create/list/delete/reset, auth profile management, plugin updates (`pac plugin push` — first-time registration requires Web API), user/role assignment (`pac admin assign-user`), add solution components (`pac solution add-solution-component`) | Data CRUD, Dataverse metadata creation (tables/columns/forms), listing solution components (no `list-components` — query `solutioncomponent` via SDK/CLI); X++ SDK install/compile require Windows |
 | **Azure CLI** | App registrations, service principals, credential management | Dataverse-specific operations |
 | **GitHub CLI** | Repo management, GitHub secrets, Actions workflow status | Dataverse-specific operations |
 | **Raw Web API** (last resort) | Only when **no** managed surface exposes the operation — i.e. not doable via MCP, the Python SDK, the Dataverse CLI, or the `dataverse api` escape hatch. Genuine cases: unbound actions like `PublishXml`, global option sets, and similar edge cases (**not** forms/views — those are SDK record CRUD on `systemform`/`savedquery`). Even then, prefer `dataverse api` (managed auth + skill attribution) over hand-rolled `urllib`. | Functionally nothing (full OData/MetadataService) — but raw `urllib` bypasses managed auth, paging, retry, and skill attribution, so treat it as the path of last resort |
 
 **Routing:** the table shows what each surface does; the *how to choose* principle (soft defaults, not a fixed order) is Hard Rule 2. MCP tools not in your list? Load `dv-connect`.
 
-**Volume guidance:** MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; Web API for `$apply` aggregation.
+**Volume guidance:** CLI `dataverse data create/query/count` for one-off commands; MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; SDK `fetchxml()` for aggregation.
 
 **SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
 
@@ -143,16 +152,16 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 ### MCP Availability Check
 
-If the user's request involves MCP — either explicitly ("connect via MCP", "use MCP", "query via MCP") or implicitly (conversational data queries where MCP would be the natural tool) — check whether Dataverse MCP tools are available in your current tool list (e.g., `search`, `describe`, `read_query`, `create_record`).
+If the user's request involves MCP — explicitly or implicitly — search your callable tools for any tool whose name or description contains `dataverse` (same search as Hard Rule 0).
 
-**If MCP tools are NOT available and the user explicitly asked for MCP** (e.g., "use MCP to query", "why isn't MCP working"):
+**If MCP NOT available and user explicitly asked for MCP** ("use MCP to query"):
 1. **Do NOT silently fall back** to the Python SDK or Web API
 2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
-3. Load the `dv-connect` skill to set up the MCP server
-4. After MCP is configured, **stop here** — the session must be restarted for MCP tools to appear. Remind the user to resume the session without losing context (Claude Code: `claude --continue`; Cursor: reload the window with Ctrl+Shift+P → "Developer: Reload Window"; Copilot: reopen the Copilot panel). Do not proceed with SDK. Wait for the user to restart.
+3. Load `dv-connect` to set up the MCP server
+4. After MCP is configured, **stop** — the session must restart for MCP tools to appear. Do not proceed with SDK.
 
-**If MCP tools are NOT available and the user asked a data question without explicitly requesting MCP** (e.g., "how many accounts with 'jeff'?", "show me open tickets"):
-1. This is a SDK fallback case — use the Python SDK to answer the question. Do not block the user.
+**If MCP NOT available and user asked a data question** ("how many accounts?"):
+1. Use the CLI (if profile exists) or SDK to answer. Do not block the user.
 2. After answering, offer: "MCP would handle this conversationally — want me to set it up?"
 
 The distinction matters: explicit MCP request → block and set up MCP; implicit question → answer with SDK, offer MCP setup.
@@ -230,4 +239,3 @@ The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition 
 ## Windows Scripting
 
 Platform-specific shell rules (ASCII in `.py`, no multiline `python -c`, PAC PowerShell wrapper, unbuffered background output) live in [`references/windows-scripting.md`](references/windows-scripting.md). Read it when running on Windows.
-
