@@ -267,6 +267,24 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual({"prefix": "ci"}, data["updates"][0]["commit-message"])
         self.assertEqual(7, data["updates"][0]["cooldown"]["default-days"])
 
+    def test_codeql_uploads_fork_results_without_privileged_checkout(self):
+        data = self.read_workflow("codeql.yml")
+        self.assertEqual({"push", "pull_request", "schedule"}, set(data["on"]))
+        self.assertEqual({"branches": ["main"]}, data["on"]["pull_request"])
+        job = data["jobs"]["analyze"]
+        self.assertEqual(
+            {"actions": "read", "contents": "read", "security-events": "write"},
+            job["permissions"],
+        )
+        checkout, init, analyze = job["steps"]
+        self.assertEqual({"persist-credentials": "false"}, checkout["with"])
+        self.assertTrue(checkout["uses"].startswith("actions/checkout@"))
+        self.assertTrue(init["uses"].startswith("github/codeql-action/init@"))
+        self.assertTrue(analyze["uses"].startswith("github/codeql-action/analyze@"))
+        self.assertEqual(init["uses"].split("@")[1], analyze["uses"].split("@")[1])
+        self.assertEqual("always", analyze["with"]["upload"])
+        self.assertEqual("/language:python", analyze["with"]["category"])
+
     def test_contributor_policy_anchor_exists(self):
         text = (self.root / "CONTRIBUTING.md").read_text(encoding="utf-8")
         self.assertIn("## GitHub Actions Pinning Policy", text)

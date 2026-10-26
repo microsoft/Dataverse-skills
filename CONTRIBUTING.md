@@ -106,6 +106,13 @@ fork and Dependabot contributions do not execute code with its write token.
 The reporter becomes active after this workflow and its scripts land on `main`;
 its first rollout is validated by local mocked API tests.
 
+Keep CodeQL analysis on `pull_request` with `upload: always`, including fork
+PRs, and leave checkout credentials unpersisted. A successful analysis with
+uploads disabled does not submit code-scanning results. GitHub
+[allows code-scanning uploads from `pull_request` runs](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/resource-not-accessible#confirming-the-cause-of-the-error);
+do not move analysis to `pull_request_target` or execute PR code in the
+privileged feedback workflow to work around a missing result.
+
 Dependabot proposes weekly grouped GitHub Actions updates using `ci:` titles
 compatible with the PR metadata check. Do not enable scoped titles (`ci(deps):`)
 without changing that check. Dependabot is an updater, not enforcement, and its
