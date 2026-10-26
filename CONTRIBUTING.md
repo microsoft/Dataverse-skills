@@ -53,8 +53,69 @@ We welcome new skill contributions! To add a new skill:
 1. Update relevant documentation if your change affects usage
 2. Ensure your skill follows the existing formatting patterns
 3. Test your changes locally with `claude --plugin-dir` (see [Local Development](#local-development) below)
-4. Your PR will be reviewed by maintainers
-5. Once approved, a maintainer will merge your contribution
+4. For workflow, action, or deployment-template changes, follow the [GitHub Actions pinning policy](#github-actions-pinning-policy) and run its local checks
+5. Your PR will be reviewed by maintainers
+6. Once approved, a maintainer will merge your contribution
+
+## GitHub Actions Pinning Policy
+
+Every external `uses:` reference must use a **full 40-character commit SHA**,
+including GitHub/Microsoft-authored actions, subdirectory actions, and job-level
+reusable workflows. Tags (`@v4`, `@v4.4.0`), branches (`@main`), abbreviated SHAs,
+and expressions are not immutable pins. Keep the release tag beside the SHA as
+a human-readable comment:
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+```
+
+This policy covers `.github/workflows/*.yml` / `*.yaml`, all `action.yml` /
+`action.yaml` manifests (including composite steps), and workflow YAML shipped
+under `.github/plugins/*/templates/`. Local actions (`./` or `./path/to/action`)
+and local reusable-workflow paths use the checked-out revision and do not need
+an `@ref`.
+Docker `uses: docker://...` actions must use `@sha256:<64-character digest>`,
+not an image tag. This check does not validate container/service images or
+dependencies installed by `run:` commands.
+
+When adding or upgrading an action:
+
+1. Choose a supported release in the **upstream action repository**, review its
+   release notes, and resolve the tag to the full commit (peel annotated tags).
+   Verify the commit and action subdirectory in that upstream repository; do
+   not copy a SHA from an unrelated fork.
+2. Update the SHA and release comment together. Keep related actions, such as
+   CodeQL `init` and `analyze`, on the same release. Review runtime/input changes
+   and preserve existing permissions and required check names.
+3. Run the checks below. If you modify a shipped plugin template, also apply
+   the repository's [plugin version bump rules](CLAUDE.md#version-bumping).
+4. Inspect the PR's checks and resolve review feedback before requesting merge.
+
+```bash
+python -m pip install pyyaml
+python .github/evals/check_action_pins.py
+python -m unittest discover -s .github/evals -p "test_action_pins.py"
+```
+
+The existing required **Static skill checks** job runs the YAML-aware checker
+and its regression tests for every PR to `main`, with no path filter. Violations
+produce file/line annotations. The **Action pinning feedback** workflow maintains
+one doc-linked PR comment and updates it when violations are fixed. It runs
+trusted base-branch code only, reading PR YAML as data through GitHub's API, so
+fork and Dependabot contributions do not execute code with its write token.
+The reporter becomes active after this workflow and its scripts land on `main`;
+its first rollout is validated by local mocked API tests.
+
+Dependabot proposes weekly grouped GitHub Actions updates using `ci:` titles
+compatible with the PR metadata check. Do not enable scoped titles (`ci(deps):`)
+without changing that check. Dependabot is an updater, not enforcement, and its
+workflow discovery does not automatically maintain the shipped nested templates;
+update and validate those pins explicitly.
+
+Maintainers can additionally enable GitHub's repository setting
+**Require actions to be pinned to a full-length commit SHA** as defense in depth.
+That setting is an administrative action, not configured by this PR, and does
+not replace this check's reusable-workflow and template coverage.
 
 ## Local Development
 
