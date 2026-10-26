@@ -103,6 +103,8 @@ produce file/line annotations. The **Action pinning feedback** workflow maintain
 one doc-linked PR comment and updates it when violations are fixed. It runs
 trusted base-branch code only, reading PR YAML as data through GitHub's API, so
 fork and Dependabot contributions do not execute code with its write token.
+Feedback is limited to 50 findings and 60,000 characters; an omission count
+directs contributors to the local checker for the full list.
 The reporter becomes active after this workflow and its scripts land on `main`;
 its first rollout is validated by local mocked API tests.
 

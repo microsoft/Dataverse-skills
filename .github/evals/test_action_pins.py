@@ -132,9 +132,11 @@ class PinTests(unittest.TestCase):
     def test_local_read_errors_are_reported(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
+            path = root / WORKFLOW
+            path.parent.mkdir(parents=True)
+            path.write_text(workflow("a/b@v1"), encoding="utf-8")
             with patch.object(checker.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, WORKFLOW + "\0")):
-                with patch.object(Path, "read_text", side_effect=PermissionError("unreadable")), patch.object(Path, "stat") as stat:
-                    stat.return_value.st_size = 10
+                with patch.object(Path, "read_text", side_effect=PermissionError("unreadable")):
                     self.assertIn("PermissionError", checker.check_files(root)[0].message)
 
 
@@ -230,7 +232,53 @@ class ReporterTests(unittest.TestCase):
         self.assertNotIn("<img>", text)
         self.assertNotIn("@all", text)
         self.assertIn("%3Cimg%3E%40all%0A", text)
-        self.assertLess(len(reporter.comment_body("fork/project", SHA, findings * 1000)), 65000)
+        text = reporter.comment_body("fork/project", SHA, findings * 1000)
+        self.assertEqual(50, text.count("- [File, line "))
+        self.assertIn("- 950 more violation(s)", text)
+        self.assertLessEqual(len(text), reporter.MAX_COMMENT_CHARACTERS)
+
+    def test_long_paths_fit_both_new_and_updated_comments(self):
+        for component in ("a" * 80, "space % \u00e9" * 8):
+            path = (component + "/") * 20 + "action.yml"
+            findings = [checker.Finding(path, 1, "Pin this action.")] * 50
+            for existing in ([], [self.existing]):
+                with self.subTest(component=component, existing=bool(existing)):
+                    calls = self.run_report(findings, existing)
+                    self.assertEqual("PATCH" if existing else "POST", calls[-1].args[2])
+                    text = calls[-1].args[1]["body"]
+                    self.assertLessEqual(len(text), reporter.MAX_COMMENT_CHARACTERS)
+                    shown = text.count("- [File, line ")
+                    self.assertGreater(shown, 0)
+                    self.assertLess(shown, 50)
+                    self.assertIn(f"- {50 - shown} more violation(s)", text)
+                    url = f"https://github.com/fork/project/blob/{SHA}/{reporter.quote(path, safe='/')}#L1"
+                    self.assertEqual(shown, text.count(f"- [File, line 1]({url}): Pin this action."))
+                    self.assertTrue(text.startswith(reporter.MARKER))
+                    self.assertIn(checker.POLICY_URL, text)
+                    self.assertIn("python .github/evals/check_action_pins.py", text)
+
+    def test_single_oversized_finding_keeps_failure_and_guidance(self):
+        finding = checker.Finding("a/" * reporter.MAX_COMMENT_CHARACTERS + "action.yml", 1, "Pin this action.")
+        text = reporter.comment_body("fork/project", SHA, [finding])
+        self.assertLessEqual(len(text), reporter.MAX_COMMENT_CHARACTERS)
+        self.assertNotIn("- [File, line ", text)
+        self.assertIn("- 1 more violation(s)", text)
+        self.assertIn("changes required", text)
+        self.assertNotIn("violations resolved", text)
+        self.assertTrue(text.startswith(reporter.MARKER))
+        self.assertIn(checker.POLICY_URL, text)
+        self.assertIn("python .github/evals/check_action_pins.py", text)
+
+    def test_comment_budget_reserves_complete_omission_notice(self):
+        single = reporter.comment_body("fork/project", SHA, self.findings)
+        notice = "- 2 more violation(s); run the checker for the full list."
+        boundary = len(single) + 1 + len(notice)
+        for limit, shown in ((boundary, 1), (boundary - 1, 0)):
+            with self.subTest(limit=limit), patch.object(reporter, "MAX_COMMENT_CHARACTERS", limit):
+                text = reporter.comment_body("fork/project", SHA, self.findings * 2)
+                self.assertLessEqual(len(text), limit)
+                self.assertEqual(shown, text.count("- [File, line "))
+                self.assertTrue(text.endswith(f"- {2 - shown} more violation(s); run the checker for the full list."))
 
 
 class WorkflowContractTests(unittest.TestCase):

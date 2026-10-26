@@ -14,6 +14,7 @@ from urllib.parse import quote
 from check_action_pins import Finding, MAX_FILE_BYTES, POLICY_URL, check_yaml, is_candidate
 
 MARKER = "<!-- dataverse-action-pin-policy -->"
+MAX_COMMENT_CHARACTERS = 60_000
 
 
 def api(endpoint: str, body: dict | None = None, method: str = "GET"):
@@ -79,12 +80,21 @@ def comment_body(repository: str, sha: str, findings: list[Finding]) -> str:
             "Docker actions require a SHA-256 digest; local `./` actions are exempt.",
             "", "Run `python .github/evals/check_action_pins.py` before pushing.", "",
         ])
+        omitted_template = "- {} more violation(s); run the checker for the full list."
+        # Reserve the longest possible omission notice, including its newline.
+        remaining = MAX_COMMENT_CHARACTERS - len("\n".join(lines)) - 1 - len(omitted_template.format(len(findings)))
+        shown = 0
         for finding in findings[:50]:
             url = f"https://github.com/{repository}/blob/{sha}/{quote(finding.path, safe='/')}#L{finding.line}"
             # Show only generated diagnostic text, not attacker-controlled ref values or paths.
-            lines.append(f"- [File, line {finding.line}]({url}): {html.escape(finding.message)}")
-        if len(findings) > 50:
-            lines.append(f"- {len(findings) - 50} more violation(s); run the checker for the full list.")
+            line = f"- [File, line {finding.line}]({url}): {html.escape(finding.message)}"
+            if len(line) + 1 > remaining:
+                break
+            lines.append(line)
+            remaining -= len(line) + 1
+            shown += 1
+        if shown < len(findings):
+            lines.append(omitted_template.format(len(findings) - shown))
     else:
         lines.extend(["", "No action pin violations remain. This does not imply that other checks or reviews passed."])
     return "\n".join(lines)
