@@ -13,17 +13,17 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@v4
 
       - name: Pack solution
-        uses: microsoft/powerplatform-actions/pack-solution@6e91314a9c6e694ea5c894fe8c40e09d73aa892b # v1
+        uses: microsoft/powerplatform-actions/pack-solution@v1
         with:
           solution-folder: solutions/${{ secrets.POWERPLATFORM_SOLUTION_NAME }}
           solution-file: solutions/${{ secrets.POWERPLATFORM_SOLUTION_NAME }}.zip
           solution-type: Unmanaged
 
       - name: Import solution
-        uses: microsoft/powerplatform-actions/import-solution@6e91314a9c6e694ea5c894fe8c40e09d73aa892b # v1
+        uses: microsoft/powerplatform-actions/import-solution@v1
         with:
           environment-url: ${{ secrets.POWERPLATFORM_ENVIRONMENT_URL }}
           app-id: ${{ secrets.POWERPLATFORM_CLIENT_ID }}

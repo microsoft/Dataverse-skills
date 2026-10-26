@@ -1,4 +1,4 @@
-"""Validate action refs in workflows, action manifests, and shipped templates.
+"""Validate action refs in this repository's workflows and action manifests.
 
 Run from any directory: python .github/evals/check_action_pins.py
 Requires PyYAML, already installed by the Static skill checks job.
@@ -34,12 +34,13 @@ class Finding:
 
 def is_candidate(path: str) -> bool:
     parts = PurePosixPath(path).parts
+    # Shipped plugin content, including deployment templates, changes only in plugin
+    # releases under the version-bump rules, so this CI check excludes it.
     return (
         path.endswith((".yml", ".yaml"))
         and (
             (len(parts) == 3 and parts[:2] == (".github", "workflows"))
-            or parts[-1] in ("action.yml", "action.yaml")
-            or (parts[:2] == (".github", "plugins") and "templates" in parts[3:-1])
+            or (parts[-1] in ("action.yml", "action.yaml") and parts[:2] != (".github", "plugins"))
         )
     )
 

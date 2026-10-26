@@ -67,11 +67,13 @@ class PinTests(unittest.TestCase):
 
     def test_scope(self):
         for path in (WORKFLOW, ".github/workflows/test.yaml", "action.yml",
-                     "src/actions/build/action.yaml", ".github/plugins/dataverse/templates/deploy.yml",
-                     ".github/plugins/other/templates/nested/deploy.yaml"):
+                     "src/actions/build/action.yaml"):
             self.assertTrue(checker.is_candidate(path), path)
         for path in ("README.md", ".github/dependabot.yml", "docs/example.yml",
-                     ".github/workflows/nested/not-a-workflow.yml", "unrelated/templates/data.yaml"):
+                     ".github/workflows/nested/not-a-workflow.yml", "unrelated/templates/data.yaml",
+                     ".github/plugins/dataverse/templates/deploy.yml",
+                     ".github/plugins/other/templates/nested/deploy.yaml",
+                     ".github/plugins/dataverse/actions/setup/action.yml"):
             self.assertFalse(checker.is_candidate(path), path)
 
     def test_yaml_errors_and_shapes(self):

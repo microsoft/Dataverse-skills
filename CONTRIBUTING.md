@@ -53,7 +53,7 @@ We welcome new skill contributions! To add a new skill:
 1. Update relevant documentation if your change affects usage
 2. Ensure your skill follows the existing formatting patterns
 3. Test your changes locally with `claude --plugin-dir` (see [Local Development](#local-development) below)
-4. For workflow, action, or deployment-template changes, follow the [GitHub Actions pinning policy](#github-actions-pinning-policy) and run its local checks
+4. For workflow or action changes, follow the [GitHub Actions pinning policy](#github-actions-pinning-policy) and run its local checks
 5. Your PR will be reviewed by maintainers
 6. Once approved, a maintainer will merge your contribution
 
@@ -69,11 +69,13 @@ a human-readable comment:
 - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 ```
 
-This policy covers `.github/workflows/*.yml` / `*.yaml`, all `action.yml` /
-`action.yaml` manifests (including composite steps), and workflow YAML shipped
-under `.github/plugins/*/templates/`. Local actions (`./` or `./path/to/action`)
-and local reusable-workflow paths use the checked-out revision and do not need
-an `@ref`.
+This policy covers this repository's CI: `.github/workflows/*.yml` / `*.yaml`
+and `action.yml` / `action.yaml` manifests (including composite steps). Shipped
+plugin content under `.github/plugins/`, such as deployment templates, is outside
+this check because changing it is a plugin release governed by the
+[version bump rules](CLAUDE.md#version-bumping). Local actions (`./` or
+`./path/to/action`) and local reusable-workflow paths use the checked-out
+revision and do not need an `@ref`.
 Docker `uses: docker://...` actions must use `@sha256:<64-character digest>`,
 not an image tag. This check does not validate container/service images or
 dependencies installed by `run:` commands.
@@ -87,8 +89,7 @@ When adding or upgrading an action:
 2. Update the SHA and release comment together. Keep related actions, such as
    CodeQL `init` and `analyze`, on the same release. Review runtime/input changes
    and preserve existing permissions and required check names.
-3. Run the checks below. If you modify a shipped plugin template, also apply
-   the repository's [plugin version bump rules](CLAUDE.md#version-bumping).
+3. Run the checks below.
 4. Inspect the PR's checks and resolve review feedback before requesting merge.
 
 ```bash
@@ -117,14 +118,12 @@ privileged feedback workflow to work around a missing result.
 
 Dependabot proposes weekly grouped GitHub Actions updates using `ci:` titles
 compatible with the PR metadata check. Do not enable scoped titles (`ci(deps):`)
-without changing that check. Dependabot is an updater, not enforcement, and its
-workflow discovery does not automatically maintain the shipped nested templates;
-update and validate those pins explicitly.
+without changing that check. Dependabot is an updater, not enforcement.
 
 Maintainers can additionally enable GitHub's repository setting
 **Require actions to be pinned to a full-length commit SHA** as defense in depth.
-That setting is an administrative action, not configured by this PR, and does
-not replace this check's reusable-workflow and template coverage.
+That setting is an administrative action outside this repository's files and
+does not replace this check's reusable-workflow coverage.
 
 ## Local Development
 
