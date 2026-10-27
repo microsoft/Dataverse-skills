@@ -84,8 +84,7 @@ To add or upgrade an action:
    violation on the PR.
 
 The check runs from your PR's own copy of the script, so a change that needs a
-new `uses:` form can update `check_action_pins.py` and `test_action_pins.py` in
-the same PR.
+new `uses:` form can update `check_action_pins.py` in the same PR.
 
 Dependabot proposes weekly grouped updates with `ci:` titles that pass the PR
 metadata check.

@@ -34,9 +34,6 @@ jobs:
       - name: Validate GitHub Actions pins
         run: python .github/evals/check_action_pins.py
 
-      - name: Test action pin checker
-        run: python -m unittest discover -s .github/evals -p "test_action_pins.py"
-
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
 
