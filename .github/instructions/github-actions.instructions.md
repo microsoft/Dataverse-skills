@@ -1,5 +1,5 @@
 ---
-applyTo: ".github/workflows/**,**/action.yml,**/action.yaml"
+applyTo: ".github/workflows/**,**/action.yml,**/action.yaml,.github/evals/*action_pins*"
 ---
 # GitHub Actions review rules
 
