@@ -59,9 +59,10 @@ We welcome new skill contributions! To add a new skill:
 
 ## GitHub Actions Pinning Policy
 
-Every external `uses:` in `.github/workflows/` (step actions and job-level
-reusable workflows) must reference a **full 40-character commit SHA**, with the
-release tag as a comment. Tags, branches, and short SHAs are not immutable.
+Every external `uses:` in `.github/workflows/` and in `action.yml` manifests
+(step actions, job-level reusable workflows, and composite-action steps) must
+reference a **full 40-character commit SHA**, with the release tag as a
+comment. Tags, branches, and short SHAs are not immutable.
 
 ```yaml
 - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

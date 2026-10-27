@@ -1,4 +1,4 @@
-"""Fail if an external `uses:` in a GitHub workflow is not pinned to a full commit SHA.
+"""Fail if an external `uses:` in a GitHub workflow or action is not pinned to a full commit SHA.
 
 Usage: python .github/evals/check_action_pins.py   (requires PyYAML)
 Policy: CONTRIBUTING.md#github-actions-pinning-policy
@@ -25,10 +25,21 @@ def children(node):
 
 
 def uses_nodes(doc):
-    """Yield jobs.<id>.uses (reusable workflows) and jobs.<id>.steps[].uses."""
+    """Yield jobs.<id>.uses, jobs.<id>.steps[].uses, and composite-action runs.steps[].uses."""
     for job in (j for jobs in values(doc, "jobs") for j in children(jobs)):
         yield from values(job, "uses")
         yield from (u for steps in values(job, "steps") for step in children(steps) for u in values(step, "uses"))
+    yield from (u for runs in values(doc, "runs") for steps in values(runs, "steps") for step in children(steps) for u in values(step, "uses"))
+
+
+def targets(root):
+    """Workflows plus action manifests; shipped plugin content is pinned in plugin releases instead."""
+    found = set(root.glob(".github/workflows/*.y*ml"))
+    for path in root.glob("**/action.y*ml"):
+        parts = path.relative_to(root).parts
+        if parts[:2] != (".github", "plugins") and not {".git", "node_modules"} & set(parts):
+            found.add(path)
+    return sorted(found)
 
 
 def check(path, rel):
@@ -44,8 +55,7 @@ def check(path, rel):
 
 
 def main(root):
-    files = sorted(root.glob(".github/workflows/*.y*ml"))
-    errors = [e for p in files for e in check(p, p.relative_to(root).as_posix())]
+    errors = [e for p in targets(root) for e in check(p, p.relative_to(root).as_posix())]
     for rel, line, msg in errors:
         msg = msg.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error file={rel},line={line}::{msg}. See {POLICY}")
