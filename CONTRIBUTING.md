@@ -59,71 +59,35 @@ We welcome new skill contributions! To add a new skill:
 
 ## GitHub Actions Pinning Policy
 
-Every external `uses:` reference must use a **full 40-character commit SHA**,
-including GitHub/Microsoft-authored actions, subdirectory actions, and job-level
-reusable workflows. Tags (`@v4`, `@v4.4.0`), branches (`@main`), abbreviated SHAs,
-and expressions are not immutable pins. Keep the release tag beside the SHA as
-a human-readable comment:
+Every external `uses:` in `.github/workflows/` (step actions and job-level
+reusable workflows) must reference a **full 40-character commit SHA**, with the
+release tag as a comment. Tags, branches, and short SHAs are not immutable.
 
 ```yaml
 - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 ```
 
-This policy covers this repository's CI: `.github/workflows/*.yml` / `*.yaml`
-and `action.yml` / `action.yaml` manifests (including composite steps). Shipped
-plugin content under `.github/plugins/`, such as deployment templates, is outside
-this check because changing it is a plugin release governed by the
-[version bump rules](CLAUDE.md#version-bumping). Local actions (`./` or
-`./path/to/action`) and local reusable-workflow paths use the checked-out
-revision and do not need an `@ref`.
-Docker `uses: docker://...` actions must use `@sha256:<64-character digest>`,
-not an image tag. This check does not validate container/service images or
-dependencies installed by `run:` commands.
+Local actions (`./path`) are exempt; `docker://` actions need `@sha256:<digest>`.
+Shipped plugin content under `.github/plugins/` is out of scope; pin it in a
+plugin release with a version bump.
 
-When adding or upgrading an action:
+To add or upgrade an action:
 
-1. Choose a supported release in the **upstream action repository**, review its
-   release notes, and resolve the tag to the full commit (peel annotated tags).
-   Verify the commit and action subdirectory in that upstream repository; do
-   not copy a SHA from an unrelated fork.
-2. Update the SHA and release comment together. Keep related actions, such as
-   CodeQL `init` and `analyze`, on the same release. Review runtime/input changes
-   and preserve existing permissions and required check names.
-3. Run the checks below.
-4. Inspect the PR's checks and resolve review feedback before requesting merge.
+1. Pick a release in the **upstream** repository, read its notes, and resolve
+   the tag to its commit: `gh api repos/OWNER/REPO/commits/TAG --jq .sha`
+   (this peels annotated tags). Never copy a SHA from a fork.
+2. Update the SHA and its `# vX.Y.Z` comment together. Keep related actions,
+   such as CodeQL `init` and `analyze`, on the same release.
+3. Run `python .github/evals/check_action_pins.py` (requires `pyyaml`). The
+   required **Static skill checks** job runs the same check and annotates any
+   violation on the PR.
 
-```bash
-python -m pip install pyyaml
-python .github/evals/check_action_pins.py
-python -m unittest discover -s .github/evals -p "test_action_pins.py"
-```
+The check runs from your PR's own copy of the script, so a change that needs a
+new `uses:` form can update `check_action_pins.py` and `test_action_pins.py` in
+the same PR.
 
-The existing required **Static skill checks** job runs the YAML-aware checker
-and its regression tests for every PR to `main`, with no path filter. Violations
-produce file/line annotations. The **Action pinning feedback** workflow maintains
-one doc-linked PR comment and updates it when violations are fixed. It runs
-trusted base-branch code only, reading PR YAML as data through GitHub's API, so
-fork and Dependabot contributions do not execute code with its write token.
-Feedback is limited to 50 findings and 60,000 characters; an omission count
-directs contributors to the local checker for the full list.
-The reporter becomes active after this workflow and its scripts land on `main`;
-its first rollout is validated by local mocked API tests.
-
-Keep CodeQL analysis on `pull_request` with `upload: always`, including fork
-PRs, and leave checkout credentials unpersisted. A successful analysis with
-uploads disabled does not submit code-scanning results. GitHub
-[allows code-scanning uploads from `pull_request` runs](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/resource-not-accessible#confirming-the-cause-of-the-error);
-do not move analysis to `pull_request_target` or execute PR code in the
-privileged feedback workflow to work around a missing result.
-
-Dependabot proposes weekly grouped GitHub Actions updates using `ci:` titles
-compatible with the PR metadata check. Do not enable scoped titles (`ci(deps):`)
-without changing that check. Dependabot is an updater, not enforcement.
-
-Maintainers can additionally enable GitHub's repository setting
-**Require actions to be pinned to a full-length commit SHA** as defense in depth.
-That setting is an administrative action outside this repository's files and
-does not replace this check's reusable-workflow coverage.
+Dependabot proposes weekly grouped updates with `ci:` titles that pass the PR
+metadata check.
 
 ## Local Development
 
