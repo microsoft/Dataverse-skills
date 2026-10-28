@@ -57,9 +57,18 @@ class SessionTests(unittest.TestCase):
     def test_reads_reuse_same_credentials_and_redact_output(self):
         def read(tool, creds, table, top):
             self.assertIs(creds, self.credentials)
-            print(f"{table}|caf\u00e9|\u6771\u4eac|\U0001f600|{SECRET}")
+            self.assertIsInstance(sys.stdout, sessions.BoundedOutput)
+            print(f"{table}|caf\u00e9|\u6771\u4eac|\U0001f600|")
 
-        with mock.patch.object(sql, "read_table", side_effect=read) as reads:
+        original_getvalue = sessions.BoundedOutput.getvalue
+
+        def captured_output(buffer):
+            # Inject the synthetic credential only into the in-memory redaction input.
+            return original_getvalue(buffer) + SECRET
+
+        with mock.patch.object(sql, "read_table", side_effect=read) as reads, mock.patch.object(
+            sessions.BoundedOutput, "getvalue", new=captured_output,
+        ):
             with mock.patch.object(sql, "request_credentials") as grant:
                 first = self.session.handle(request())
                 second = self.session.handle(request(table="dbo.BATCHJOB"))
@@ -260,7 +269,9 @@ class LocalTransportTests(unittest.TestCase):
         listener = ipc.listen(session_id)
         api = listener.api
         descriptor = ctypes.c_void_p()
+        expected_descriptor = ctypes.c_void_p()
         text = api.w.LPWSTR()
+        expected_text = api.w.LPWSTR()
         get_security = api.advapi.GetSecurityInfo
         get_security.restype = api.w.DWORD
         get_security.argtypes = [
@@ -277,10 +288,17 @@ class LocalTransportTests(unittest.TestCase):
         try:
             self.assertEqual(get_security(listener.handle, 6, 4, None, None, None, None, ctypes.byref(descriptor)), 0)
             self.assertTrue(to_string(descriptor, 1, 4, ctypes.byref(text), None))
-            self.assertTrue(text.value.startswith("D:P"))
-            self.assertEqual(text.value.count("("), 1)
-            self.assertIn(f";;;{api.sid})", text.value)
+            # Canonicalize both descriptors: Windows can render a numeric SID as an alias.
+            self.assertTrue(api.advapi.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                f"D:P(A;;FA;;;{api.sid})", 1, ctypes.byref(expected_descriptor), None,
+            ))
+            self.assertTrue(to_string(expected_descriptor, 1, 4, ctypes.byref(expected_text), None))
+            self.assertEqual(text.value, expected_text.value)
         finally:
+            if expected_text:
+                api.kernel.LocalFree(ctypes.cast(expected_text, ctypes.c_void_p))
+            if expected_descriptor:
+                api.kernel.LocalFree(expected_descriptor)
             if text:
                 api.kernel.LocalFree(ctypes.cast(text, ctypes.c_void_p))
             if descriptor:
@@ -315,9 +333,8 @@ class LocalTransportTests(unittest.TestCase):
 class ProcessReuseTests(unittest.TestCase):
     def test_owner_exits_and_clears_credentials_on_idle_or_expiry(self):
         for idle in (True, False):
-            with self.subTest(idle=idle), tempfile.TemporaryDirectory() as directory:
-                driver = Path(directory) / "short_lived_owner.py"
-                driver.write_text(f"""
+            with self.subTest(idle=idle):
+                driver = f"""
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -341,12 +358,12 @@ def access(args):
 
 session.sql.sql_access = access
 sys.exit(session.main())
-""", encoding="ascii")
+"""
                 session_id = uuid.uuid4().hex
                 common = ["--session", session_id, "--environment", URL, "--role", "Reader", "--client-ip", IP]
                 result = subprocess.run(
-                    [sys.executable, str(driver), "start", *common, "--confirm-environment", URL, "--reason", "Hermetic test"],
-                    capture_output=True, timeout=10,
+                    [sys.executable, "-", "start", *common, "--confirm-environment", URL, "--reason", "Hermetic test"],
+                    input=driver.encode("ascii"), capture_output=True, timeout=10,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
                 self.assertIn(b'"ready": true', result.stdout)
@@ -358,8 +375,7 @@ sys.exit(session.main())
 
     def test_two_cli_reads_use_one_grant_then_close(self):
         with tempfile.TemporaryDirectory() as directory:
-            driver = Path(directory) / "fake_sql_server.py"
-            driver.write_text(f"""
+            driver = f"""
 import sys
 import json
 from datetime import datetime, timedelta, timezone
@@ -399,12 +415,13 @@ def fake_run(command, label, **kwargs):
 
 sql.run_command = fake_run
 sys.exit(session.main())
-""", encoding="ascii")
+"""
             session_id = uuid.uuid4().hex
             common = ["--session", session_id, "--environment", URL, "--role", "Reader", "--client-ip", IP]
             process = subprocess.Popen(
-                [sys.executable, "-u", str(driver), "start", *common, "--confirm-environment", URL, "--reason", "Hermetic test"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                [sys.executable, "-u", "-", "start", *common, "--confirm-environment", URL, "--reason", "Hermetic test"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                cwd=directory,
                 env={**os.environ, "PYTHONIOENCODING": "cp1252:strict"},
             )
             lines = queue.Queue()
@@ -417,6 +434,8 @@ sys.exit(session.main())
             reader = threading.Thread(target=collect, daemon=True)
             reader.start()
             try:
+                process.stdin.write(driver.encode("ascii"))
+                process.stdin.close()
                 deadline = time.monotonic() + 15
                 while True:
                     line = lines.get(timeout=max(0.01, deadline - time.monotonic()))
@@ -426,7 +445,7 @@ sys.exit(session.main())
                 for table in ("dbo.BATCH", "dbo.BATCHJOB"):
                     result = subprocess.run(
                         [sys.executable, str(SCRIPTS / "session.py"), "read", *common, "--table", table, "--top", "1"],
-                        capture_output=True, timeout=15,
+                        cwd=directory, capture_output=True, timeout=15,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
                     self.assertIn("caf\u00e9-\u6771\u4eac-\U0001f600", result.stdout.decode("utf-8"))
@@ -435,19 +454,19 @@ sys.exit(session.main())
                 mismatched[mismatched.index("--role") + 1] = "Writer"
                 result = subprocess.run(
                     [sys.executable, str(SCRIPTS / "session.py"), "status", *mismatched],
-                    capture_output=True, timeout=15,
+                    cwd=directory, capture_output=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 1)
                 self.assertIn(b"does not match", result.stderr)
                 result = subprocess.run(
                     [sys.executable, str(SCRIPTS / "session.py"), "status", *common],
-                    capture_output=True, timeout=15,
+                    cwd=directory, capture_output=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 0)
                 self.assertEqual(json.loads(result.stdout)["session"], session_id)
                 result = subprocess.run(
                     [sys.executable, str(SCRIPTS / "session.py"), "close", *common],
-                    capture_output=True, timeout=15,
+                    cwd=directory, capture_output=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
                 process.wait(timeout=10)
@@ -461,11 +480,12 @@ sys.exit(session.main())
                 self.assertEqual(stderr, b"")
                 result = subprocess.run(
                     [sys.executable, str(SCRIPTS / "session.py"), "status", *common],
-                    capture_output=True, timeout=15,
+                    cwd=directory, capture_output=True, timeout=15,
                 )
                 self.assertEqual(result.returncode, 1)
                 self.assertNotIn(SECRET.encode(), result.stdout + result.stderr)
             finally:
+                process.stdin.close()
                 if process.poll() is None:
                     process.terminate()
                     process.wait(timeout=10)
