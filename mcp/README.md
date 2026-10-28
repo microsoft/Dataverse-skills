@@ -12,6 +12,12 @@ npx -y @microsoft/dataverse mcp https://yourorg.crm.dynamics.com
 
 The local server signs you in to your Dataverse environment and connects your MCP client to the environment's Dataverse MCP endpoint. For the tools it exposes, see [Dataverse MCP server](https://learn.microsoft.com/power-apps/maker/data-platform/data-platform-mcp).
 
+## Recommended: the Dataverse skills plugin
+
+For the full Dataverse experience, install the [Dataverse skills plugin](../README.md) from this repository. It adds skills for schema, data, solutions, security and administration on top of MCP. Its `dv-connect` skill signs you in and registers the Dataverse MCP server for your agent, so you don't need to configure it separately.
+
+The registry entry described on this page is for MCP clients that let you add servers from the MCP Registry directly.
+
 ## Prerequisites
 
 - **Node.js 18 or later** (for `npx`).
@@ -107,10 +113,6 @@ npx -y @microsoft/dataverse mcp https://yourorg.crm.dynamics.com --validate
 ```
 
 To turn off the Dataverse MCP server for an environment, see [Disable the Dataverse MCP server](https://learn.microsoft.com/power-apps/maker/data-platform/data-platform-mcp-disable).
-
-## Relationship to the Dataverse skills plugin
-
-The [Dataverse skills plugin](../README.md) in this repository does not register this server automatically. Its `dv-connect` skill signs you in and registers a `dataverse-<orgname>` MCP server for your agent. Use either the plugin or the configuration on this page; you don't need both.
 
 ## Support
 

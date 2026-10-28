@@ -24,8 +24,6 @@ A Microsoft Dataverse environment, available through Power Apps, Dynamics 365, o
 
 ## Install
 
-> **Only need the Dataverse MCP server?** See [mcp/README.md](mcp/README.md) to configure `@microsoft/dataverse` directly in any MCP client, without the skills.
-
 ### Quick install — any agent, incl. JetBrains (npx)
 
 One command installs **all** Dataverse skills and lets you choose which agent(s) to add them to:
