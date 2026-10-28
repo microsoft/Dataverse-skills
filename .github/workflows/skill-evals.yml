@@ -7,25 +7,32 @@ on:
     # workflow, causing those PRs to be permanently blocked waiting for a check that never runs.
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   static-checks:
     name: Static skill checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0  # needed for version_bump_check.py to compare against main
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
 
       - name: Install eval dependencies (tiktoken for CAT-8, pyyaml for CAT-4 STRUCT-05)
         run: pip install tiktoken pyyaml
+
+      - name: Validate GitHub Actions pins
+        run: python .github/evals/check_action_pins.py
 
       - name: Run static eval suite
         run: python .github/evals/static_checks.py
