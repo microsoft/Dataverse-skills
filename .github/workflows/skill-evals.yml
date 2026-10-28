@@ -8,6 +8,21 @@ on:
     branches: [main]
 
 jobs:
+  erp-sql-tests:
+    name: ERP SQL tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run ERP SQL unit and local IPC tests
+        run: python -m unittest discover -s .github/evals -p "test_erp_sql*.py"
+
   static-checks:
     name: Static skill checks
     runs-on: ubuntu-latest

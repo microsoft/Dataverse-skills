@@ -13,6 +13,7 @@ description: Temporary SQL access and bounded physical-table reads for Finance a
 > 3. **Never expose the password.** Do not invoke the credential action through a tool that displays its response. Capture the managed CLI response inside Python, keep credentials in memory, and pass the password only in the sqlcmd child's `SQLCMDPASSWORD` environment. Never use `-P`, files, `.env`, chat, or logs for the password.
 > 4. **Never bypass TLS validation.** Require encryption and certificate validation; do not add `-C`.
 > 5. **A credential response is not a successful connection.** Require sqlcmd exit code zero and a matching database/login from the connection check. Do not claim success while a JIT operation or login is pending.
+> 6. **For follow-up reads, reuse only the explicitly started session for this workspace and approved environment/role/IP scope.** Never expose its credentials, automatically renew it, or attach to another conversation's session. Close it when finished; local closure does not revoke the server-side grant.
 
 This skill is an explicit opt-in exception to normal ERP OData/MCP reads, not a replacement for them. It connects to the **ERP SQL database**, not the Dataverse read-only TDS endpoint. A Dataverse authentication token is used to request temporary SQL credentials, not as the SQL password.
 
@@ -42,6 +43,16 @@ dataverse org who --environment <dataverse-url> --json --context "app=dataverse-
 6. **Explicitly ask the user: "What is the reason for this JIT SQL access request?"** Use `ask_user` when available with a free-text reason field and **no default or suggested answer**. Explain that their text will be recorded as `sqljitreason`. Wait for a meaningful, non-empty user response; if they decline or leave it blank, stop before requesting credentials. Do not derive a reason from the task, supply a generic justification, or reuse a previous request's reason without asking. If the user already explicitly supplied a reason for this specific request, repeat their exact text for confirmation instead of asking them to retype it.
 7. **Ask for the access type using `ask_user` with enum values `Reader` and `Writer`**, defaulting the form to `Reader` but waiting for the user's response. Explain that Writer grants write capability even though this helper's probe is read-only. If the choice is absent or declined, stop; never silently select a role.
 8. Show the target, linked ERP URL, **selected access type**, client IP, **user-provided reason verbatim**, and proposed SQL (`SELECT DB_NAME(), SUSER_SNAME()`). For a table read, also disclose the table, schema inspection, row count, and preview limit. Obtain explicit approval for the JIT/firewall change, connection probe, and requested reads. Pass that exact reason to `--reason` (and therefore `sqljitreason`), without rewriting it. Environment confirmation or acceptance of an agent-generated reason does not satisfy the user-provided reason requirement.
+
+**Range-first approval:** ask the user to provide their known IPv4 egress range.
+If unknown, with permission for the HTTP IP-echo request, run `connect.py --discover-ip --suggest-range`.
+This prints the observed HTTP IPv4 and a calculated eight-address `/29` candidate
+(endpoints and count), without requesting credentials. Offer the candidate,
+a custom public range/CIDR (at most 256 addresses), or a single IPv4. Require the
+user to explicitly accept the exact scope. The candidate is **not a discovered
+or authorized NAT pool**, may include unrelated addresses, and may not cover SQL
+egress. Never automatically grant, widen, or present the suggestion as guaranteed
+to solve a firewall failure.
 
 ## Discover the contract, not the password
 
@@ -86,7 +97,30 @@ subprocess.run(
 
 For approved IP discovery, use `subprocess.run([sys.executable, "<resolved-erp-sql-skill-directory>/scripts/connect.py", "--discover-ip"], check=True)` instead. Do not combine discovery with an automatic grant; confirm the resulting exact IP first.
 
-The helper rechecks the Dataverse organization and ERP linkage before granting access. It requests the **explicitly selected Reader or Writer role**, validates the returned role/IP and expiry, waits 60 seconds for credential propagation, and launches sqlcmd with the returned server, database, and username. The password is placed only in a child environment; inherited SQLCMD startup/scripting settings are removed. Without `--table` it executes only the fixed database/login probe and exits. With `--table`, it completes the approved reads before discarding credentials. It never opens an unattended interactive SQL session or accepts arbitrary SQL.
+The one-shot helper rechecks the Dataverse organization and ERP linkage before granting access. It requests the **explicitly selected Reader or Writer role**, validates the returned role/IP and expiry, waits 60 seconds for credential propagation, and launches sqlcmd with the returned server, database, and username. The password is placed only in a child environment; inherited SQLCMD startup/scripting settings are removed. Without a read option it executes only the fixed database/login probe and exits. With `--table` or `--waiting-jobs`, it completes the approved reads before discarding credentials. It never opens an unattended interactive SQL session or accepts arbitrary SQL.
+
+## Reuse access across follow-up reads
+
+When the user expects to read table A and then table B in later commands, prefer
+`scripts/session.py` after explicit approval to retain credentials in a running
+process. It uses the same preflight, grant, SQL functions, and safeguards as the
+one-shot helper; no passwords are persisted or returned to the agent.
+
+Start it in a dedicated terminal or a supported, explicitly approved persistent
+background task. Wait for `ready: true`, record its non-secret session ID in
+this conversation, and use `read`, `status`, and `close` with that ID.
+Every client supplies the same environment, selected role, and approved IP scope,
+and runs from the same workspace. Each later table/count/limit still needs user
+approval; do not infer that a grant authorizes arbitrary reads.
+
+The session is local to the current OS user: Windows named pipe or macOS/Linux
+Unix-domain socket. It ends on close, JIT expiry, or **15 idle minutes**; only
+successful reads reset the idle clock, not status checks. Requests are serialized;
+a busy/unavailable session is an explicit error, never a trigger for a new grant.
+If the harness cannot keep a process running, explain the limitation and use
+one-shot mode with a freshly approved grant instead of writing credentials to disk.
+See [reusable SQL sessions](references/sessions.md) for executable invocations,
+lifecycle, transport security, and validation limits.
 
 On a propagation-related login failure, it retries the **same** credentials twice, ten seconds apart; it does not request another grant. If SQL reports a firewall failure for one unambiguous IP **inside the approved scope**, allow up to four further retries at 60-second intervals after the initial 60-second wait, checking expiry before each attempt. Azure SQL firewall updates can take up to five minutes to propagate ([Microsoft firewall guidance](https://learn.microsoft.com/en-us/azure/azure-sql/database/firewall-configure)). Out-of-scope, missing, or ambiguous client IPs stop immediately. These retries never widen the scope or request credentials again. Report only non-secret server/database, role, expiry, operation ID, and the verified connection outcome. The local credential reference is released after the subprocess; Python cannot guarantee zeroization of immutable strings, and the server-side grant remains until its returned expiry.
 
@@ -121,6 +155,8 @@ After approving the table read **before** requesting credentials, add `--table B
 The helper verifies the connection, discovers the exact table/schema and columns, omits payload/secret-like/unsupported columns, counts rows, and returns a bounded text preview using one in-memory credential response. It orders by `RECID` ascending when present, otherwise reports no guaranteed ordering. A low-RECID preview is **not** the latest jobs. Report status codes as stored unless their enum mapping is verified.
 
 See [table reads and operational lessons](references/table-reads.md) for the complete reusable invocation, output limits, and failure recovery. No live grants are needed merely to author or test the skill.
+
+For **waiting batch jobs**, obtain approval for `BATCHJOB` schema inspection, a matching count, and up to 100 matching rows, then use `--waiting-jobs --top 100` instead of `--table`. This fixed read uses `STATUS = 1` ([BatchStatus.Waiting](https://learn.microsoft.com/en-us/dotnet/api/microsoft.dynamics.ax.xpp.batchstatus)), checks integer STATUS/RECID columns, and returns only allowlisted summary columns. Both count and preview use the filter. Report the total separately from the bounded RECID-ascending preview; do not claim the preview is complete when the total exceeds its limit.
 
 ## Troubleshooting
 

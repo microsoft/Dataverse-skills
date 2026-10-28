@@ -4,8 +4,10 @@
 
 First obtain the environment, exact IP scope, user-authored reason, selected role,
 and approval for the requested table, schema inspection, count, and row limit.
-Do not launch a probe-only helper and then ask for the table: the probe-only
-process intentionally discards its password when it exits.
+Do not launch a probe-only one-shot helper and then ask for the table: that
+process intentionally discards its password when it exits. For follow-up reads,
+use the reusable-session workflow in the skill body; the same approved grant
+can serve multiple separate client commands while its owner process remains alive.
 
 Resolve the helper relative to this skill, then run this single Python call:
 
@@ -30,7 +32,17 @@ subprocess.run(
 
 `BATCH` is an example: use the table the user requested. The helper accepts a
 simple `TableName` or `schema.TableName`, not arbitrary SQL, predicates, or
-cross-database names. It queries SQL metadata rather than assuming `dbo`.
+cross-database names. The dedicated `--waiting-jobs` mode is the only supported
+status filter: use it instead of `--table`, optionally with `--top` (1-100).
+It resolves `BATCHJOB`, requires integer STATUS and RECID columns, and applies
+`WHERE STATUS = 1` to both the count and preview. The mapping is verified in
+Microsoft's [BatchStatus enum reference](https://learn.microsoft.com/en-us/dotnet/api/microsoft.dynamics.ax.xpp.batchstatus).
+This lists job headers, not individual `BATCH` tasks. It returns only available
+RECID, CAPTION, STATUS, STARTDATETIME, ENDDATETIME, BATCHGROUP, and COMPANY columns.
+Obtain approval for this exact read before granting access; disclose the matching
+total and whether the RECID-ascending preview is incomplete.
+
+It queries SQL metadata rather than assuming `dbo`.
 If the unqualified name is ambiguous, require a schema. No visible match can mean
 an incorrect name or insufficient metadata permissions; do not fabricate rows or
 silently switch tables.
@@ -93,9 +105,10 @@ sqlcmd formatting mistakes. Unknown errors remain explicitly withheld, not
 success-shaped defaults.
 
 The helper does not automatically broaden firewall access, elevate roles, issue
-another grant, or refresh expired credentials. It clears credentials on final
-failure as well as success. A retry after process exit needs a newly approved JIT
-request; disclose that any earlier server-side grant may remain until expiry.
+another grant, or refresh expired credentials. One-shot mode clears credentials
+on final failure as well as success. A retry after the credential-owner process
+exits needs a newly approved JIT request; disclose that any earlier server-side
+grant may remain until expiry.
 Prefer one complete approved read over separate probe and query scripts.
 
 Use hermetic tests and the static skill checks for authoring changes. A live

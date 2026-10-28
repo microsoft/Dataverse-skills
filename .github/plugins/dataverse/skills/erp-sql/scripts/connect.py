@@ -1,6 +1,7 @@
 """Request approved JIT access, verify ERP SQL, and optionally read a bounded table preview."""
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import ipaddress
 import json
@@ -105,6 +106,24 @@ def discover_public_ip():
         raise ConnectionFailure("Public IP service returned an oversized response.")
     data = read_json(body, "Public IP service")
     return canonical_ip_scope(public_ip(required_string(data, "ip")))
+
+
+def suggest_ip_range(address):
+    address = canonical_ip_scope(address)
+    if "-" in address:
+        raise ConnectionFailure("Range suggestions require one public IPv4 address.")
+    network = ipaddress.IPv4Network(f"{address}/29", strict=False)
+    candidate = canonical_ip_scope(str(network))
+    return {
+        "observed_http_ipv4": address,
+        "suggested_range": candidate,
+        "address_count": 8,
+        "warning": (
+            "Calculated candidate only, not a discovered NAT pool. HTTP and SQL egress may differ. "
+            "Ask the user to approve these exact endpoints or provide a custom range/single IPv4. "
+            "No JIT grant or firewall change has been made."
+        ),
+    }
 
 
 def environment_url(value):
@@ -346,10 +365,12 @@ def quote_identifier(value):
     return "[" + value.replace("]", "]]") + "]"
 
 
-def read_table(sqlcmd, credentials, table, top):
+def read_table(sqlcmd, credentials, table, top, *, waiting_only=False):
     schema, name = table_parts(table)
     if not 1 <= top <= 100:
         raise ConnectionFailure("Table previews require --top between 1 and 100.")
+    if waiting_only and name.lower() != "batchjob":
+        raise ConnectionFailure("Waiting-job reads require the BATCHJOB table.")
     schema_filter = f" AND LOWER(s.name) = N'{schema.lower()}'" if schema else ""
     matches = metadata_rows(execute_sql(sqlcmd, credentials, f"""
 SET NOCOUNT ON;
@@ -384,16 +405,30 @@ ORDER BY c.column_id;
         if kind.lower() in scalar_types
         and not re.search(r"password|secret|token|privatekey|credential|connectionstring|parameter", column, re.IGNORECASE)
     ]
+    predicate = ""
+    if waiting_only:
+        integer_columns = {
+            column.lower(): column for column, kind in columns
+            if kind.lower() in {"bigint", "int", "smallint", "tinyint"}
+        }
+        if not {"status", "recid"} <= integer_columns.keys():
+            raise ConnectionFailure("Waiting-job reads require integer STATUS and RECID columns.")
+        predicate = f" WHERE {quote_identifier(integer_columns['status'])} = 1"
+        allowed = {"recid", "caption", "status", "startdatetime", "enddatetime", "batchgroup", "company"}
+        selected = [column for column in selected if column.lower() in allowed]
     if not selected:
         raise ConnectionFailure("No supported non-secret scalar columns are available for preview.")
     omitted = [column for column, _ in columns if column not in selected]
     print(f"Table: {qualified}", flush=True)
     if omitted:
         print("Omitted payload/secret-like/unsupported columns: " + ", ".join(omitted), flush=True)
-    count = execute_sql(sqlcmd, credentials, f"SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM {qualified};").strip()
+    if waiting_only:
+        print("Filter: BatchStatus.Waiting = 1 (Microsoft BatchStatus enum reference).", flush=True)
+    count = execute_sql(sqlcmd, credentials, f"SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM {qualified}{predicate};").strip()
     if not count.isdecimal():
         raise ConnectionFailure("Unexpected table row-count response; output withheld.")
-    print(f"Total rows at count time: {count}", flush=True)
+    label = "Total waiting jobs" if waiting_only else "Total rows"
+    print(f"{label} at count time: {count}", flush=True)
     recid = next((column for column in selected if column.lower() == "recid"), None)
     order = " ORDER BY " + quote_identifier(recid) if recid else ""
     print(
@@ -404,13 +439,15 @@ ORDER BY c.column_id;
     output = execute_sql(
         sqlcmd, credentials,
         f"SET NOCOUNT ON; SELECT TOP ({top}) "
-        + ", ".join(quote_identifier(column) for column in selected) + f" FROM {qualified}{order};",
+        + ", ".join(quote_identifier(column) for column in selected) + f" FROM {qualified}{predicate}{order};",
     )
     print(" | ".join(selected), flush=True)
     print(output.rstrip() or "(No rows returned.)", flush=True)
 
 
-def connect(args):
+@contextmanager
+def sql_access(args):
+    """Own one approved grant for either a one-shot read or a reusable session."""
     url = environment_url(args.environment)
     if environment_url(args.confirm_environment) != url:
         raise ConnectionFailure("Approval URL does not match the target environment.")
@@ -419,8 +456,11 @@ def connect(args):
         raise ConnectionFailure("An approved, non-empty access reason is required.")
     if args.role not in ("Reader", "Writer"):
         raise ConnectionFailure("An explicitly selected Reader or Writer access type is required.")
-    if args.table:
-        table_parts(args.table)
+    if args.waiting_jobs and args.table:
+        raise ConnectionFailure("--waiting-jobs cannot be combined with --table.")
+    if args.table or args.waiting_jobs:
+        if args.table:
+            table_parts(args.table)
         if not 1 <= args.top <= 100:
             raise ConnectionFailure("Table previews require --top between 1 and 100.")
     tools = {name: shutil.which(name) for name in ("dataverse", "sqlcmd")}
@@ -449,10 +489,17 @@ def connect(args):
         print(f"{args.role} credentials received; expiry: {expires.isoformat()}. Waiting for propagation.", flush=True)
         probe_sql(tools["sqlcmd"], credentials)
         print("Connected successfully; sqlcmd verified the expected database and login.")
-        if args.table:
-            read_table(tools["sqlcmd"], credentials, args.table, args.top)
+        yield tools["sqlcmd"], credentials
     finally:
         credentials.clear()
+
+
+def connect(args):
+    with sql_access(args) as (sqlcmd, credentials):
+        if args.table:
+            read_table(sqlcmd, credentials, args.table, args.top)
+        elif args.waiting_jobs:
+            read_table(sqlcmd, credentials, "BATCHJOB", args.top, waiting_only=True)
 
 
 def main():
@@ -460,26 +507,33 @@ def main():
     sys.stderr.reconfigure(encoding="utf-8", errors="strict")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--discover-ip", action="store_true", help="Discover public IPv4 only; no JIT grant or SQL connection")
+    parser.add_argument("--suggest-range", action="store_true", help="With --discover-ip, propose an eight-address /29 for explicit approval; never grants access")
     parser.add_argument("--environment")
     parser.add_argument("--client-ip", help="Approved public IPv4 address or IPv4 range/CIDR (maximum 256 addresses; IPv6 unsupported)")
     parser.add_argument("--reason")
     parser.add_argument("--role", choices=("Reader", "Writer"), help="Explicitly approved JIT access type")
     parser.add_argument("--confirm-environment")
     parser.add_argument("--table", help="Approved table or schema.table to preview after connecting")
-    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with --table)")
+    parser.add_argument("--waiting-jobs", action="store_true", help="Read BATCHJOB with STATUS = 1 (Waiting); no arbitrary SQL")
+    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with --table or --waiting-jobs)")
     args = parser.parse_args()
+    if args.suggest_range and not args.discover_ip:
+        parser.error("--suggest-range requires --discover-ip and cannot grant access.")
     connection_args = (args.environment, args.client_ip, args.reason, args.role, args.confirm_environment)
-    if args.discover_ip and (any(connection_args) or args.table is not None or args.top is not None):
+    if args.discover_ip and (any(connection_args) or args.table is not None or args.waiting_jobs or args.top is not None):
         parser.error("--discover-ip cannot be combined with connection arguments.")
-    if args.top is not None and not args.table:
-        parser.error("--top requires --table.")
+    if args.table and args.waiting_jobs:
+        parser.error("--waiting-jobs cannot be combined with --table.")
+    if args.top is not None and not (args.table or args.waiting_jobs):
+        parser.error("--top requires --table or --waiting-jobs.")
     if args.top is None:
         args.top = 50
     if not args.discover_ip and not all(connection_args):
         parser.error("--environment, --client-ip, --reason, --role, and --confirm-environment are required.")
     try:
         if args.discover_ip:
-            print(discover_public_ip())
+            address = discover_public_ip()
+            print(json.dumps(suggest_ip_range(address)) if args.suggest_range else address)
         else:
             connect(args)
     except (ConnectionFailure, ValueError) as error:

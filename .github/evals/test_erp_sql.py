@@ -349,7 +349,7 @@ class ProbeTests(unittest.TestCase):
 
 class PreflightTests(unittest.TestCase):
     def args(self, **changes):
-        values = dict(environment=URL, confirm_environment=URL, client_ip=IP, reason="Approved probe", role="Reader", table=None, top=50)
+        values = dict(environment=URL, confirm_environment=URL, client_ip=IP, reason="Approved probe", role="Reader", table=None, waiting_jobs=False, top=50)
         values.update(changes)
         return argparse.Namespace(**values)
 
@@ -452,14 +452,76 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(value, {})
 
     def test_invalid_table_options_fail_before_any_commands(self):
-        for changes in ({"table": "BATCH;DELETE"}, {"table": "BATCH", "top": 0}, {"table": "BATCH", "top": 101}):
+        for changes in (
+            {"table": "BATCH;DELETE"}, {"table": "BATCH", "top": 0},
+            {"table": "BATCH", "top": 101}, {"waiting_jobs": True, "top": 101},
+            {"waiting_jobs": True, "top": 0}, {"waiting_jobs": True, "table": "BATCH"},
+        ):
             with self.subTest(changes=changes), mock.patch.object(sql, "run_command") as run:
                 with self.assertRaises(sql.ConnectionFailure):
                     sql.connect(self.args(**changes))
                 run.assert_not_called()
 
+    def test_waiting_jobs_use_one_grant_and_clear_credentials_on_failure(self):
+        value = credentials()
+        org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
+        with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+                with mock.patch.object(sql, "run_command", side_effect=[
+                    "SQL Server Command Line Tool\n-N Encrypt Connection", json.dumps(org),
+                ]):
+                    with mock.patch.object(sql, "request_credentials", return_value=value) as grant:
+                        with mock.patch.object(sql, "probe_sql"), mock.patch.object(
+                            sql, "read_table", side_effect=sql.ConnectionFailure("Read failed"),
+                        ) as read, redirect_stdout(io.StringIO()):
+                            with self.assertRaisesRegex(sql.ConnectionFailure, "Read failed"):
+                                sql.connect(self.args(waiting_jobs=True, top=100))
+        grant.assert_called_once()
+        read.assert_called_once_with("sqlcmd", value, "BATCHJOB", 100, waiting_only=True)
+        self.assertEqual(value, {})
+
 
 class TableReadTests(unittest.TestCase):
+    def test_waiting_jobs_filter_count_and_preview_and_limit_columns(self):
+        value = credentials()
+        with mock.patch.object(sql, "execute_sql", side_effect=[
+            "dbo|BatchJob|123\n",
+            "RecId|bigint\nCaption|nvarchar\nStatus|int\nStartDateTime|datetime\nParameters|nvarchar\nOtherData|nvarchar\n",
+            "123\n", "42|Example waiting job|1|2026-10-28\n",
+        ]) as execute, redirect_stdout(io.StringIO()) as output:
+            sql.read_table("sqlcmd", value, "BATCHJOB", 100, waiting_only=True)
+        statements = [call.args[2] for call in execute.call_args_list]
+        self.assertIn("LOWER(t.name) = N'batchjob'", statements[0])
+        self.assertIn("COUNT_BIG(*) FROM [dbo].[BatchJob] WHERE [Status] = 1;", statements[2])
+        self.assertIn("TOP (100) [RecId], [Caption], [Status], [StartDateTime]", statements[3])
+        self.assertIn("WHERE [Status] = 1 ORDER BY [RecId];", statements[3])
+        self.assertNotIn("OtherData", statements[3])
+        self.assertNotIn("Parameters", statements[3])
+        self.assertIn("Total waiting jobs at count time: 123", output.getvalue())
+        self.assertIn("42|Example waiting job|1", output.getvalue())
+        self.assertTrue(all(call.args[1] is value for call in execute.call_args_list))
+
+    def test_waiting_jobs_reject_wrong_table_or_invalid_status_schema(self):
+        with mock.patch.object(sql, "execute_sql") as execute:
+            with self.assertRaises(sql.ConnectionFailure):
+                sql.read_table("sqlcmd", credentials(), "BATCH", 50, waiting_only=True)
+            execute.assert_not_called()
+        for columns in ("RECID|bigint\n", "RECID|bigint\nSTATUS|nvarchar\n", "STATUS|int\n"):
+            with self.subTest(columns=columns), mock.patch.object(sql, "execute_sql", side_effect=[
+                "dbo|BATCHJOB|123\n", columns,
+            ]) as execute:
+                with self.assertRaisesRegex(sql.ConnectionFailure, "integer STATUS and RECID"):
+                    sql.read_table("sqlcmd", credentials(), "BATCHJOB", 50, waiting_only=True)
+                self.assertEqual(execute.call_count, 2)
+
+    def test_waiting_jobs_empty_result_is_explicit(self):
+        with mock.patch.object(sql, "execute_sql", side_effect=[
+            "dbo|BATCHJOB|123\n", "RECID|bigint\nSTATUS|int\n", "0\n", "",
+        ]), redirect_stdout(io.StringIO()) as output:
+            sql.read_table("sqlcmd", credentials(), "BATCHJOB", 50, waiting_only=True)
+        self.assertIn("Total waiting jobs at count time: 0", output.getvalue())
+        self.assertIn("(No rows returned.)", output.getvalue())
+
     def test_read_discovers_exact_schema_and_reports_count_preview_and_omissions(self):
         replies = [
             "dbo|BATCH|123\n",
