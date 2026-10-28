@@ -1,6 +1,6 @@
 ---
 name: erp-sql
-description: Temporary SQL access and bounded physical-table reads for Finance and Operations unified developer environments, including public client IP discovery, just-in-time credentials, and sqlcmd. Use when the user explicitly requests direct ERP SQL access, a temporary SQL password, a sqlcmd connection, client IP discovery for SQL access, or a table read in an established ERP SQL workflow.
+description: Temporary Finance and Operations SQL access and bounded physical-table reads, applicable only to unified development environments (UDEs) and unified sandbox environments (USEs), requiring the environment System administrator (sysAdmin) role. Use when the user explicitly requests direct ERP SQL access, a temporary SQL password, a sqlcmd connection, client IP discovery for SQL access, or a table read in an established ERP SQL workflow.
 ---
 
 # Skill: Finance and Operations SQL Access
@@ -9,13 +9,25 @@ description: Temporary SQL access and bounded physical-table reads for Finance a
 >
 > 1. **Confirm the Dataverse URL, selected access type, exact client IP or range, and access reason before requesting credentials.** JIT access changes database access and firewall configuration even though the SQL check only reads. Verify the exact organization and linked ERP environment with the targeted Dataverse CLI check below before the request. This workflow uses Dataverse CLI verification instead of the overview's PAC check; PAC is not required.
 >    **The user must supply the JIT reason.** Explicitly ask for it using `ask_user` when available, with an empty free-text field and no suggested/default reason. Wait for a meaningful, non-empty response; never invent, infer, or auto-fill the reason.
-> 2. **Ask for the access type; unified developer environments only.** Use an enum with `Reader` and `Writer`, recommending `Reader`. Never infer Writer from a task or escalate after a failure. Explain that Writer grants write-capable credentials and obtain explicit approval for that privilege. Never broaden the approved IP scope without new explicit approval or execute direct ERP data changes; the helper only probes the connection and performs explicitly approved bounded table reads. Use supported business APIs for writes.
+> 2. **UDEs/USEs only; the user must already have the environment System administrator (sysAdmin) role.** Confirm eligibility before requesting a grant; never self-elevate. Separately ask for the SQL access type using `Reader` and `Writer`, recommending `Reader`. Never infer Writer from a task or escalate after a failure. Explain that Writer grants write-capable credentials and obtain explicit approval for that privilege. Never broaden the approved IP scope without new explicit approval or execute direct ERP data changes; the helper only probes the connection and performs explicitly approved bounded table reads. Use supported business APIs for writes.
 > 3. **Never expose the password.** Do not invoke the credential action through a tool that displays its response. Capture the managed CLI response inside Python, keep credentials in memory, and pass the password only in the sqlcmd child's `SQLCMDPASSWORD` environment. Never use `-P`, files, `.env`, chat, or logs for the password.
 > 4. **Never bypass TLS validation.** Require encryption and certificate validation; do not add `-C`.
 > 5. **A credential response is not a successful connection.** Require sqlcmd exit code zero and a matching database/login from the connection check. Do not claim success while a JIT operation or login is pending.
 > 6. **Default to a reusable session for interactive reads, starting with the first table request.** Obtain approval to retain credentials in the owner process. Reuse only this conversation's session for the approved workspace/environment/role/IP scope. Do not close it merely because one read or agent turn finishes. Close on an explicit user request or known conversation end; idle timeout and expiry also end it. Never expose credentials, automatically renew access, or attach to another conversation's session.
 
 This skill is an explicit opt-in exception to normal ERP OData/MCP reads, not a replacement for them. It connects to the **ERP SQL database**, not the Dataverse read-only TDS endpoint. A Dataverse authentication token is used to request temporary SQL credentials, not as the SQL password.
+
+**Feature eligibility:** Microsoft's [product database access documentation](https://learn.microsoft.com/en-us/power-platform/developer/unified-experience/finance-operations-product-db-access)
+limits this feature to **unified development environments (UDEs)** and **unified
+sandbox environments (USEs)**, with the **System administrator (sysAdmin) role in
+the environment**. That prerequisite is separate from the requested SQL Reader
+or Writer role. USE write access is limited to `db_datawriter`; this skill still
+executes only reads.
+
+**Current helper limitation:** the automated preflight accepts only the verified
+`ErpDeploymentType = OnlineDev` value. Platform eligibility for USEs does not mean
+all USE deployment types are implemented or live-tested here. Stop on any other
+value; do not bypass the guard or guess a USE deployment-type mapping.
 
 ## Skill boundaries
 
