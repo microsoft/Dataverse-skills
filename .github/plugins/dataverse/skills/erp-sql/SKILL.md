@@ -13,7 +13,7 @@ description: Temporary SQL access and bounded physical-table reads for Finance a
 > 3. **Never expose the password.** Do not invoke the credential action through a tool that displays its response. Capture the managed CLI response inside Python, keep credentials in memory, and pass the password only in the sqlcmd child's `SQLCMDPASSWORD` environment. Never use `-P`, files, `.env`, chat, or logs for the password.
 > 4. **Never bypass TLS validation.** Require encryption and certificate validation; do not add `-C`.
 > 5. **A credential response is not a successful connection.** Require sqlcmd exit code zero and a matching database/login from the connection check. Do not claim success while a JIT operation or login is pending.
-> 6. **For follow-up reads, reuse only the explicitly started session for this workspace and approved environment/role/IP scope.** Never expose its credentials, automatically renew it, or attach to another conversation's session. Close it when finished; local closure does not revoke the server-side grant.
+> 6. **Default to a reusable session for interactive reads, starting with the first table request.** Obtain approval to retain credentials in the owner process. Reuse only this conversation's session for the approved workspace/environment/role/IP scope. Do not close it merely because one read or agent turn finishes. Close on an explicit user request or known conversation end; idle timeout and expiry also end it. Never expose credentials, automatically renew access, or attach to another conversation's session.
 
 This skill is an explicit opt-in exception to normal ERP OData/MCP reads, not a replacement for them. It connects to the **ERP SQL database**, not the Dataverse read-only TDS endpoint. A Dataverse authentication token is used to request temporary SQL credentials, not as the SQL password.
 
@@ -29,6 +29,13 @@ This skill is an explicit opt-in exception to normal ERP OData/MCP reads, not a 
 | Production SQL access or executing direct SQL updates | Not covered; use supported administration and business APIs |
 
 ## Preflight and confirmation
+
+**Before requesting a grant:** if this conversation already has a ready session ID,
+check `session.py status` with its approved scope and workspace. If active, use
+`session.py read` for the newly approved table/limit: do **not** request a new
+reason, role selection, firewall grant, or credentials. The steps below apply to
+starting a new grant, not every read. If no reusable session exists, default to
+the session workflow below; disclose a one-shot fallback before using it.
 
 1. Load **dv-overview** first. For planning or skill authoring only, do not request credentials.
 2. Confirm the target Dataverse URL with the user. Run the following explicitly targeted CLI check:
@@ -74,6 +81,11 @@ Do not invoke it through MCP `invoke_api` or a bare terminal command: that would
 
 ## Request credentials and connect
 
+For interactive chat, use **Reuse access across follow-up reads** below from the
+first request, even if the user names only one table. The `connect.py` invocation
+in this section is for explicitly selected one-shot execution or an explained,
+approved fallback when a persistent owner cannot be kept running.
+
 Resolve `scripts/connect.py` relative to **this skill's directory** (not the workspace). It needs the shared `auth.py` supplied by **dv-connect**, either in the workspace's `scripts/` directory or the plugin's `scripts/` directory. Skill-only/npx installs must finish **dv-connect** helper setup first.
 
 After the approval above, use Python to launch the helper. Replace placeholders with approved non-secret values and the resolved helper path:
@@ -101,14 +113,17 @@ The one-shot helper rechecks the Dataverse organization and ERP linkage before g
 
 ## Reuse access across follow-up reads
 
-When the user expects to read table A and then table B in later commands, prefer
-`scripts/session.py` after explicit approval to retain credentials in a running
-process. It uses the same preflight, grant, SQL functions, and safeguards as the
+Use `scripts/session.py` by default for interactive reads after explicit approval
+to retain credentials in a running process; do not require the user to predict
+all later table requests. It uses the same preflight, grant, SQL functions, and safeguards as the
 one-shot helper; no passwords are persisted or returned to the agent.
 
 Start it in a dedicated terminal or a supported, explicitly approved persistent
 background task. Wait for `ready: true`, record its non-secret session ID in
 this conversation, and use `read`, `status`, and `close` with that ID.
+After a successful read, leave the owner running for follow-up turns and report
+the reusable session ID and its idle/expiry limits. Do not put `close` in a
+per-read cleanup/finally block or run it before each answer.
 Every client supplies the same environment, selected role, and approved IP scope,
 and runs from the same workspace. Each later table/count/limit still needs user
 approval; do not infer that a grant authorizes arbitrary reads.

@@ -1,6 +1,14 @@
 # Reliable physical-table reads through ERP SQL
 
-## Execute the complete read in one process
+## Choose reusable sessions for interactive reads
+
+Start with `session.py` for interactive table requests, even when only one table
+is initially requested. Check this conversation's recorded session ID before
+requesting another grant. Keep a ready owner alive across turns; finishing a
+table read does not mean the user has ended the SQL session. Only an expired,
+closed, or unavailable session requires a newly approved grant and JIT reason.
+
+## Execute an explicitly selected one-shot read
 
 First obtain the environment, exact IP scope, user-authored reason, selected role,
 and approval for the requested table, schema inspection, count, and row limit.

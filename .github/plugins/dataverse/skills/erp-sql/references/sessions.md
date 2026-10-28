@@ -1,6 +1,7 @@
 # Reusable, memory-only ERP SQL sessions
 
-Use this workflow for separate approved table reads within the same conversation.
+Use this workflow by default from the first interactive table request, keeping
+the owner available for later approved reads within the same conversation.
 It does not reuse the Dataverse MSAL cache for SQL passwords. Dataverse CLI auth
 still uses its existing managed cache; temporary SQL credentials live only inside
 one running Python owner process.
@@ -101,7 +102,7 @@ read-only through this interface.
 
 ## Status, close, expiry, and failure
 
-Use `status` and `close` with the same scope arguments:
+Check `status` before follow-up reads without extending the idle lifetime:
 
 ```python
 import subprocess
@@ -115,15 +116,20 @@ scope = [
     "--client-ip", "<explicitly-approved-public-IPv4-scope>",
 ]
 subprocess.run([sys.executable, helper, "status", *scope], check=True)
-subprocess.run([sys.executable, helper, "close", *scope], check=True)
 ```
+
+Do **not** close the session after every read or before returning an answer.
+Only when the user explicitly asks to close it or the conversation is known to
+have ended, run `session.py close` with the same scope arguments. Closing is a
+separate lifecycle action, not part of the read/status sequence above.
 
 - Only a successful read resets the **15-minute idle timeout**. Status, rejected
   requests, and failed reads cannot keep a session alive indefinitely.
 - JIT expiry is checked before each SQL command and before returning a read.
   Active SQL commands retain their existing finite timeouts; shutdown is not
   instantaneous cancellation or guaranteed zeroization of immutable strings.
-- Close the session when the task/conversation ends. A terminal/process shutdown
+- Close the session on an explicit user request or known conversation end, not
+  completion of one table request or agent turn. A terminal/process shutdown
   also releases local credentials. A background owner otherwise remains until
   idle timeout or expiry: it does not magically detect a chat ending.
 - Closure does **not** revoke the server-side grant. Disclose its expiry; do not
