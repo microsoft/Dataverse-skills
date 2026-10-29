@@ -29,3 +29,7 @@ done
 ```
 
 **Skip condition:** `scripts/auth.py` and `scripts/enable-mcp-client.py` both exist.
+
+## JetBrains attribution
+
+A JetBrains install (skills under a JetBrains-managed agent path such as `aia/agents`, or installed with `-a junie`) appends `/jetbrains` to the agent in Step 3, so `.env` gets `DATAVERSE_PLUGIN_AGENT=<agent>/jetbrains` (e.g. `codex/jetbrains`) and `scripts/auth.py` stamps `agent=codex/jetbrains` into the operation context. Leave `ide` empty when the surface is unknown.
