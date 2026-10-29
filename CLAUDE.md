@@ -150,7 +150,7 @@ Contributors who aren't on the maintainers team need two team members to review.
 
 ## Version Bumping
 
-When a PR changes any published plugin content (`.github/plugins/dataverse/**`), bump the plugin version before merging. Version must be updated in all nine fields (across seven files):
+When a PR changes any published plugin content (`.github/plugins/dataverse/**`), bump the plugin version before merging. Version must be updated in all eleven fields (across eight files):
 
 1. `.github/plugin/marketplace.json` — top-level `metadata.version`
 2. `.github/plugin/marketplace.json` — plugin entry `version`
@@ -161,8 +161,10 @@ When a PR changes any published plugin content (`.github/plugins/dataverse/**`),
 7. `.cursor-plugin/marketplace.json` — top-level `metadata.version`
 8. `.cursor-plugin/marketplace.json` — plugin entry `version`
 9. `.github/plugins/dataverse/gemini-extension.json` — `version`
+10. `.github/plugins/dataverse/gemini-extension.json` — the `dataverse-skills/<version>` segment of `mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT`
+11. `gemini-extension.json` (repo root, read by the Gemini CLI extensions gallery) — `version`
 
-All nine must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
+All eleven must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
 
 Run the PR-level bump check to verify the bump level matches the structural changes in your branch:
 
