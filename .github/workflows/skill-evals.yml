@@ -11,6 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  erp-sql-tests:
+    name: ERP SQL tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Run ERP SQL unit and local IPC tests
+        run: python -m unittest discover -s .github/evals -p "test_erp_sql*.py"
+
   static-checks:
     name: Static skill checks
     runs-on: ubuntu-latest
