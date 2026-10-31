@@ -45,7 +45,7 @@ Each layer can be independently revoked without affecting the others.
 
 ## Least-Privilege & Security Role Enforcement
 
-The plugin **cannot exceed the permissions of the authenticated user**. Every API call respects the caller's Dataverse security roles:
+The plugin **cannot exceed the permissions of the authenticated user**. Dataverse data operations respect the caller's Dataverse security roles:
 
 - **Read access** is determined by entity-level read privileges
 - **Write access** is determined by entity-level create, update, and delete privileges
@@ -55,13 +55,17 @@ The plugin **cannot exceed the permissions of the authenticated user**. Every AP
 
 Role enforcement is handled server-side by Dataverse itself. The plugin is a passthrough — it adds guidance and guardrails, but authorization decisions are made by the platform.
 
+Direct ERP SQL reads are a separate authorization path: they use temporary SQL
+Reader credentials, not Dataverse record-level security, field security, or sharing.
+See [ERP SQL credentials, firewall scope, and query data](#erp-sql-credentials-firewall-scope-and-query-data).
+
 ## Confirmation & Approval Steps
 
 Safety is enforced at two levels: **platform-level** controls that are always on, and **agent-level** guardrails defined in the plugin's skill instructions that guide Claude and Copilot behavior.
 
 ### Platform-level (always enforced)
 
-- **Dataverse security roles** — every API call is authorized server-side by Dataverse (see [Least-Privilege](#least-privilege--security-role-enforcement) above).
+- **Dataverse security roles** — every Dataverse API call is authorized server-side by Dataverse (see [Least-Privilege](#least-privilege--security-role-enforcement) above).
 - **Multi-layer MCP authorization** — MCP access requires developer auth, tenant admin consent, and per-environment allowlisting (see [Authentication](#authentication) above). Other plugin tools (SDK, Web API, PAC CLI) authenticate directly and are not subject to these controls.
 
 ### Agent-level (guardrails in skill instructions)
@@ -78,6 +82,10 @@ Before the first operation that touches a specific environment, the agent:
 4. **Does not proceed until you explicitly confirm**
 
 Once confirmed for an environment in a session, re-confirmation is not required for subsequent operations against that same environment.
+
+The ERP SQL skill instead verifies the confirmed organization and linked ERP
+environment with targeted `dataverse org who`. Each new SQL grant requires its
+own approval, including the credential-invalidation warning described below.
 
 #### 2. Solution confirmation (before schema changes)
 
@@ -107,6 +115,55 @@ Some operations require extra care because they are difficult or impossible to r
 - Service principal tokens: held in memory only, never persisted
 - Tokens are scoped to your Dataverse environment and are not passed to external services
 
+### ERP SQL credentials, firewall scope, and query data
+
+The `erp-sql` skill is an explicit opt-in path for UDEs reporting
+`ErpDeploymentType = OnlineDev`. It requires the environment System administrator
+role, but requests only SQL **Reader** credentials. USEs, Writer grants, and direct
+SQL writes are not supported by these helpers.
+
+**No IP discovery or range suggestions:** the user must supply the public IPv4
+address or range/CIDR to authorize. The skill does not contact an IP-lookup service,
+discover an address through another source, propose a range, or direct the user
+to lookup tools or services. If the user cannot supply a valid scope, the agent
+stops. Ranges must contain at most 256 public IPv4 addresses; every address between
+the approved endpoints is included. CIDR normalization preserves that exact span.
+SQL-reported IPs are failure diagnostics for checking the approved scope, not a
+source for a replacement scope.
+
+**Grant and firewall effects:** the helper sends the user-supplied IP scope,
+Reader role, and verbatim access reason to the confirmed Dataverse environment
+through the managed CLI. The request creates temporary SQL access and configures
+the SQL firewall even though subsequent queries only read data. Before requesting
+each grant, the agent must disclose that it invalidates existing SQL credentials
+for the same user/environment, including those used in Visual Studio, SSMS, or
+another SQL session, and obtain explicit approval. This warning and consent step
+is an agent instruction, not an interactive gate in the Python helper. The helper
+validates inputs and returned role/IP/expiry, but cannot verify that consent occurred.
+It never automatically renews a grant or broadens its IP scope. A failed local
+validation or connection does not undo a grant that already occurred.
+
+**Credential handling:** SQL credentials are captured in process memory, never
+printed or written to credential files. The password is passed only through the
+sqlcmd child's `SQLCMDPASSWORD` environment, not command-line arguments. The helper
+does temporarily write the non-secret request body (reason, role, and IP scope)
+to a local file, which is removed when the request scope exits. SQL connections
+require encryption and certificate validation. A reusable session retains its
+credentials in the owner process until explicit close, expiry, or 15 minutes
+without a successful read; this is an OS-user boundary, not isolation from other
+processes under that user or administrators. Python cannot guarantee memory
+zeroization. Local close does not revoke the server-side grant or restore
+credentials invalidated by that grant.
+
+**Data handling and residency:** approved bounded SQL results travel from the ERP
+database to the machine running the helper and may appear in the agent conversation.
+They are not confined to the database's region after being returned. Apply the
+organization's data-access, host, transcript retention, and residency requirements.
+The helper omits secret-like and unsupported columns and redacts the SQL password,
+but these filters are not a complete sensitive-data classifier. Grant requests and
+SQL access remain subject to the applicable platform and tenant audit policies;
+no separate IP-discovery endpoint receives the user's IP.
+
 ## Logging & Auditability
 
 ### Client-side logging (local to your machine)
@@ -123,7 +180,7 @@ Client-side logs do **not** capture customer data records, credentials, or perso
 
 ### Server-side logging (Dataverse platform)
 
-Every API call the plugin makes reaches Dataverse via HTTP. Once a request hits Dataverse, it is subject to your tenant's standard audit and telemetry policies — the same as any other Dataverse client (model-driven apps, Power Automate, direct API calls). The plugin does not add any additional server-side logging beyond what Dataverse records by default.
+Dataverse API calls reach Dataverse via HTTP. Once a request hits Dataverse, it is subject to your tenant's standard audit and telemetry policies — the same as any other Dataverse client (model-driven apps, Power Automate, direct API calls). The plugin does not add any additional server-side logging beyond what Dataverse records by default. Direct ERP SQL queries use the SQL connection instead, as described above.
 
 For details on Dataverse auditing, see [Microsoft's auditing documentation](https://learn.microsoft.com/en-us/power-platform/admin/manage-dataverse-auditing).
 

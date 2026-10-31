@@ -8,62 +8,113 @@ one running Python owner process.
 
 ## Approval and IP range selection
 
-Confirm the environment/linkage, Reader or Writer role, exact public IPv4 scope,
+Confirm the environment/linkage, Reader role, exact public IPv4 scope,
 user-authored reason, connection probe, and retention in a running process.
-Reader is sufficient for all supported reads. Ask for the customer's known
-egress range first. If unknown, obtain permission to contact the IP-echo service,
-then invoke the following discovery-only command:
+Before approval, warn that starting a new owner requests a grant that invalidates
+existing SQL credentials for the same user in the same environment, including
+credentials used in Visual Studio, SSMS, or another owner. Obtain explicit approval
+for this impact; stop if absent or declined. Reusing an existing owner for
+`read` or `status` does not request a new grant.
 
-```python
-import subprocess
-import sys
-
-subprocess.run(
-    [sys.executable, "<resolved-erp-sql-directory>/scripts/connect.py",
-     "--discover-ip", "--suggest-range"],
-    check=True,
-)
-```
-
-Show `observed_http_ipv4`, `suggested_range`, `address_count`, and the warning.
-Offer the eight-address `/29` candidate, a customer-supplied public IPv4
-range/CIDR of at most 256 addresses, or a single IPv4. Only submit the explicitly
-accepted scope. This is arithmetic around one observed address, not detection
-of a NAT pool; HTTP and SQL may use different egress, and nearby addresses can
-belong to other users. Never silently retry a grant with the candidate.
+Reader is the only supported role. Ask the user to supply a public IPv4 address
+or range/CIDR of at most 256 addresses, without a default or suggested value.
+Show the supplied scope's endpoints and address count and obtain explicit approval.
+Do not discover an IP, calculate a candidate range, reuse an earlier session's
+scope as a default, or recommend a source or command for finding one.
+If the user cannot provide a valid scope or declines, stop before starting an owner.
+Every client then uses the same user-approved scope recorded at startup.
 
 ## Start the owner process once
 
-Run from the intended workspace in a dedicated terminal, or a harness-managed
-persistent background task with user approval. The `start` command stays in the
-foreground; it does not secretly detach. Do not treat a still-running command
-as a failure or relaunch it. Use the harness's supported persistent/detached-task
-facility if the session must survive the current agent turn. If that facility is
-unavailable, use the dedicated terminal or explain the one-shot limitation.
+Complete the skill's action discovery and schema compatibility check before
+starting a new owner. Startup does not perform that metadata discovery; stop if
+the action or schema cannot be verified, rather than requesting a grant.
+
+**Do not run `session.py start` with `subprocess.run`, `check_call`, `wait`, or
+`communicate` in a foreground agent tool call.** The owner intentionally runs
+until close, idle timeout, or expiry. A foreground timeout can kill it after a
+grant has already invalidated earlier credentials.
+
+Use the host's supported **persistent background-task mechanism**, from the
+intended workspace and with approval to retain credentials across turns.
+A plain `Popen` is not sufficient when the host cleans up child processes at
+tool-call or turn completion. Confirm that the host supports persistence before
+launching; do not bypass its detachment approval or use shell tricks.
+
+### Example: Windows host with a persistent PowerShell tool
+
+When the host exposes the `powershell` tool with `mode`, `detach`, and `shellId`
+parameters, generate its arguments below. **This Python block only prints a
+launch specification; it does not start the owner or request credentials.**
+Replace placeholders with the resolved helper path and approved values.
 
 ```python
-import subprocess
+import json
 import sys
+import uuid
 
-subprocess.run(
-    [sys.executable, "<resolved-erp-sql-directory>/scripts/session.py", "start",
-     "--environment", "<confirmed-dataverse-url>",
-     "--confirm-environment", "<confirmed-dataverse-url>",
-     "--role", "Reader",
-     "--client-ip", "<explicitly-approved-public-IPv4-scope>",
-     "--reason", "<verbatim-user-provided-reason>"],
-    check=True,
-)
+session_id = uuid.uuid4().hex
+argv = [
+    sys.executable, "-u", "<resolved-erp-sql-directory>/scripts/session.py", "start",
+    "--session", session_id,
+    "--environment", "<confirmed-dataverse-url>",
+    "--confirm-environment", "<confirmed-dataverse-url>",
+    "--role", "Reader",
+    "--client-ip", "<explicitly-approved-public-IPv4-scope>",
+    "--reason", "<verbatim-user-provided-reason>",
+]
+# PowerShell literal strings preserve spaces, apostrophes, and metacharacters.
+command = "& " + " ".join("'" + value.replace("'", "''") + "'" for value in argv)
+print(json.dumps({
+    "command": command,
+    "description": "Start the approved persistent ERP SQL owner",
+    "mode": "async",
+    "detach": True,
+    "shellId": "erp-sql-" + session_id,
+}))
 ```
+
+Submit the emitted object as the **arguments to the host's `powershell` tool**,
+not as a shell script. `mode: "async"` returns control without waiting for owner
+exit; `detach: true` requests persistence across tool calls and turns. Retain the
+returned task handle and the chosen session ID. Do not submit the launch again.
+
+On other hosts, use their documented persistent-background equivalent; do not
+assume these parameter names exist. If persistence is unavailable or denied,
+use a user-managed dedicated terminal, or explain the limitation and obtain
+approval for one-shot access **before requesting a grant**.
+
+### Wait for readiness, not process exit
 
 Startup performs the same preflight, one JIT request, credential validation, and
 encrypted database/login probe as `connect.py`. It prints a JSON readiness line
 only after the probe succeeds, containing `ready: true`, session ID, process ID,
 workspace, environment, role, IP scope, expiration, and idle timeout. No password
-or SQL login is included. Retain the session ID in the conversation, not a
-credential file. An optional `--session` on start accepts a caller-generated
-32-character lowercase UUID hex string; it cannot attach to or replace an
-existing owner. A duplicate endpoint fails before requesting a grant.
+or SQL login is included.
+
+- Use bounded reads of the **same background task's captured output**. For the
+  PowerShell host, use `read_powershell` with the returned `shellId`; do not wait
+  for a completion notification from this long-lived process.
+- Inspect successive output lines until a JSON object contains `ready: true`.
+  **The first line is not the readiness record:** target, credential-received,
+  propagation, and connection messages can precede it. Do not interpret one
+  missing readiness line or a still-running task as startup failure.
+- Monitor startup for at most ten minutes per monitoring attempt. If readiness
+  has not appeared, report startup as pending/unverified and retain the same
+  task handle. Do not kill/relaunch the owner or silently fall back to a new
+  one-shot grant. Further monitoring uses the same task.
+- After readiness, verify the session ID and approved workspace/environment/
+  Reader/IP scope, then run `session.py status` to confirm that the owner is
+  responsive before a read. Keep it running across turns.
+- If the task exits before readiness, report the sanitized failure. Another
+  grant requires the invalidation warning, a user-provided reason, and fresh
+  explicit approval; an exit or timeout never authorizes a restart.
+
+Retain the task handle and session ID in the conversation, not a credential file.
+`--session` accepts a caller-generated 32-character lowercase UUID hex string;
+it cannot attach to or replace an existing owner. A duplicate endpoint fails
+before requesting a grant. For session clients, use `subprocess.run` only for
+the bounded `read`, `status`, and explicit `close` operations below.
 
 ## Read table A, then table B using the same grant
 
@@ -97,8 +148,17 @@ subprocess.run(
 Replace the example table names with the customer's actual requested tables.
 `--waiting-jobs` is also supported instead of `--table`, with the existing fixed
 BATCHJOB/STATUS=1 query and allowlisted summary columns. Neither mode accepts
-arbitrary SQL, writes, credentials, or shell commands. Writer credentials remain
-read-only through this interface.
+arbitrary SQL, writes, credentials, or shell commands. Writer requests and
+credentials are rejected; a persistent owner retains only Reader credentials.
+
+For an approved virtual-entity lookup, substitute
+`--virtual-entity-name JobEntity --top 20` for the table selection. This searches
+the name-like text columns discovered in `CDSVIRTUALENTITYLIST`, using a literal
+case-insensitive substring. It counts matches across the table and returns a
+bounded preview using the same session, without a new grant. It cannot be
+combined with `--table` or `--waiting-jobs`. Name fragments accept only ASCII
+letters, digits, and underscores (1-128 characters, starting with a letter or
+underscore); no arbitrary predicate is accepted.
 
 ## Status, close, expiry, and failure
 
@@ -141,7 +201,24 @@ separate lifecycle action, not part of the read/status sequence above.
   report that the read may have run rather than claiming success.
 - If the owner exits/crashes, a later command fails explicitly. Do not recover
   credentials from files, memory dumps, logs, or token caches. A new owner needs
-  new explicit approval for a grant.
+  the credential-invalidation warning and fresh explicit approval for a grant,
+  even after idle timeout or expiry: the same user may now be using newer
+  credentials in Visual Studio, SSMS, or another session.
+
+**Propagation retry limits (both helpers):** after the initial 60-second wait,
+retry propagation-related login failures twice, ten seconds apart, using the
+same credentials. For a firewall failure reporting one unambiguous IP inside
+the approved scope, allow up to four further retries at 60-second intervals.
+Check credential expiry before each attempt. Azure SQL firewall changes can take
+up to five minutes to propagate ([Microsoft firewall guidance](https://learn.microsoft.com/en-us/azure/azure-sql/database/firewall-configure)).
+Out-of-scope, missing, or ambiguous client IPs stop immediately. Neither retry
+path widens the approved scope or requests another grant. These limits apply to
+every SQL command, not just the initial probe.
+
+Local credential references are released when the owner or one-shot helper exits;
+Python cannot guarantee zeroization of immutable strings. Local exit does not
+revoke the server-side grant, and closing an owner does not restore credentials
+invalidated by its grant.
 
 ## Local transport and security boundary
 

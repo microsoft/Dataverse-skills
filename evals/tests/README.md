@@ -70,19 +70,35 @@ dotnet run -- evals/tests/dv_data.biceval.json --copilotcliagent config.json
 
 ## ERP eval suites
 
-These suites provide a read-only passing baseline for Dataverse skill surfaces that can be exercised without requesting or executing a Finance and Operations mutation. The active set contains four tests, and every test declares `"safety_tier": "read-only"`.
+ERP suites combine live read-only scenarios with offline skill-contract and routing checks. Every test declares `"safety_tier": "read-only"`. Adding or statically validating a test definition does not establish a passing behavioural result; agent trajectories must be graded by LocalEvalRunner.
 
 | File | Skill surface | Coverage |
 |---|---|---|
-| [`erp_dv_query.biceval.json`](erp_dv_query.biceval.json) | `dv-query` | ERP composite-key read |
+| [`erp_dv_query.biceval.json`](erp_dv_query.biceval.json) | `dv-query` | Composite-key and cross-company reads, local aggregation, offline ERP/Dataverse SQL negative routing |
 | [`erp_dv_admin.biceval.json`](erp_dv_admin.biceval.json) | `dv-admin` | ERP batch listing and local filtering |
 | [`erp_dv_overview.biceval.json`](erp_dv_overview.biceval.json) | `dv-overview` | ERP business-data read routing |
+| [`erp_sql.biceval.json`](erp_sql.biceval.json) | `erp-sql` | Offline planning, missing-reason gate, Writer refusal/Reader approval, password-handling refusal, unsupported deployment, and ERP/Dataverse SQL negative routing |
 
 > ## Safety and fixture requirements
 >
 > The active ERP suite must not request or execute create, update, delete, import, deploy, synchronize, cancel, install, uninstall, or potentially mutating ERP actions. Mutation coverage and read-only scenarios that did not pass the compatibility run were removed from the active files and remain recoverable from Git history.
 
 The live tests require an authenticated ERP-linked development environment.
+
+All seven `erp_sql.biceval.json` cases are offline and require no live grant or
+environment fixture. The two negative-routing cases are also present in
+`erp_dv_query.biceval.json` so query-skill edits exercise the boundary. Its live-read
+outcome requirements apply only to live cases, not these planning scenarios.
+Every SQL case includes `**/skills/erp-sql/**` in `pr_file_filter`; both copies of
+the routing cases also include the query and overview skill paths.
+
+Run the offline cases with a runner/agent configuration that has no live environment
+credentials or mutating tools. Treat `mode` and `safety_tier` as test declarations,
+not proof that the runner blocks network or write access. Prompts explicitly forbid
+environment/authentication calls, command execution, and file writes while permitting
+skill/reference reads. The secret-handling case supplies no password fixture: it
+grades refusal of transcript-exposing commands, not a live credential retrieval.
+Script-level password redaction remains covered by the hermetic Python tests.
 
 LocalEvalRunner is an external repository dependency; this repository does not contain its project or `config.json`. After checking out and configuring LocalEvalRunner, pass an ERP test file path to that runner, for example:
 

@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import importlib.util
 import ipaddress
 import json
 import os
@@ -14,14 +15,37 @@ import sys
 import tempfile
 import time
 from urllib.parse import urlsplit
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
-for scripts in (Path(__file__).resolve().parents[3] / "scripts", Path.cwd() / "scripts"):
-    if scripts.is_dir():
-        sys.path.insert(0, str(scripts))
+def _load_auth_helpers():
+    candidates = (
+        Path(__file__).resolve().parents[3] / "scripts" / "auth.py",
+        Path.cwd() / "scripts" / "auth.py",
+    )
+    for path in candidates:
+        if not path.is_file():
+            continue
+        # An explicit file load also avoids a workspace auth cached in sys.modules.
+        spec = importlib.util.spec_from_file_location("_erp_sql_auth", path)
+        if spec is None or spec.loader is None:
+            raise ImportError("Cannot load the auth helper.")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        load_env = getattr(module, "load_env", None)
+        get_cli_context = getattr(module, "get_cli_context", None)
+        if not callable(load_env) or not callable(get_cli_context):
+            raise ImportError("The auth helper is outdated.")
+        return load_env, get_cli_context
+    raise ImportError("The auth helper is missing.")
 
-from auth import load_env, _operation_context_str
+
+try:
+    load_env, get_cli_context = _load_auth_helpers()
+except (ImportError, OSError):
+    raise SystemExit(
+        "ERROR: ERP SQL requires a current auth.py with load_env and get_cli_context. "
+        "Update the plugin; for skill-only installs, re-run the dv-connect helper setup "
+        "to refresh scripts/auth.py. No credential request was made."
+    ) from None
 
 
 ACTION = "/api/data/v9.2/msprov_getfinopssqljitaccessasync"
@@ -92,38 +116,6 @@ def ip_scope(value):
 def canonical_ip_scope(value):
     start, end = ip_scope(value)
     return str(start) if start == end else f"{start}-{end}"
-
-
-def discover_public_ip():
-    # IP discovery is separate from granting access and never includes auth.
-    request = Request("https://api.ipify.org?format=json", headers={"Accept": "application/json"})
-    try:
-        with urlopen(request, timeout=15) as response:
-            body = response.read(1025)
-    except (URLError, TimeoutError, OSError):
-        raise ConnectionFailure("Public IP discovery failed; supply the IP explicitly.") from None
-    if len(body) > 1024:
-        raise ConnectionFailure("Public IP service returned an oversized response.")
-    data = read_json(body, "Public IP service")
-    return canonical_ip_scope(public_ip(required_string(data, "ip")))
-
-
-def suggest_ip_range(address):
-    address = canonical_ip_scope(address)
-    if "-" in address:
-        raise ConnectionFailure("Range suggestions require one public IPv4 address.")
-    network = ipaddress.IPv4Network(f"{address}/29", strict=False)
-    candidate = canonical_ip_scope(str(network))
-    return {
-        "observed_http_ipv4": address,
-        "suggested_range": candidate,
-        "address_count": 8,
-        "warning": (
-            "Calculated candidate only, not a discovered NAT pool. HTTP and SQL egress may differ. "
-            "Ask the user to approve these exact endpoints or provide a custom range/single IPv4. "
-            "No JIT grant or firewall change has been made."
-        ),
-    }
 
 
 def environment_url(value):
@@ -218,6 +210,11 @@ def required_string(data, key):
     return value
 
 
+def require_reader(role):
+    if role != "Reader":
+        raise ConnectionFailure("Only the Reader SQL access type is supported.")
+
+
 def expiration(data):
     value = required_string(data, "sqljitexpiration")
     try:
@@ -230,6 +227,7 @@ def expiration(data):
 
 
 def validate_credentials(data, client_ip, role):
+    require_reader(role)
     operation = data.get("operationhistoryid")
     if not all(data.get(key) for key in (
         "servername", "databasename", "sqljitusername", "sqljitpassword",
@@ -254,8 +252,7 @@ def validate_credentials(data, client_ip, role):
 
 
 def request_credentials(cli, url, context, reason, client_ip, role):
-    if role not in ("Reader", "Writer"):
-        raise ConnectionFailure("Access type must be Reader or Writer.")
+    require_reader(role)
     client_ip = canonical_ip_scope(client_ip)
     # Only the non-secret request is on disk; the response stays in memory.
     with tempfile.TemporaryDirectory(prefix="erp-sql-") as directory:
@@ -313,15 +310,14 @@ def execute_sql(sqlcmd, credentials, statement):
                 elif len(error.client_ips) == 1:
                     action = (
                         f"The approved IP scope was {approved_ip}. SQL egress is outside the approved scope. "
-                        "Confirm the SQL-reported IP and obtain approval for a new JIT request "
-                        "using that exact --client-ip; do not reuse the HTTP-discovered IP. "
-                        "If SQL reports a different IP after an approved correction, stop issuing "
-                        "grants and arrange stable SQL egress with the network administrator."
+                        "Stop and ask the user to supply an IPv4 address or range and approve a new JIT request. "
+                        "Do not copy the SQL-reported IP or infer a range. "
+                        "A new grant invalidates existing credentials for the same user/environment."
                     )
                 else:
                     action = (
-                        "No unambiguous public SQL client IP was reported. Check network policy "
-                        "with the administrator; do not guess or broaden the allowlist."
+                        "No unambiguous public SQL client IP was reported. "
+                        "Stop; do not discover addresses, guess, or broaden the allowlist."
                     )
                 raise ConnectionFailure(f"{error} {action}") from None
             except ConnectionFailure as error:
@@ -365,12 +361,22 @@ def quote_identifier(value):
     return "[" + value.replace("]", "]]") + "]"
 
 
-def read_table(sqlcmd, credentials, table, top, *, waiting_only=False):
+def entity_name_fragment(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", value):
+        raise ConnectionFailure("Use an entity-name fragment of 1-128 ASCII letters, digits, or underscores, starting with a letter or underscore.")
+    return value.lower()
+
+
+def read_table(sqlcmd, credentials, table, top, *, waiting_only=False, virtual_entity_name=None):
     schema, name = table_parts(table)
     if not 1 <= top <= 100:
         raise ConnectionFailure("Table previews require --top between 1 and 100.")
     if waiting_only and name.lower() != "batchjob":
         raise ConnectionFailure("Waiting-job reads require the BATCHJOB table.")
+    if virtual_entity_name is not None:
+        virtual_entity_name = entity_name_fragment(virtual_entity_name)
+        if waiting_only or name.lower() != "cdsvirtualentitylist":
+            raise ConnectionFailure("Virtual-entity name searches require CDSVIRTUALENTITYLIST and cannot use waiting-job mode.")
     schema_filter = f" AND LOWER(s.name) = N'{schema.lower()}'" if schema else ""
     matches = metadata_rows(execute_sql(sqlcmd, credentials, f"""
 SET NOCOUNT ON;
@@ -416,6 +422,19 @@ ORDER BY c.column_id;
         predicate = f" WHERE {quote_identifier(integer_columns['status'])} = 1"
         allowed = {"recid", "caption", "status", "startdatetime", "enddatetime", "batchgroup", "company"}
         selected = [column for column in selected if column.lower() in allowed]
+    search_columns = []
+    if virtual_entity_name is not None:
+        search_columns = [
+            column for column, kind in columns
+            if column in selected and kind.lower() in {"char", "varchar", "nchar", "nvarchar"}
+            and "name" in column.lower()
+        ]
+        if not search_columns:
+            raise ConnectionFailure("No supported non-secret name-like text columns exist in CDSVIRTUALENTITYLIST; no name search was performed.")
+        pattern = virtual_entity_name.replace("_", "[_]")
+        predicate = " WHERE (" + " OR ".join(
+            f"LOWER({quote_identifier(column)}) LIKE N'%{pattern}%'" for column in search_columns
+        ) + ")"
     if not selected:
         raise ConnectionFailure("No supported non-secret scalar columns are available for preview.")
     omitted = [column for column, _ in columns if column not in selected]
@@ -424,10 +443,13 @@ ORDER BY c.column_id;
         print("Omitted payload/secret-like/unsupported columns: " + ", ".join(omitted), flush=True)
     if waiting_only:
         print("Filter: BatchStatus.Waiting = 1 (Microsoft BatchStatus enum reference).", flush=True)
+    if virtual_entity_name is not None:
+        print(f"Filter: case-insensitive literal substring '{virtual_entity_name}' in name-like columns: "
+              + ", ".join(search_columns), flush=True)
     count = execute_sql(sqlcmd, credentials, f"SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM {qualified}{predicate};").strip()
     if not count.isdecimal():
         raise ConnectionFailure("Unexpected table row-count response; output withheld.")
-    label = "Total waiting jobs" if waiting_only else "Total rows"
+    label = "Total matching entities" if virtual_entity_name is not None else ("Total waiting jobs" if waiting_only else "Total rows")
     print(f"{label} at count time: {count}", flush=True)
     recid = next((column for column in selected if column.lower() == "recid"), None)
     order = " ORDER BY " + quote_identifier(recid) if recid else ""
@@ -454,11 +476,13 @@ def sql_access(args):
     client_ip = canonical_ip_scope(args.client_ip)
     if not args.reason.strip():
         raise ConnectionFailure("An approved, non-empty access reason is required.")
-    if args.role not in ("Reader", "Writer"):
-        raise ConnectionFailure("An explicitly selected Reader or Writer access type is required.")
-    if args.waiting_jobs and args.table:
-        raise ConnectionFailure("--waiting-jobs cannot be combined with --table.")
-    if args.table or args.waiting_jobs:
+    require_reader(args.role)
+    virtual_entity_name = getattr(args, "virtual_entity_name", None)
+    if sum((bool(args.table), bool(args.waiting_jobs), virtual_entity_name is not None)) > 1:
+        raise ConnectionFailure("Choose only one of --table, --waiting-jobs, or --virtual-entity-name.")
+    if virtual_entity_name is not None:
+        entity_name_fragment(virtual_entity_name)
+    if args.table or args.waiting_jobs or virtual_entity_name is not None:
         if args.table:
             table_parts(args.table)
         if not 1 <= args.top <= 100:
@@ -470,7 +494,7 @@ def sql_access(args):
     if "SQL Server Command Line Tool" not in sqlcmd_help or not re.search(r"-N(?:\[s\|m\|o\])?\s+Encrypt Connection", sqlcmd_help):
         raise ConnectionFailure("This helper requires sqlcmd (ODBC) with the -N encryption flag.")
     load_env()
-    context = _operation_context_str("erp-sql")
+    context = get_cli_context("erp-sql")
     print(f"Target: {url}; role: {args.role}; client IP scope: {client_ip}", flush=True)
     org = read_json(run_command([
         tools["dataverse"], "org", "who", "--environment", url,
@@ -500,42 +524,32 @@ def connect(args):
             read_table(sqlcmd, credentials, args.table, args.top)
         elif args.waiting_jobs:
             read_table(sqlcmd, credentials, "BATCHJOB", args.top, waiting_only=True)
+        elif getattr(args, "virtual_entity_name", None) is not None:
+            read_table(sqlcmd, credentials, "CDSVIRTUALENTITYLIST", args.top, virtual_entity_name=args.virtual_entity_name)
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
     sys.stderr.reconfigure(encoding="utf-8", errors="strict")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--discover-ip", action="store_true", help="Discover public IPv4 only; no JIT grant or SQL connection")
-    parser.add_argument("--suggest-range", action="store_true", help="With --discover-ip, propose an eight-address /29 for explicit approval; never grants access")
-    parser.add_argument("--environment")
-    parser.add_argument("--client-ip", help="Approved public IPv4 address or IPv4 range/CIDR (maximum 256 addresses; IPv6 unsupported)")
-    parser.add_argument("--reason")
-    parser.add_argument("--role", choices=("Reader", "Writer"), help="Explicitly approved JIT access type")
-    parser.add_argument("--confirm-environment")
+    parser.add_argument("--environment", required=True)
+    parser.add_argument("--client-ip", required=True, help="User-supplied, approved public IPv4 address or range/CIDR (maximum 256 addresses; no discovery)")
+    parser.add_argument("--reason", required=True)
+    parser.add_argument("--role", choices=("Reader",), required=True, help="Explicitly approved Reader-only JIT access")
+    parser.add_argument("--confirm-environment", required=True)
     parser.add_argument("--table", help="Approved table or schema.table to preview after connecting")
     parser.add_argument("--waiting-jobs", action="store_true", help="Read BATCHJOB with STATUS = 1 (Waiting); no arbitrary SQL")
-    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with --table or --waiting-jobs)")
+    parser.add_argument("--virtual-entity-name", help="Search CDSVIRTUALENTITYLIST name-like text columns for a literal entity-name fragment (case-insensitive)")
+    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with a read mode)")
     args = parser.parse_args()
-    if args.suggest_range and not args.discover_ip:
-        parser.error("--suggest-range requires --discover-ip and cannot grant access.")
-    connection_args = (args.environment, args.client_ip, args.reason, args.role, args.confirm_environment)
-    if args.discover_ip and (any(connection_args) or args.table is not None or args.waiting_jobs or args.top is not None):
-        parser.error("--discover-ip cannot be combined with connection arguments.")
-    if args.table and args.waiting_jobs:
-        parser.error("--waiting-jobs cannot be combined with --table.")
-    if args.top is not None and not (args.table or args.waiting_jobs):
-        parser.error("--top requires --table or --waiting-jobs.")
+    if sum((args.table is not None, args.waiting_jobs, args.virtual_entity_name is not None)) > 1:
+        parser.error("Choose only one of --table, --waiting-jobs, or --virtual-entity-name.")
+    if args.top is not None and not (args.table or args.waiting_jobs or args.virtual_entity_name is not None):
+        parser.error("--top requires --table, --waiting-jobs, or --virtual-entity-name.")
     if args.top is None:
         args.top = 50
-    if not args.discover_ip and not all(connection_args):
-        parser.error("--environment, --client-ip, --reason, --role, and --confirm-environment are required.")
     try:
-        if args.discover_ip:
-            address = discover_public_ip()
-            print(json.dumps(suggest_ip_range(address)) if args.suggest_range else address)
-        else:
-            connect(args)
+        connect(args)
     except (ConnectionFailure, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

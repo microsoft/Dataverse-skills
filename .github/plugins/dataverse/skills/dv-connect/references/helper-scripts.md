@@ -29,3 +29,10 @@ done
 ```
 
 **Skip condition:** `scripts/auth.py` and `scripts/enable-mcp-client.py` both exist.
+
+An existing copy can still be outdated. If **erp-sql** reports a missing or
+incompatible helper, do not apply the skip condition: refresh `scripts/auth.py`
+from the current plugin's helper source, preserving any local customizations.
+ERP SQL requires `load_env` and the public `get_cli_context(skill)` function,
+which returns the unwrapped value for the Dataverse CLI's `--context` flag.
+Native plugin installs prefer their bundled helper over the workspace copy.

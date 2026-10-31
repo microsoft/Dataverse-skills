@@ -7,6 +7,8 @@ description: Foundational cross-cutting context for Dataverse / Power Platform w
 
 Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
 
+---
+
 ## What This Plugin Covers
 
 Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
@@ -19,9 +21,15 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
 | Finance and Operations X++ — author, build, deploy, DB sync, verify | `erp-xpp` |
-|ERP SQL|erp-sql|
+| Finance and Operations developer-database access — temporary JIT SQL credentials, physical-table reads (UDE only) | `erp-sql` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
+
+Ordinary ERP business-data reads stay in **dv-query** through ERP MCP/OData.
+Dataverse SQL/TDS reads also stay in **dv-query**. Use **erp-sql** only for an
+explicit direct developer-database access request or a follow-up read in an
+established ERP SQL session; do not start a credential/firewall flow for an
+ordinary data query.
 
 **Model-driven apps:** the building blocks (tables, forms, views) are covered by `dv-metadata`; composing the app shell itself — site map and navigation — is **not yet** a first-class skill.
 
@@ -31,6 +39,8 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 - **Power Automate flows** — use the maker portal or the Power Automate Management API
 - **Azure infrastructure** beyond what's needed for service-principal setup
 - **Business Central** or other Dynamics products
+
+---
 
 ## Hard Rules
 
@@ -108,6 +118,8 @@ Each skill documents a tested sequence — follow it when it fits. The skills ar
 
 **Connectivity is not auth.** A `login.microsoftonline.com` token can succeed while the org's data-plane domain is unreachable (restricted-egress hosts like ChatGPT Work Mode). Never report a count or result you didn't get from a real call that returned — verify with `python scripts/auth.py --check`; if it fails, say "unreachable," never a fabricated number. On a constrained host, lead with the SDK, not CLI/MCP. See `dv-connect/references/headless-hosts.md`.
 
+---
+
 ## Tool Capabilities — Which Tool for Which Job
 
 Understanding the real limits of each tool prevents hallucinated paths. This is the one piece of context no individual skill owns.
@@ -127,23 +139,9 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 **Volume guidance:** CLI `dataverse data create/query/count` for one-off commands; MCP for up to ~25 records per call or simple filters; the SDK's `CreateMultiple` for larger bulk writes (chunk large sets starting ~1,000 — see `dv-data`) and `dv-query` for bulk reads; SDK `fetchxml()` for aggregation.
 
-**SDK method cheat-sheet** (anti-hallucination, *not* a preference signal): SDK method names are the least discoverable surface, so agents invent them. This maps common ops to the exact call. Each op is equally reachable via MCP/CLI per Hard Rule 2; see the noted skill for the full pattern.
-
-| Operation | SDK call | Skill |
-| --- | --- | --- |
-| Create / update / delete records | `client.records.create()` / `.update()` / `.delete()` (pass a list for bulk) | `dv-data` |
-| Upsert on an alternate key | `client.records.upsert()` | `dv-data` |
-| Query / filter records | `client.records.list(...)` (flat) or `.list_pages(...)` (streaming) | `dv-query` |
-| One record by GUID | `client.records.retrieve(table, guid)` (`None` if missing) | `dv-query` |
-| Aggregation / server-side joins | `client.query.fetchxml(xml)` (aggregates + link-entity) | `dv-query` |
-| Fluent query build (chainable) | `client.query.builder(Table).where(...).execute()` | `dv-query` |
-| Limited SQL read | `client.query.sql("SELECT ...")` | `dv-query` |
-| Load into pandas | `client.query.builder(table).select(...).execute().to_dataframe()` | `dv-query` |
-| Upload to a file column | `client.files.upload(...)` | `dv-data` |
-| Create tables / columns / lookups / N:N | `client.tables.create()` / `.add_columns()` / `.create_lookup_field()` / `.create_many_to_many_relationship()` | `dv-metadata` |
-| Create an alternate key (enables upsert) | `client.tables.create_alternate_key(...)` | `dv-metadata` |
-| Inspect existing schema | `client.tables.list_columns(table)` / `.list_table_relationships(table)` | `dv-metadata` |
-| Create publisher / solution | `client.records.create("publisher" / "solution", {...})` | `dv-solution` |
+**SDK method cheat-sheet:** before writing SDK calls, read the
+[exact method mapping](references/sdk-methods.md). It is anti-hallucination
+guidance, not a preference signal; choose the surface using Hard Rule 2.
 
 ### MCP Availability Check
 
@@ -162,6 +160,8 @@ If the user's request involves MCP — explicitly or implicitly — search your 
 The distinction matters: explicit MCP request → block and set up MCP; implicit question → answer with SDK, offer MCP setup.
 
 **If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
+
+---
 
 ## The Change Lifecycle — Operate Safely
 
@@ -221,9 +221,13 @@ git push
 
 The repo is always the source of truth.
 
+---
+
 ## Scripts
 
 The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition — used by all other scripts and the SDK). Any Web API call beyond a one-off query should be a Python script committed to `/scripts/`, using `scripts/auth.py` for tokens. For writes see `dv-data`; queries and analytics see `dv-query`; post-import validation see `dv-solution`.
+
+---
 
 ## Windows Scripting
 

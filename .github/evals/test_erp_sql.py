@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,78 @@ spec.loader.exec_module(sql)
 
 URL = "https://example.crm.dynamics.com"
 IP = "8.8.8.8"
+
+
+class AuthHelperLoadingTests(unittest.TestCase):
+    def import_helper(self, script, workspace, *, session=False):
+        driver = f"""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / "scripts"))
+if (Path.cwd() / "scripts" / "auth.py").is_file():
+    import auth
+sys.path.insert(0, {str(script.parent)!r})
+if {session!r}:
+    import session
+    sql = session.sql
+else:
+    import connect as sql
+print(Path(sql.load_env.__globals__["__file__"]).resolve())
+print(sql.get_cli_context("erp-sql"))
+"""
+        return subprocess.run(
+            [sys.executable, "-"], input=driver.encode("utf-8"),
+            cwd=workspace, capture_output=True, timeout=15,
+            env={**os.environ, "DATAVERSE_PLUGIN_VERSION": "1.2.3", "DATAVERSE_PLUGIN_AGENT": "copilot"},
+        )
+
+    def test_bundled_auth_precedes_stale_workspace_and_cached_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            (workspace / "scripts").mkdir()
+            stale = workspace / "scripts" / "auth.py"
+            stale.write_text("def load_env():\n    pass\n", encoding="utf-8")
+            expected = SCRIPT.parents[3] / "scripts" / "auth.py"
+            for session in (False, True):
+                with self.subTest(session=session):
+                    result = self.import_helper(SCRIPT, workspace, session=session)
+                    self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                    self.assertEqual(result.stdout.decode("utf-8").splitlines(), [
+                        str(expected.resolve()), "app=dataverse-skills/1.2.3;skill=erp-sql;agent=copilot",
+                    ])
+            self.assertEqual(stale.read_text(encoding="utf-8"), "def load_env():\n    pass\n")
+
+    def test_skill_only_auth_fallback_and_actionable_setup_errors(self):
+        bundled = SCRIPT.parents[3] / "scripts" / "auth.py"
+        for case in ("current-workspace", "old-workspace", "missing", "incompatible-bundle"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                script = root / "plugin" / "skills" / "erp-sql" / "scripts" / "connect.py"
+                script.parent.mkdir(parents=True)
+                shutil.copyfile(SCRIPT, script)
+                workspace = root / "workspace"
+                (workspace / "scripts").mkdir(parents=True)
+                workspace_auth = workspace / "scripts" / "auth.py"
+                if case in ("current-workspace", "incompatible-bundle"):
+                    shutil.copyfile(bundled, workspace_auth)
+                elif case == "old-workspace":
+                    workspace_auth.write_text("def load_env():\n    pass\n", encoding="utf-8")
+                if case == "incompatible-bundle":
+                    plugin_auth = script.parents[3] / "scripts" / "auth.py"
+                    plugin_auth.parent.mkdir()
+                    plugin_auth.write_text("def load_env():\n    pass\n", encoding="utf-8")
+                result = self.import_helper(script, workspace)
+                if case == "current-workspace":
+                    self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                    self.assertEqual(result.stdout.decode("utf-8").splitlines(), [
+                        str(workspace_auth.resolve()), "app=dataverse-skills/1.2.3;skill=erp-sql;agent=copilot",
+                    ])
+                else:
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, b"")
+                    self.assertIn(b"re-run the dv-connect helper setup", result.stderr)
+                    self.assertIn(b"No credential request was made", result.stderr)
+                    self.assertNotIn(b"Traceback", result.stderr)
 
 
 def credentials(**updates):
@@ -110,42 +183,25 @@ class ContractTests(unittest.TestCase):
         with mock.patch.object(sql, "run_command", side_effect=run):
             sql.request_credentials("dataverse", URL, "context", "Exact user reason ", "8.8.8.8/29", "Reader")
 
-    def test_selected_writer_is_preserved_and_unselected_writer_is_rejected(self):
-        sql.validate_credentials(credentials(sqljitrole="Writer"), IP, "Writer")
-        with self.assertRaises(sql.ConnectionFailure):
-            sql.validate_credentials(credentials(sqljitrole="Writer"), IP, "Reader")
-        with mock.patch.object(sql, "run_command", return_value=json.dumps(credentials(sqljitrole="Writer"))) as run:
-            sql.request_credentials("dataverse", URL, "context", "User reason", IP, "Writer")
-        self.assertEqual(run.call_count, 1)
-        with mock.patch.object(sql, "run_command") as run:
-            with self.assertRaises(sql.ConnectionFailure):
-                sql.request_credentials("dataverse", URL, "context", "User reason", IP, "Admin")
-            run.assert_not_called()
+    def test_non_reader_requests_are_rejected_before_commands_or_body_files(self):
+        for role in ("Writer", "Admin", "reader", "", None):
+            with self.subTest(role=role), mock.patch.object(sql, "run_command") as run:
+                with mock.patch.object(sql.tempfile, "TemporaryDirectory") as directory:
+                    with self.assertRaisesRegex(sql.ConnectionFailure, "Only the Reader"):
+                        sql.request_credentials("dataverse", URL, "context", "User reason", IP, role)
+                    directory.assert_not_called()
+                run.assert_not_called()
+
+    def test_matching_non_reader_credentials_are_still_rejected(self):
+        for role in ("Writer", "Admin", "reader", "", None):
+            with self.subTest(role=role), self.assertRaisesRegex(sql.ConnectionFailure, "Only the Reader"):
+                sql.validate_credentials(credentials(sqljitrole=role), IP, role)
 
     def test_public_ip_validation(self):
         self.assertEqual(sql.public_ip(IP), IP)
         for value in ("127.0.0.1", "10.0.0.1", "0.0.0.0", "::1", "224.0.0.1", "8.8.8.0/24"):
             with self.subTest(value=value), self.assertRaises(sql.ConnectionFailure):
                 sql.public_ip(value)
-
-    def test_ip_discovery_is_separate_and_unauthenticated(self):
-        response = mock.MagicMock()
-        response.__enter__.return_value.read.return_value = json.dumps({"ip": IP}).encode()
-        with mock.patch.object(sql, "urlopen", return_value=response) as fetch:
-            self.assertEqual(sql.discover_public_ip(), IP)
-        request = fetch.call_args.args[0]
-        self.assertEqual(request.full_url, "https://api.ipify.org?format=json")
-        self.assertNotIn("Authorization", request.headers)
-        self.assertEqual(fetch.call_args.kwargs["timeout"], 15)
-        response.__enter__.return_value.read.assert_called_once_with(1025)
-
-    def test_ip_discovery_rejects_bad_responses(self):
-        for body in (b"x" * 1025, b"not json", b'{"ip":"127.0.0.1"}', b'{"ip":"2606:4700:4700::1111"}', b"[]"):
-            response = mock.MagicMock()
-            response.__enter__.return_value.read.return_value = body
-            with self.subTest(body=body[:40]), mock.patch.object(sql, "urlopen", return_value=response):
-                with self.assertRaises(sql.ConnectionFailure):
-                    sql.discover_public_ip()
 
     def test_request_uses_managed_cli_and_only_nonsecret_body_file(self):
         paths = []
@@ -226,7 +282,7 @@ class ContractTests(unittest.TestCase):
 class ProbeTests(unittest.TestCase):
     def test_firewall_diagnostics_stop_and_require_exact_ip_approval(self):
         for addresses, expected in (
-            (("1.1.1.1",), "Confirm the SQL-reported IP"),
+            (("1.1.1.1",), "ask the user to supply an IPv4 address or range"),
             ((IP,), "within the approved scope"),
             ((), "No unambiguous"),
             (("1.1.1.1", IP), "No unambiguous"),
@@ -353,11 +409,83 @@ class PreflightTests(unittest.TestCase):
         values.update(changes)
         return argparse.Namespace(**values)
 
+    def test_removed_ip_discovery_flags_stop_before_connecting(self):
+        for flags in (["--discover-ip"], ["--suggest-range"], ["--discover-ip", "--suggest-range"]):
+            argv = [
+                "connect.py", "--environment", URL, "--confirm-environment", URL,
+                "--client-ip", IP, "--reason", "No grant permitted", "--role", "Reader", *flags,
+            ]
+            with self.subTest(flags=flags), mock.patch.object(sys, "argv", argv):
+                with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr") as stderr:
+                    with mock.patch.object(sql, "connect") as connect:
+                        with self.assertRaises(SystemExit) as raised:
+                            sql.main()
+                        self.assertEqual(raised.exception.code, 2)
+                        self.assertIn("unrecognized arguments", "".join(call.args[0] for call in stderr.write.call_args_list))
+                        connect.assert_not_called()
+
+    def test_cli_requires_user_supplied_client_ip(self):
+        argv = [
+            "connect.py", "--environment", URL, "--confirm-environment", URL,
+            "--reason", "No grant permitted", "--role", "Reader",
+        ]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr") as stderr:
+            with mock.patch.object(sql, "connect") as connect:
+                with self.assertRaises(SystemExit) as raised:
+                    sql.main()
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn("required: --client-ip", "".join(call.args[0] for call in stderr.write.call_args_list))
+                connect.assert_not_called()
+
+    def test_empty_client_ip_stops_before_commands_or_grant(self):
+        with mock.patch.object(sql, "run_command") as run, mock.patch.object(sql, "request_credentials") as grant:
+            with self.assertRaises(sql.ConnectionFailure):
+                sql.connect(self.args(client_ip=""))
+            run.assert_not_called()
+            grant.assert_not_called()
+
     def test_mismatched_approval_stops_before_commands(self):
         with mock.patch.object(sql, "run_command") as run:
             with self.assertRaises(sql.ConnectionFailure):
                 sql.connect(self.args(confirm_environment="https://wrong.crm.dynamics.com"))
             run.assert_not_called()
+
+    def test_non_reader_preflight_stops_before_commands_or_grant(self):
+        for role in ("Writer", "Admin", "reader", "", None):
+            with self.subTest(role=role), mock.patch.object(sql, "run_command") as run:
+                with mock.patch.object(sql, "request_credentials") as grant:
+                    with self.assertRaisesRegex(sql.ConnectionFailure, "Only the Reader"):
+                        sql.connect(self.args(role=role))
+                    grant.assert_not_called()
+                run.assert_not_called()
+
+    def test_cli_rejects_writer_before_connecting(self):
+        argv = [
+            "connect.py", "--environment", URL, "--confirm-environment", URL,
+            "--client-ip", IP, "--reason", "No grant permitted", "--role", "Writer",
+        ]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr"):
+            with mock.patch.object(sql, "connect") as connect:
+                with self.assertRaises(SystemExit) as raised:
+                    sql.main()
+                self.assertEqual(raised.exception.code, 2)
+                connect.assert_not_called()
+
+    def test_returned_writer_credentials_are_cleared_without_sql_probe(self):
+        value = credentials(sqljitrole="Writer")
+        org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
+        with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
+                with mock.patch.object(sql, "run_command", side_effect=[
+                    "SQL Server Command Line Tool\n-N Encrypt Connection", json.dumps(org),
+                ]):
+                    with mock.patch.object(sql, "request_credentials", return_value=value) as grant:
+                        with mock.patch.object(sql, "probe_sql") as probe, redirect_stdout(io.StringIO()):
+                            with self.assertRaisesRegex(sql.ConnectionFailure, "returned SQL role"):
+                                sql.connect(self.args())
+        grant.assert_called_once_with("dataverse", URL, "context", "Approved probe", IP, "Reader")
+        probe.assert_not_called()
+        self.assertEqual(value, {})
 
     def test_ipv6_stops_before_commands_or_grant(self):
         with mock.patch.object(sql, "run_command") as run, mock.patch.object(sql, "request_credentials") as grant:
@@ -370,7 +498,7 @@ class PreflightTests(unittest.TestCase):
         value = credentials()
         org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
         with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
-            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
                 with mock.patch.object(sql, "run_command", side_effect=[
                     "Microsoft (R) SQL Server Command Line Tool\n[-N[s|m|o] Encrypt Connection]",
                     json.dumps(org), "AxDB|temporary_reader\n",
@@ -406,7 +534,7 @@ class PreflightTests(unittest.TestCase):
             {"OrgUrl": "https://wrong.crm.dynamics.com", "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"},
         ):
             with self.subTest(org=org), mock.patch.object(sql.shutil, "which", side_effect=lambda x: x):
-                with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+                with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
                     with mock.patch.object(sql, "run_command", side_effect=[help_text, json.dumps(org)]):
                         with mock.patch.object(sql, "request_credentials") as grant, redirect_stdout(io.StringIO()):
                             with self.assertRaises(sql.ConnectionFailure):
@@ -417,7 +545,7 @@ class PreflightTests(unittest.TestCase):
         value = credentials()
         org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
         with mock.patch.object(sql.shutil, "which", side_effect=lambda x: x):
-            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
                 with mock.patch.object(sql, "run_command", side_effect=[
                     "SQL Server Command Line Tool\n-N Encrypt Connection", json.dumps(org),
                 ]):
@@ -431,13 +559,14 @@ class PreflightTests(unittest.TestCase):
         self.assertNotIn("test-only-not-a-real-password", output.getvalue())
 
     def test_erp_sql_is_an_allowed_attribution_skill(self):
-        sql._operation_context_str.__globals__["_validate_skill"]("erp-sql")
+        with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.2.3"}):
+            self.assertIn("skill=erp-sql", sql.get_cli_context("erp-sql"))
 
     def test_table_preview_uses_one_grant_and_clears_credentials_on_failure(self):
         value = credentials()
         org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
         with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
-            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
                 with mock.patch.object(sql, "run_command", side_effect=[
                     "SQL Server Command Line Tool\n-N Encrypt Connection", json.dumps(org),
                 ]):
@@ -456,17 +585,28 @@ class PreflightTests(unittest.TestCase):
             {"table": "BATCH;DELETE"}, {"table": "BATCH", "top": 0},
             {"table": "BATCH", "top": 101}, {"waiting_jobs": True, "top": 101},
             {"waiting_jobs": True, "top": 0}, {"waiting_jobs": True, "table": "BATCH"},
+            {"virtual_entity_name": ""}, {"virtual_entity_name": "Job%"},
+            {"virtual_entity_name": "JobEntity", "top": 101},
+            {"virtual_entity_name": "JobEntity", "table": "CDSVIRTUALENTITYLIST"},
+            {"virtual_entity_name": "JobEntity", "waiting_jobs": True},
         ):
             with self.subTest(changes=changes), mock.patch.object(sql, "run_command") as run:
                 with self.assertRaises(sql.ConnectionFailure):
                     sql.connect(self.args(**changes))
                 run.assert_not_called()
 
+    def test_virtual_entity_search_dispatches_to_fixed_table(self):
+        value = credentials()
+        with mock.patch.object(sql, "sql_access") as access, mock.patch.object(sql, "read_table") as read:
+            access.return_value.__enter__.return_value = ("sqlcmd", value)
+            sql.connect(self.args(virtual_entity_name="JobEntity", top=20))
+        read.assert_called_once_with("sqlcmd", value, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="JobEntity")
+
     def test_waiting_jobs_use_one_grant_and_clear_credentials_on_failure(self):
         value = credentials()
         org = {"OrgUrl": URL, "ErpUrl": "https://erp.example.com", "ErpDeploymentType": "OnlineDev"}
         with mock.patch.object(sql.shutil, "which", side_effect=lambda name: name):
-            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "_operation_context_str", return_value="context"):
+            with mock.patch.object(sql, "load_env"), mock.patch.object(sql, "get_cli_context", return_value="context"):
                 with mock.patch.object(sql, "run_command", side_effect=[
                     "SQL Server Command Line Tool\n-N Encrypt Connection", json.dumps(org),
                 ]):
@@ -482,6 +622,55 @@ class PreflightTests(unittest.TestCase):
 
 
 class TableReadTests(unittest.TestCase):
+    def test_virtual_entity_search_filters_full_count_and_bounded_preview(self):
+        value = credentials()
+        with mock.patch.object(sql, "execute_sql", side_effect=[
+            "dbo|CDSVIRTUALENTITYLIST|123\n",
+            "RECID|bigint\nDATAENTITYNAME|nvarchar\nPUBLICENTITYNAME|varchar\nCAPTION|nvarchar\nSecretName|nvarchar\nOtherName|int\n",
+            "120\n", "1|HcmJobEntity|Job\n",
+        ]) as execute, redirect_stdout(io.StringIO()) as output:
+            sql.read_table("sqlcmd", value, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="JobEntity")
+        statements = [call.args[2] for call in execute.call_args_list]
+        predicate = " WHERE (LOWER([DATAENTITYNAME]) LIKE N'%jobentity%' OR LOWER([PUBLICENTITYNAME]) LIKE N'%jobentity%')"
+        self.assertIn("LOWER(t.name) = N'cdsvirtualentitylist'", statements[0])
+        self.assertIn(predicate + ";", statements[2])
+        self.assertNotIn("TOP", statements[2])
+        self.assertIn(predicate + " ORDER BY [RECID];", statements[3])
+        self.assertIn("TOP (20)", statements[3])
+        self.assertNotIn("SecretName", statements[3])
+        self.assertIn("Total matching entities at count time: 120", output.getvalue())
+        self.assertIn("DATAENTITYNAME, PUBLICENTITYNAME", output.getvalue())
+        self.assertTrue(all(call.args[1] is value for call in execute.call_args_list))
+
+    def test_virtual_entity_search_literal_underscore_and_empty_result(self):
+        with mock.patch.object(sql, "execute_sql", side_effect=[
+            "dbo|CDSVIRTUALENTITYLIST|123\n", "NAME|nvarchar\n", "0\n", "",
+        ]) as execute, redirect_stdout(io.StringIO()) as output:
+            sql.read_table("sqlcmd", credentials(), "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="Job_Entity")
+        self.assertIn("LIKE N'%job[_]entity%'", execute.call_args.args[2])
+        self.assertIn("Total matching entities at count time: 0", output.getvalue())
+        self.assertIn("(No rows returned.)", output.getvalue())
+
+    def test_virtual_entity_search_rejects_bad_names_and_other_tables(self):
+        for value in ("", "Job%", "Job' OR 1=1", "Job[Entity]", "Job\nEntity", "1Job", "x" * 129, True, 1, []):
+            with self.subTest(value=value), mock.patch.object(sql, "execute_sql") as execute:
+                with self.assertRaises(sql.ConnectionFailure):
+                    sql.read_table("sqlcmd", credentials(), "CDSVIRTUALENTITYLIST", 20, virtual_entity_name=value)
+                execute.assert_not_called()
+        with mock.patch.object(sql, "execute_sql") as execute:
+            with self.assertRaisesRegex(sql.ConnectionFailure, "CDSVIRTUALENTITYLIST"):
+                sql.read_table("sqlcmd", credentials(), "BATCH", 20, virtual_entity_name="JobEntity")
+            execute.assert_not_called()
+
+    def test_virtual_entity_search_fails_on_missing_name_columns(self):
+        for columns in ("RECID|bigint\n", "SecretName|nvarchar\n", "NAME|int\n", "NAME|varbinary\n"):
+            with self.subTest(columns=columns), mock.patch.object(sql, "execute_sql", side_effect=[
+                "dbo|CDSVIRTUALENTITYLIST|123\n", columns,
+            ]) as execute:
+                with self.assertRaisesRegex(sql.ConnectionFailure, "no name search was performed"):
+                    sql.read_table("sqlcmd", credentials(), "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="JobEntity")
+                self.assertEqual(execute.call_count, 2)
+
     def test_waiting_jobs_filter_count_and_preview_and_limit_columns(self):
         value = credentials()
         with mock.patch.object(sql, "execute_sql", side_effect=[

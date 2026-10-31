@@ -37,6 +37,7 @@ Functions:
   get_client(skill)     — returns a DataverseClient with plugin attribution
   get_token(scope=None) — returns a raw access token string
   get_plugin_headers(skill, token) — returns headers dict for raw Web API calls
+  get_cli_context(skill) — returns the unwrapped attribution value for CLI --context
 
 Usage:
     # PREFERRED — SDK with plugin attribution:
@@ -931,6 +932,12 @@ def _operation_context_str(skill):
         safe_skill = skill if skill in _ALLOWED_SKILLS else "unknown"
         ctx_str = f"app=dataverse-skills/unknown;skill={safe_skill};agent=unknown"
     return ctx_str
+
+
+def get_cli_context(skill):
+    """Return validated plugin attribution for CLI --context, without parentheses."""
+    _validate_skill(skill)
+    return _operation_context_str(skill)
 
 
 def _build_operation_context(skill):

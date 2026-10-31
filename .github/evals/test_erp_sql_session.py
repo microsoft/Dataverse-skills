@@ -1,7 +1,9 @@
 """Hermetic lifecycle tests and real local IPC tests; no live grants or SQL connections."""
 
 from datetime import datetime, timedelta, timezone
+from contextlib import redirect_stdout
 import ctypes
+import io
 import json
 import os
 from pathlib import Path
@@ -54,6 +56,68 @@ class SessionTests(unittest.TestCase):
         self.credentials = credentials()
         self.session = sessions.Session("sqlcmd", self.credentials, scope(), uuid.uuid4().hex)
 
+    def test_documented_start_only_builds_persistent_host_launch_arguments(self):
+        reference = SCRIPTS.parent / "references" / "sessions.md"
+        example = reference.read_text(encoding="utf-8").split("```python\n", 1)[1].split("```", 1)[0]
+        reason = "Developer's check; $env:PATH"
+        example = example.replace("<verbatim-user-provided-reason>", reason)
+        with mock.patch.object(subprocess, "run") as run, mock.patch.object(subprocess, "Popen") as popen:
+            with redirect_stdout(io.StringIO()) as output:
+                exec(compile(example, str(reference), "exec"), {})
+            run.assert_not_called()
+            popen.assert_not_called()
+        launch = json.loads(output.getvalue())
+        self.assertEqual(launch["mode"], "async")
+        self.assertIs(launch["detach"], True)
+        self.assertRegex(launch["shellId"], r"^erp-sql-[0-9a-f]{32}$")
+        self.assertTrue(launch["command"].startswith("& '"))
+        self.assertIn("'--session' '" + launch["shellId"].removeprefix("erp-sql-") + "'", launch["command"])
+        self.assertIn("'Developer''s check; $env:PATH'", launch["command"])
+        self.assertIn("'-u'", launch["command"])
+        self.assertIn("'start'", launch["command"])
+
+    def test_session_rejects_non_reader_scope_and_credentials(self):
+        for role in ("Writer", "Admin", "reader", None):
+            for field in ("scope", "credentials"):
+                with self.subTest(role=role, field=field):
+                    value, binding = credentials(), scope()
+                    if field == "scope":
+                        binding["role"] = role
+                    else:
+                        value["sqljitrole"] = role
+                    with self.assertRaisesRegex(sql.ConnectionFailure, "Only the Reader"):
+                        sessions.Session("sqlcmd", value, binding, uuid.uuid4().hex)
+
+    def test_writer_binding_stops_before_transport_or_grant(self):
+        args = mock.Mock(command="status", environment=URL, role="Writer", client_ip=IP, session=uuid.uuid4().hex)
+        with mock.patch.object(ipc, "listen") as listen, mock.patch.object(ipc, "client") as client:
+            with mock.patch.object(sql, "sql_access") as access:
+                for operation in (sessions.serve, sessions.request):
+                    with self.subTest(operation=operation.__name__), self.assertRaisesRegex(sql.ConnectionFailure, "Only the Reader"):
+                        operation(args)
+                access.assert_not_called()
+            listen.assert_not_called()
+            client.assert_not_called()
+
+    def test_all_session_cli_commands_reject_writer(self):
+        for command in ("start", "read", "status", "close"):
+            argv = [
+                "session.py", command, "--session", uuid.uuid4().hex, "--environment", URL,
+                "--client-ip", IP, "--role", "Writer",
+            ]
+            if command == "start":
+                argv.extend(["--confirm-environment", URL, "--reason", "No grant permitted"])
+            elif command == "read":
+                argv.extend(["--table", "dbo.BATCH"])
+            with self.subTest(command=command), mock.patch.object(sys, "argv", argv):
+                with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr"):
+                    with mock.patch.object(sessions, "serve") as serve, mock.patch.object(sessions, "request") as send:
+                        with self.assertRaises(SystemExit) as raised:
+                            sessions.main()
+                        self.assertEqual(raised.exception.code, 2)
+                        serve.assert_not_called()
+                        send.assert_not_called()
+
     def test_reads_reuse_same_credentials_and_redact_output(self):
         def read(tool, creds, table, top):
             self.assertIs(creds, self.credentials)
@@ -84,6 +148,34 @@ class SessionTests(unittest.TestCase):
         with mock.patch.object(sql, "read_table") as read:
             self.session.handle(request(table=None, waiting_jobs=True))
         read.assert_called_once_with("sqlcmd", self.credentials, "BATCHJOB", 10, waiting_only=True)
+
+    def test_virtual_entity_search_reuses_credentials(self):
+        with mock.patch.object(sql, "read_table") as read, mock.patch.object(sql, "request_credentials") as grant:
+            for name in ("HcmJobEntity", "JobEntity"):
+                result = self.session.handle(request(table=None, virtual_entity_name=name, top=20))
+                self.assertTrue(result["ok"])
+        read.assert_has_calls([
+            mock.call("sqlcmd", self.credentials, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="hcmjobentity"),
+            mock.call("sqlcmd", self.credentials, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="jobentity"),
+        ])
+        grant.assert_not_called()
+
+    def test_virtual_entity_client_validates_and_sends_filter(self):
+        args = mock.Mock(command="read", session=uuid.uuid4().hex, environment=URL, role="Reader",
+                         client_ip=IP, table=None, top=20, waiting_jobs=False, virtual_entity_name="JobEntity")
+        with mock.patch.object(ipc, "client") as client, mock.patch.object(ipc, "send") as send:
+            with mock.patch.object(ipc, "receive", return_value=sessions.encode({"ok": True, "output": ""})):
+                with mock.patch("builtins.print"):
+                    sessions.request(args)
+            payload = sessions.decode(send.call_args_list[0].args[1])
+            self.assertEqual(payload["virtual_entity_name"], "jobentity")
+            self.assertIsNone(payload["table"])
+            client.return_value.close.assert_called_once()
+        args.virtual_entity_name = "Job%;DROP"
+        with mock.patch.object(ipc, "client") as client:
+            with self.assertRaises(sql.ConnectionFailure):
+                sessions.request(args)
+            client.assert_not_called()
 
     def test_status_does_not_extend_idle_lifetime_or_return_credentials(self):
         before = self.session.last_read
@@ -123,6 +215,12 @@ class SessionTests(unittest.TestCase):
             request(table="BATCH;DELETE"), request(top=True), request(top=101),
             request(top=0), request(top="10"), request(waiting_jobs="true"),
             request(table=None), request(waiting_jobs=True),
+            request(table=None, virtual_entity_name=None),
+            request(table=None, virtual_entity_name=""),
+            request(table=None, virtual_entity_name="Job%"),
+            request(virtual_entity_name="JobEntity"),
+            request(table=None, virtual_entity_name="JobEntity", waiting_jobs=True),
+            request("status", virtual_entity_name="JobEntity"),
         ]
         with mock.patch.object(sql, "read_table") as read:
             for value in invalid:
@@ -176,27 +274,25 @@ class SessionTests(unittest.TestCase):
         ipc.send(channel, b"example", 100, time.monotonic() + 1)
         self.assertEqual(ipc.receive(channel, 100, time.monotonic() + 1), b"example")
 
-    def test_range_suggestion_is_bounded_and_separate_from_grants(self):
-        with mock.patch.object(sql, "request_credentials") as grant:
-            result = sql.suggest_ip_range("4.213.232.53")
-        self.assertEqual(result["suggested_range"], "4.213.232.48-4.213.232.55")
-        self.assertEqual(result["address_count"], 8)
-        self.assertIn("not a discovered NAT pool", result["warning"])
-        self.assertIn("approve", result["warning"])
-        grant.assert_not_called()
-        for address in ("2606:4700:4700::1111", "10.0.0.1", IP):
-            with self.subTest(address=address), self.assertRaises(sql.ConnectionFailure):
-                sql.suggest_ip_range(address)
-
-    def test_suggest_range_cannot_be_combined_with_grant_arguments(self):
-        result = subprocess.run(
-            [sys.executable, str(SCRIPTS / "connect.py"), "--suggest-range",
-             "--environment", URL, "--confirm-environment", URL,
-             "--client-ip", IP, "--reason", "No grant permitted", "--role", "Reader"],
-            capture_output=True, timeout=10,
-        )
-        self.assertEqual(result.returncode, 2)
-        self.assertIn(b"--suggest-range requires --discover-ip", result.stderr)
+    def test_session_commands_require_user_supplied_client_ip(self):
+        for command in ("start", "read", "status", "close"):
+            argv = [
+                "session.py", command, "--session", uuid.uuid4().hex,
+                "--environment", URL, "--role", "Reader",
+            ]
+            if command == "start":
+                argv.extend(["--confirm-environment", URL, "--reason", "No grant permitted"])
+            elif command == "read":
+                argv.extend(["--table", "dbo.BATCH"])
+            with self.subTest(command=command), mock.patch.object(sys, "argv", argv):
+                with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr") as stderr:
+                    with mock.patch.object(sessions, "serve") as serve, mock.patch.object(sessions, "request") as send:
+                        with self.assertRaises(SystemExit) as raised:
+                            sessions.main()
+                        self.assertEqual(raised.exception.code, 2)
+                        self.assertIn("required: --client-ip", "".join(call.args[0] for call in stderr.write.call_args_list))
+                        serve.assert_not_called()
+                        send.assert_not_called()
 
     def test_listener_failure_precedes_grant(self):
         args = mock.Mock(environment=URL, role="Reader", client_ip=IP, session=uuid.uuid4().hex)
@@ -348,6 +444,7 @@ if {idle!r}:
 def access(args):
     credentials = {{
         "sqljitpassword": {SECRET!r},
+        "sqljitrole": "Reader",
         "sqljitexpiration": (datetime.now(timezone.utc) + timedelta(seconds={60 if idle else 0.2})).isoformat(),
     }}
     try:
@@ -384,7 +481,7 @@ import session
 sql = session.sql
 sql.shutil.which = lambda name: name
 sql.load_env = lambda: None
-sql._operation_context_str = lambda skill: "test-context"
+sql.get_cli_context = lambda skill: "test-context"
 original_probe = sql.probe_sql
 sql.probe_sql = lambda tool, credentials: original_probe(tool, credentials, wait_seconds=0)
 
@@ -405,10 +502,10 @@ def fake_run(command, label, **kwargs):
     if statement == sql.PROBE:
         return "AxDB|temporary_reader\\n"
     if "sys.tables" in statement:
-        table = "BATCHJOB" if "batchjob" in statement else "BATCH"
+        table = "CDSVIRTUALENTITYLIST" if "cdsvirtualentitylist" in statement else ("BATCHJOB" if "batchjob" in statement else "BATCH")
         return "dbo|" + table + "|123\\n"
     if "sys.columns" in statement:
-        return "RECID|bigint\\nCAPTION|nvarchar\\nSTATUS|int\\n"
+        return "RECID|bigint\\nCAPTION|nvarchar\\nSTATUS|int\\nNAME|nvarchar\\n"
     if "COUNT_BIG" in statement:
         return "1\\n"
     return "1|caf\\u00e9-\\u6771\\u4eac-\\U0001f600|0|" + {SECRET!r} + "\\n"
@@ -442,22 +539,28 @@ sys.exit(session.main())
                     seen.append(line)
                     if b'"ready": true' in line:
                         break
-                for table in ("dbo.BATCH", "dbo.BATCHJOB"):
+                self.assertNotIn(b'"ready": true', seen[0])
+                for option, selection in (("--table", "dbo.BATCH"), ("--table", "dbo.BATCHJOB"),
+                                          ("--virtual-entity-name", "JobEntity")):
                     result = subprocess.run(
-                        [sys.executable, str(SCRIPTS / "session.py"), "read", *common, "--table", table, "--top", "1"],
+                        [sys.executable, str(SCRIPTS / "session.py"), "read", *common, option, selection, "--top", "1"],
                         cwd=directory, capture_output=True, timeout=15,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
                     self.assertIn("caf\u00e9-\u6771\u4eac-\U0001f600", result.stdout.decode("utf-8"))
                     self.assertNotIn(SECRET.encode(), result.stdout + result.stderr)
-                mismatched = common.copy()
-                mismatched[mismatched.index("--role") + 1] = "Writer"
-                result = subprocess.run(
-                    [sys.executable, str(SCRIPTS / "session.py"), "status", *mismatched],
-                    cwd=directory, capture_output=True, timeout=15,
-                )
-                self.assertEqual(result.returncode, 1)
-                self.assertIn(b"does not match", result.stderr)
+                for option, value, code, error in (
+                    ("--role", "Writer", 2, b"invalid choice"),
+                    ("--client-ip", "1.1.1.1", 1, b"does not match"),
+                ):
+                    mismatched = common.copy()
+                    mismatched[mismatched.index(option) + 1] = value
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPTS / "session.py"), "status", *mismatched],
+                        cwd=directory, capture_output=True, timeout=15,
+                    )
+                    self.assertEqual(result.returncode, code)
+                    self.assertIn(error, result.stderr)
                 result = subprocess.run(
                     [sys.executable, str(SCRIPTS / "session.py"), "status", *common],
                     cwd=directory, capture_output=True, timeout=15,
