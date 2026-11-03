@@ -12,7 +12,7 @@ Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us
 | **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
 | **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
 | **erp-xpp** | Handles the Finance and Operations X++ lifecycle: model and metadata authoring, matching SDK installation, compile/build, deployable package deployment, database synchronization, and verification of custom services/APIs, runnable X++ classes, and public OData data entities. |
-| **erp-sql** | Requests an explicitly selected temporary Reader or Writer grant, verifies sqlcmd connectivity, and reads approved physical ERP tables with bounded previews and shared propagation retries, without exposing the password. |
+| **erp-sql** | Requests explicitly approved temporary Reader-only SQL access to Finance and Operations unified development environments (UDEs), verifies sqlcmd connectivity, and reads user-selected physical tables with bounded previews and reusable sessions, without exposing the password. |
 | **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
 | **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
 | **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
