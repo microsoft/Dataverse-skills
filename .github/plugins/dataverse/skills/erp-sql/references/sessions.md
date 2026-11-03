@@ -135,30 +135,22 @@ scope = [
     "--client-ip", "<explicitly-approved-public-IPv4-scope>",
 ]
 subprocess.run(
-    [sys.executable, helper, "read", *scope, "--table", "dbo.BATCH", "--top", "10"],
+    [sys.executable, helper, "read", *scope, "--table", "<first-approved-schema.table>", "--top", "10"],
     check=True,
 )
 # Run a later, separately approved request with the same scope and session ID.
 subprocess.run(
-    [sys.executable, helper, "read", *scope, "--table", "dbo.BATCHJOB", "--top", "10"],
+    [sys.executable, helper, "read", *scope, "--table", "<next-approved-schema.table>", "--top", "10"],
     check=True,
 )
 ```
 
-Replace the example table names with the customer's actual requested tables.
-`--waiting-jobs` is also supported instead of `--table`, with the existing fixed
-BATCHJOB/STATUS=1 query and allowlisted summary columns. Neither mode accepts
-arbitrary SQL, writes, credentials, or shell commands. Writer requests and
-credentials are rejected; a persistent owner retains only Reader credentials.
-
-For an approved virtual-entity lookup, substitute
-`--virtual-entity-name JobEntity --top 20` for the table selection. This searches
-the name-like text columns discovered in `CDSVIRTUALENTITYLIST`, using a literal
-case-insensitive substring. It counts matches across the table and returns a
-bounded preview using the same session, without a new grant. It cannot be
-combined with `--table` or `--waiting-jobs`. Name fragments accept only ASCII
-letters, digits, and underscores (1-128 characters, starting with a letter or
-underscore); no arbitrary predicate is accepted.
+Replace the placeholders with the user's explicitly supplied tables and approved
+limits. A read requires `--table`; there are no table-specific modes or business
+filters. Do not select a table or start a grant for an entity-discovery question;
+use **dv-query** for that request. Reads accept no arbitrary SQL, writes,
+credentials, or shell commands. Writer requests and credentials are rejected;
+a persistent owner retains only Reader credentials.
 
 ## Status, close, expiry, and failure
 

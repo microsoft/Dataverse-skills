@@ -35,7 +35,7 @@ type; do not bypass the guard or guess a USE mapping.
 
 | Need | Use instead |
 |---|---|
-| Ordinary ERP business-data reads or analytics | **dv-query** |
+| Ordinary ERP business-data reads, analytics, or runtime entity/schema/action discovery | **dv-query** |
 | ERP record writes or DMF imports | **dv-data** |
 | Authentication, tools, or linkage diagnostics | **dv-connect** |
 | X++ development, deployment, or database synchronization | **erp-xpp** |
@@ -137,7 +137,7 @@ subprocess.run(
 )
 ```
 
-The one-shot helper rechecks the Dataverse organization and ERP linkage before granting access. It requests the **explicitly approved Reader role**, rejects any other returned role before connecting or retaining credentials in a session, validates the IP and expiry, waits 60 seconds for credential propagation, and launches sqlcmd with the returned server, database, and username. The password is placed only in a child environment; inherited SQLCMD startup/scripting settings are removed. Without a read option it executes only the fixed database/login probe and exits. With `--table` or `--waiting-jobs`, it completes the approved reads before discarding credentials. It never opens an unattended interactive SQL session or accepts arbitrary SQL.
+The one-shot helper rechecks the Dataverse organization and ERP linkage before granting access. It requests the **explicitly approved Reader role**, rejects any other returned role before connecting or retaining credentials in a session, validates the IP and expiry, waits 60 seconds for credential propagation, and launches sqlcmd with the returned server, database, and username. The password is placed only in a child environment; inherited SQLCMD startup/scripting settings are removed. Without `--table` it executes only the fixed database/login probe and exits. With `--table`, it completes the approved read before discarding credentials. It never opens an unattended interactive SQL session or accepts arbitrary SQL.
 
 ## Reuse access across follow-up reads
 
@@ -202,14 +202,16 @@ If credentials are absent, report the operation ID and stop. Do not invent polli
 
 ## Read a physical ERP table
 
-For a table request within this SQL workflow, stay in **erp-sql** instead of assuming the physical table is an OData entity. Ordinary business-data reads outside this context still use **dv-query**.
+For an explicitly requested physical-table read within this SQL workflow, stay in **erp-sql** instead of assuming the table is an OData entity. Ordinary business-data reads and entity-discovery questions stay in **dv-query**. A table name alone is not consent to direct SQL access or a JIT grant; never infer a physical table from a business concept or entity-discovery request.
 
 **Default: `session.py read`, including the first table request.** Follow the
 [session workflow](references/sessions.md): reuse this conversation's ready owner,
 or start one once after the required approvals and wait for verified readiness.
 Obtain approval for the table, schema inspection, count, and preview limit, then
-pass `--table BATCH --top 50` (or `--table dbo.BATCH`) to `session.py read` with the
-recorded session ID and approved scope. Replace `BATCH` with the requested table.
+pass `--table <approved-schema.table> --top <approved-limit>` to `session.py read`
+with the recorded session ID and approved scope. The user must supply the table;
+if absent, ask rather than select or infer one. There are no table-specific modes
+or business filters.
 `--top` supports 1-100 and defaults to 50. Use only `--role Reader`.
 
 The read uses the owner's existing credentials; it does not request a new grant
@@ -223,13 +225,7 @@ persistence limitation, add the same read options to `connect.py`. This requests
 a new grant and discards local credentials when it exits. Repeat the invalidation
 warning and obtain grant approval; never switch automatically after a session error.
 
-For approved `CDSVIRTUALENTITYLIST` name searches, pass
-`--virtual-entity-name JobEntity --top 20` to `session.py read` instead of `--table`;
-see [table reads](references/table-reads.md) for the fixed filter and matching-count semantics.
-
 See [table-read guidance](references/table-reads.md) for the complete reusable invocation, output limits, and failure recovery. No live grants are needed merely to author or test the skill.
-
-For **waiting batch jobs**, obtain approval for `BATCHJOB` schema inspection, a matching count, and up to 100 matching rows, then pass `--waiting-jobs --top 100` to `session.py read` instead of `--table`. This fixed read uses `STATUS = 1` ([BatchStatus.Waiting](https://learn.microsoft.com/en-us/dotnet/api/microsoft.dynamics.ax.xpp.batchstatus)), checks integer STATUS/RECID columns, and returns only allowlisted summary columns. Both count and preview use the filter. Report the total separately from the bounded RECID-ascending preview; do not claim the preview is complete when the total exceeds its limit.
 
 ## Troubleshooting
 

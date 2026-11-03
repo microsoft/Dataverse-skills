@@ -46,7 +46,7 @@ def scope():
 def request(operation="read", **changes):
     value = {"operation": operation, **scope()}
     if operation == "read":
-        value.update(table="dbo.BATCH", top=10, waiting_jobs=False)
+        value.update(table="dbo.UserTable", top=10)
     value.update(changes)
     return value
 
@@ -108,7 +108,7 @@ class SessionTests(unittest.TestCase):
             if command == "start":
                 argv.extend(["--confirm-environment", URL, "--reason", "No grant permitted"])
             elif command == "read":
-                argv.extend(["--table", "dbo.BATCH"])
+                argv.extend(["--table", "dbo.UserTable"])
             with self.subTest(command=command), mock.patch.object(sys, "argv", argv):
                 with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr"):
                     with mock.patch.object(sessions, "serve") as serve, mock.patch.object(sessions, "request") as send:
@@ -135,47 +135,50 @@ class SessionTests(unittest.TestCase):
         ):
             with mock.patch.object(sql, "request_credentials") as grant:
                 first = self.session.handle(request())
-                second = self.session.handle(request(table="dbo.BATCHJOB"))
+                second = self.session.handle(request(table="custom.OtherTable"))
         self.assertEqual(reads.call_count, 2)
         grant.assert_not_called()
         for result in (first, second):
             self.assertTrue(result["ok"])
             self.assertNotIn(SECRET, json.dumps(result))
             self.assertIn("<redacted>", result["output"])
-        self.assertIn("dbo.BATCHJOB", second["output"])
+        self.assertIn("custom.OtherTable", second["output"])
 
-    def test_waiting_jobs_reuses_existing_read(self):
-        with mock.patch.object(sql, "read_table") as read:
-            self.session.handle(request(table=None, waiting_jobs=True))
-        read.assert_called_once_with("sqlcmd", self.credentials, "BATCHJOB", 10, waiting_only=True)
-
-    def test_virtual_entity_search_reuses_credentials(self):
-        with mock.patch.object(sql, "read_table") as read, mock.patch.object(sql, "request_credentials") as grant:
-            for name in ("HcmJobEntity", "JobEntity"):
-                result = self.session.handle(request(table=None, virtual_entity_name=name, top=20))
-                self.assertTrue(result["ok"])
-        read.assert_has_calls([
-            mock.call("sqlcmd", self.credentials, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="hcmjobentity"),
-            mock.call("sqlcmd", self.credentials, "CDSVIRTUALENTITYLIST", 20, virtual_entity_name="jobentity"),
-        ])
-        grant.assert_not_called()
-
-    def test_virtual_entity_client_validates_and_sends_filter(self):
+    def test_client_validates_and_sends_only_explicit_table_and_limit(self):
         args = mock.Mock(command="read", session=uuid.uuid4().hex, environment=URL, role="Reader",
-                         client_ip=IP, table=None, top=20, waiting_jobs=False, virtual_entity_name="JobEntity")
+                         client_ip=IP, table="custom.UserTable", top=20)
         with mock.patch.object(ipc, "client") as client, mock.patch.object(ipc, "send") as send:
             with mock.patch.object(ipc, "receive", return_value=sessions.encode({"ok": True, "output": ""})):
                 with mock.patch("builtins.print"):
                     sessions.request(args)
             payload = sessions.decode(send.call_args_list[0].args[1])
-            self.assertEqual(payload["virtual_entity_name"], "jobentity")
-            self.assertIsNone(payload["table"])
+            self.assertEqual(payload, {"operation": "read", **scope(), "table": "custom.UserTable", "top": 20})
             client.return_value.close.assert_called_once()
-        args.virtual_entity_name = "Job%;DROP"
-        with mock.patch.object(ipc, "client") as client:
-            with self.assertRaises(sql.ConnectionFailure):
-                sessions.request(args)
-            client.assert_not_called()
+        for table in (None, "", "UserTable;DROP"):
+            args.table = table
+            with self.subTest(table=table), mock.patch.object(ipc, "client") as client:
+                with self.assertRaises(sql.ConnectionFailure):
+                    sessions.request(args)
+                client.assert_not_called()
+
+    def test_read_cli_requires_table_and_rejects_removed_modes(self):
+        base = [
+            "session.py", "read", "--session", uuid.uuid4().hex,
+            "--environment", URL, "--client-ip", IP, "--role", "Reader",
+        ]
+        for flags, message in (
+            ([], "required: --table"),
+            (["--table", "UserTable", "--waiting-jobs"], "unrecognized arguments"),
+            (["--table", "UserTable", "--virtual-entity-name", "ExampleEntity"], "unrecognized arguments"),
+        ):
+            with self.subTest(flags=flags), mock.patch.object(sys, "argv", [*base, *flags]):
+                with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr") as stderr:
+                    with mock.patch.object(sessions, "request") as send:
+                        with self.assertRaises(SystemExit) as raised:
+                            sessions.main()
+                        self.assertEqual(raised.exception.code, 2)
+                        self.assertIn(message, "".join(call.args[0] for call in stderr.write.call_args_list))
+                        send.assert_not_called()
 
     def test_status_does_not_extend_idle_lifetime_or_return_credentials(self):
         before = self.session.last_read
@@ -212,15 +215,16 @@ class SessionTests(unittest.TestCase):
             request(role="Writer"), request(client_ip="8.8.8.0/24"),
             request(workspace="another workspace"), request("grant"), request("password"),
             request("status", sql="SELECT 1"), request(operation=[]),
-            request(table="BATCH;DELETE"), request(top=True), request(top=101),
+            request(table="UserTable;DELETE"), request(top=True), request(top=101),
             request(top=0), request(top="10"), request(waiting_jobs="true"),
-            request(table=None), request(waiting_jobs=True),
+            request(table=None), request(table=""), request(table=42),
+            request(waiting_jobs=True), request(waiting_jobs=False),
             request(table=None, virtual_entity_name=None),
             request(table=None, virtual_entity_name=""),
-            request(table=None, virtual_entity_name="Job%"),
-            request(virtual_entity_name="JobEntity"),
-            request(table=None, virtual_entity_name="JobEntity", waiting_jobs=True),
-            request("status", virtual_entity_name="JobEntity"),
+            request(table=None, virtual_entity_name="Example%"),
+            request(virtual_entity_name="ExampleEntity"),
+            request(table=None, virtual_entity_name="ExampleEntity", waiting_jobs=True),
+            request("status", virtual_entity_name="ExampleEntity"),
         ]
         with mock.patch.object(sql, "read_table") as read:
             for value in invalid:
@@ -283,7 +287,7 @@ class SessionTests(unittest.TestCase):
             if command == "start":
                 argv.extend(["--confirm-environment", URL, "--reason", "No grant permitted"])
             elif command == "read":
-                argv.extend(["--table", "dbo.BATCH"])
+                argv.extend(["--table", "dbo.UserTable"])
             with self.subTest(command=command), mock.patch.object(sys, "argv", argv):
                 with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr") as stderr:
                     with mock.patch.object(sessions, "serve") as serve, mock.patch.object(sessions, "request") as send:
@@ -502,8 +506,11 @@ def fake_run(command, label, **kwargs):
     if statement == sql.PROBE:
         return "AxDB|temporary_reader\\n"
     if "sys.tables" in statement:
-        table = "CDSVIRTUALENTITYLIST" if "cdsvirtualentitylist" in statement else ("BATCHJOB" if "batchjob" in statement else "BATCH")
-        return "dbo|" + table + "|123\\n"
+        if "N'usertable'" in statement and "N'dbo'" in statement:
+            return "dbo|UserTable|123\\n"
+        if "N'othertable'" in statement and "N'custom'" in statement:
+            return "custom|OtherTable|456\\n"
+        raise AssertionError("Unexpected table requested")
     if "sys.columns" in statement:
         return "RECID|bigint\\nCAPTION|nvarchar\\nSTATUS|int\\nNAME|nvarchar\\n"
     if "COUNT_BIG" in statement:
@@ -540,13 +547,13 @@ sys.exit(session.main())
                     if b'"ready": true' in line:
                         break
                 self.assertNotIn(b'"ready": true', seen[0])
-                for option, selection in (("--table", "dbo.BATCH"), ("--table", "dbo.BATCHJOB"),
-                                          ("--virtual-entity-name", "JobEntity")):
+                for selection in ("dbo.UserTable", "custom.OtherTable"):
                     result = subprocess.run(
-                        [sys.executable, str(SCRIPTS / "session.py"), "read", *common, option, selection, "--top", "1"],
+                        [sys.executable, str(SCRIPTS / "session.py"), "read", *common, "--table", selection, "--top", "1"],
                         cwd=directory, capture_output=True, timeout=15,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                    self.assertIn("Table: " + ".".join(f"[{part}]" for part in selection.split(".")), result.stdout.decode("utf-8"))
                     self.assertIn("caf\u00e9-\u6771\u4eac-\U0001f600", result.stdout.decode("utf-8"))
                     self.assertNotIn(SECRET.encode(), result.stdout + result.stderr)
                 for option, value, code, error in (

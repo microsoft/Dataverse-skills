@@ -7,6 +7,7 @@
 | Request | Skill and surface |
 |---|---|
 | Ordinary Finance and Operations business-data reads | **dv-query**, using ERP MCP or CLI OData; no SQL credential or firewall flow |
+| ERP runtime entity/schema/action discovery, including finding a virtual entity | **dv-query**, using documented metadata discovery; no direct SQL grant |
 | SQL queries against Dataverse data or its TDS endpoint | **dv-query**; Dataverse SQL is not direct ERP database access |
 | Explicit Finance and Operations developer-database access — temporary JIT SQL credentials, physical-table reads (UDE only) | **erp-sql**, including follow-up reads in an established ERP SQL session |
 

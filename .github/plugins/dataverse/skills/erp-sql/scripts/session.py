@@ -96,9 +96,7 @@ class Session:
         operation = request.get("operation")
         if not isinstance(operation, str):
             raise sql.ConnectionFailure("Session operation must be a string.")
-        allowed = base | ({"table", "top", "waiting_jobs"} if operation == "read" else set())
-        if operation == "read" and "virtual_entity_name" in request:
-            allowed.add("virtual_entity_name")
+        allowed = base | ({"table", "top"} if operation == "read" else set())
         if set(request) != allowed or operation not in {"read", "status", "close"}:
             raise sql.ConnectionFailure("Unsupported session operation or fields; arbitrary SQL is not accepted.")
         if any(request.get(key) != value for key, value in self.scope.items()):
@@ -112,28 +110,12 @@ class Session:
                 "expires": sql.expiration(self.credentials).isoformat(),
                 "remaining_seconds": int(self.remaining()),
             }
-        table, top, waiting = request["table"], request["top"], request["waiting_jobs"]
-        if type(top) is not int or not 1 <= top <= 100 or type(waiting) is not bool:
-            raise sql.ConnectionFailure("Session reads require a limit of 1-100 and a boolean waiting-jobs flag.")
-        virtual_entity_name = None
-        if "virtual_entity_name" in request:
-            virtual_entity_name = sql.entity_name_fragment(request["virtual_entity_name"])
-            if table is not None or waiting:
-                raise sql.ConnectionFailure("Virtual-entity name searches cannot be combined with a table or waiting-job mode.")
-        elif waiting:
-            if table is not None:
-                raise sql.ConnectionFailure("Waiting-jobs cannot be combined with a table.")
-        elif not isinstance(table, str):
-            raise sql.ConnectionFailure("A table is required for this session read.")
-        else:
-            sql.table_parts(table)
+        table, top = request["table"], request["top"]
+        if type(top) is not int or not 1 <= top <= 100:
+            raise sql.ConnectionFailure("Session reads require a limit of 1-100.")
+        sql.table_parts(table)
         with BoundedOutput() as output, redirect_stdout(output):
-            if virtual_entity_name is not None:
-                sql.read_table(self.sqlcmd, self.credentials, "CDSVIRTUALENTITYLIST", top, virtual_entity_name=virtual_entity_name)
-            elif waiting:
-                sql.read_table(self.sqlcmd, self.credentials, "BATCHJOB", top, waiting_only=True)
-            else:
-                sql.read_table(self.sqlcmd, self.credentials, table, top)
+            sql.read_table(self.sqlcmd, self.credentials, table, top)
             sql.expiration(self.credentials)
             text = output.getvalue().replace(self.credentials["sqljitpassword"], "<redacted>")
         self.last_read = time.monotonic()
@@ -190,11 +172,8 @@ def serve(args):
 def request(args):
     data = {"operation": args.command, **binding(args)}
     if args.command == "read":
-        if args.table:
-            sql.table_parts(args.table)
-        data.update(table=args.table, top=args.top, waiting_jobs=args.waiting_jobs)
-        if getattr(args, "virtual_entity_name", None) is not None:
-            data["virtual_entity_name"] = sql.entity_name_fragment(args.virtual_entity_name)
+        sql.table_parts(args.table)
+        data.update(table=args.table, top=args.top)
     channel = ipc.client(args.session)
     try:
         ipc.send(channel, encode(data), REQUEST_LIMIT, time.monotonic() + 5)
@@ -225,12 +204,9 @@ def main():
         if name == "start":
             command.add_argument("--confirm-environment", required=True)
             command.add_argument("--reason", required=True)
-            command.set_defaults(table=None, waiting_jobs=False, top=50)
+            command.set_defaults(table=None, top=50)
         elif name == "read":
-            selection = command.add_mutually_exclusive_group(required=True)
-            selection.add_argument("--table")
-            selection.add_argument("--waiting-jobs", action="store_true")
-            selection.add_argument("--virtual-entity-name", help="Search CDSVIRTUALENTITYLIST name-like text columns; literal case-insensitive substring")
+            command.add_argument("--table", required=True, help="User-supplied, approved table or schema.table")
             command.add_argument("--top", type=int, choices=range(1, 101), default=50, metavar="1-100")
     args = parser.parse_args()
     try:

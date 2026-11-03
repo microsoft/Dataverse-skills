@@ -342,6 +342,8 @@ def probe_sql(sqlcmd, credentials, *, wait_seconds=60):
 
 
 def table_parts(value):
+    if not isinstance(value, str):
+        raise ConnectionFailure("A table name is required.")
     parts = value.split(".")
     if len(parts) not in (1, 2) or any(
         not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", part) for part in parts
@@ -361,22 +363,10 @@ def quote_identifier(value):
     return "[" + value.replace("]", "]]") + "]"
 
 
-def entity_name_fragment(value):
-    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,127}", value):
-        raise ConnectionFailure("Use an entity-name fragment of 1-128 ASCII letters, digits, or underscores, starting with a letter or underscore.")
-    return value.lower()
-
-
-def read_table(sqlcmd, credentials, table, top, *, waiting_only=False, virtual_entity_name=None):
+def read_table(sqlcmd, credentials, table, top):
     schema, name = table_parts(table)
-    if not 1 <= top <= 100:
+    if type(top) is not int or not 1 <= top <= 100:
         raise ConnectionFailure("Table previews require --top between 1 and 100.")
-    if waiting_only and name.lower() != "batchjob":
-        raise ConnectionFailure("Waiting-job reads require the BATCHJOB table.")
-    if virtual_entity_name is not None:
-        virtual_entity_name = entity_name_fragment(virtual_entity_name)
-        if waiting_only or name.lower() != "cdsvirtualentitylist":
-            raise ConnectionFailure("Virtual-entity name searches require CDSVIRTUALENTITYLIST and cannot use waiting-job mode.")
     schema_filter = f" AND LOWER(s.name) = N'{schema.lower()}'" if schema else ""
     matches = metadata_rows(execute_sql(sqlcmd, credentials, f"""
 SET NOCOUNT ON;
@@ -411,57 +401,27 @@ ORDER BY c.column_id;
         if kind.lower() in scalar_types
         and not re.search(r"password|secret|token|privatekey|credential|connectionstring|parameter", column, re.IGNORECASE)
     ]
-    predicate = ""
-    if waiting_only:
-        integer_columns = {
-            column.lower(): column for column, kind in columns
-            if kind.lower() in {"bigint", "int", "smallint", "tinyint"}
-        }
-        if not {"status", "recid"} <= integer_columns.keys():
-            raise ConnectionFailure("Waiting-job reads require integer STATUS and RECID columns.")
-        predicate = f" WHERE {quote_identifier(integer_columns['status'])} = 1"
-        allowed = {"recid", "caption", "status", "startdatetime", "enddatetime", "batchgroup", "company"}
-        selected = [column for column in selected if column.lower() in allowed]
-    search_columns = []
-    if virtual_entity_name is not None:
-        search_columns = [
-            column for column, kind in columns
-            if column in selected and kind.lower() in {"char", "varchar", "nchar", "nvarchar"}
-            and "name" in column.lower()
-        ]
-        if not search_columns:
-            raise ConnectionFailure("No supported non-secret name-like text columns exist in CDSVIRTUALENTITYLIST; no name search was performed.")
-        pattern = virtual_entity_name.replace("_", "[_]")
-        predicate = " WHERE (" + " OR ".join(
-            f"LOWER({quote_identifier(column)}) LIKE N'%{pattern}%'" for column in search_columns
-        ) + ")"
     if not selected:
         raise ConnectionFailure("No supported non-secret scalar columns are available for preview.")
     omitted = [column for column, _ in columns if column not in selected]
     print(f"Table: {qualified}", flush=True)
     if omitted:
         print("Omitted payload/secret-like/unsupported columns: " + ", ".join(omitted), flush=True)
-    if waiting_only:
-        print("Filter: BatchStatus.Waiting = 1 (Microsoft BatchStatus enum reference).", flush=True)
-    if virtual_entity_name is not None:
-        print(f"Filter: case-insensitive literal substring '{virtual_entity_name}' in name-like columns: "
-              + ", ".join(search_columns), flush=True)
-    count = execute_sql(sqlcmd, credentials, f"SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM {qualified}{predicate};").strip()
+    count = execute_sql(sqlcmd, credentials, f"SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM {qualified};").strip()
     if not count.isdecimal():
         raise ConnectionFailure("Unexpected table row-count response; output withheld.")
-    label = "Total matching entities" if virtual_entity_name is not None else ("Total waiting jobs" if waiting_only else "Total rows")
-    print(f"{label} at count time: {count}", flush=True)
+    print(f"Total rows at count time: {count}", flush=True)
     recid = next((column for column in selected if column.lower() == "recid"), None)
     order = " ORDER BY " + quote_identifier(recid) if recid else ""
     print(
-        f"Preview limit: {top}; " + ("RECID ascending, not latest jobs." if recid else "no guaranteed ordering."),
+        f"Preview limit: {top}; " + ("RECID ascending, not latest rows." if recid else "no guaranteed ordering."),
         flush=True,
     )
     print("Text preview only: long values may be truncated; delimiters/newlines in values are not escaped.", flush=True)
     output = execute_sql(
         sqlcmd, credentials,
         f"SET NOCOUNT ON; SELECT TOP ({top}) "
-        + ", ".join(quote_identifier(column) for column in selected) + f" FROM {qualified}{predicate}{order};",
+        + ", ".join(quote_identifier(column) for column in selected) + f" FROM {qualified}{order};",
     )
     print(" | ".join(selected), flush=True)
     print(output.rstrip() or "(No rows returned.)", flush=True)
@@ -477,15 +437,9 @@ def sql_access(args):
     if not args.reason.strip():
         raise ConnectionFailure("An approved, non-empty access reason is required.")
     require_reader(args.role)
-    virtual_entity_name = getattr(args, "virtual_entity_name", None)
-    if sum((bool(args.table), bool(args.waiting_jobs), virtual_entity_name is not None)) > 1:
-        raise ConnectionFailure("Choose only one of --table, --waiting-jobs, or --virtual-entity-name.")
-    if virtual_entity_name is not None:
-        entity_name_fragment(virtual_entity_name)
-    if args.table or args.waiting_jobs or virtual_entity_name is not None:
-        if args.table:
-            table_parts(args.table)
-        if not 1 <= args.top <= 100:
+    if args.table is not None:
+        table_parts(args.table)
+        if type(args.top) is not int or not 1 <= args.top <= 100:
             raise ConnectionFailure("Table previews require --top between 1 and 100.")
     tools = {name: shutil.which(name) for name in ("dataverse", "sqlcmd")}
     if missing := [name for name, path in tools.items() if path is None]:
@@ -520,12 +474,8 @@ def sql_access(args):
 
 def connect(args):
     with sql_access(args) as (sqlcmd, credentials):
-        if args.table:
+        if args.table is not None:
             read_table(sqlcmd, credentials, args.table, args.top)
-        elif args.waiting_jobs:
-            read_table(sqlcmd, credentials, "BATCHJOB", args.top, waiting_only=True)
-        elif getattr(args, "virtual_entity_name", None) is not None:
-            read_table(sqlcmd, credentials, "CDSVIRTUALENTITYLIST", args.top, virtual_entity_name=args.virtual_entity_name)
 
 
 def main():
@@ -537,15 +487,11 @@ def main():
     parser.add_argument("--reason", required=True)
     parser.add_argument("--role", choices=("Reader",), required=True, help="Explicitly approved Reader-only JIT access")
     parser.add_argument("--confirm-environment", required=True)
-    parser.add_argument("--table", help="Approved table or schema.table to preview after connecting")
-    parser.add_argument("--waiting-jobs", action="store_true", help="Read BATCHJOB with STATUS = 1 (Waiting); no arbitrary SQL")
-    parser.add_argument("--virtual-entity-name", help="Search CDSVIRTUALENTITYLIST name-like text columns for a literal entity-name fragment (case-insensitive)")
-    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with a read mode)")
+    parser.add_argument("--table", help="User-supplied, approved table or schema.table to preview after connecting")
+    parser.add_argument("--top", type=int, help="Preview limit, 1-100 (default 50 with --table)")
     args = parser.parse_args()
-    if sum((args.table is not None, args.waiting_jobs, args.virtual_entity_name is not None)) > 1:
-        parser.error("Choose only one of --table, --waiting-jobs, or --virtual-entity-name.")
-    if args.top is not None and not (args.table or args.waiting_jobs or args.virtual_entity_name is not None):
-        parser.error("--top requires --table, --waiting-jobs, or --virtual-entity-name.")
+    if args.top is not None and args.table is None:
+        parser.error("--top requires --table.")
     if args.top is None:
         args.top = 50
     try:

@@ -74,10 +74,10 @@ ERP suites combine live read-only scenarios with offline skill-contract and rout
 
 | File | Skill surface | Coverage |
 |---|---|---|
-| [`erp_dv_query.biceval.json`](erp_dv_query.biceval.json) | `dv-query` | Composite-key and cross-company reads, local aggregation, offline ERP/Dataverse SQL negative routing |
+| [`erp_dv_query.biceval.json`](erp_dv_query.biceval.json) | `dv-query` | Composite-key and cross-company reads, local aggregation, offline ERP/Dataverse SQL and entity-discovery negative routing |
 | [`erp_dv_admin.biceval.json`](erp_dv_admin.biceval.json) | `dv-admin` | ERP batch listing and local filtering |
 | [`erp_dv_overview.biceval.json`](erp_dv_overview.biceval.json) | `dv-overview` | ERP business-data read routing |
-| [`erp_sql.biceval.json`](erp_sql.biceval.json) | `erp-sql` | Offline planning, missing-reason gate, Writer refusal/Reader approval, password-handling refusal, unsupported deployment, and ERP/Dataverse SQL negative routing |
+| [`erp_sql.biceval.json`](erp_sql.biceval.json) | `erp-sql` | Offline planning, missing reason/table gates, Writer refusal/Reader approval, password-handling refusal, unsupported deployment, and ERP/Dataverse SQL and entity-discovery negative routing |
 
 > ## Safety and fixture requirements
 >
@@ -85,8 +85,8 @@ ERP suites combine live read-only scenarios with offline skill-contract and rout
 
 The live tests require an authenticated ERP-linked development environment.
 
-All seven `erp_sql.biceval.json` cases are offline and require no live grant or
-environment fixture. The two negative-routing cases are also present in
+All nine `erp_sql.biceval.json` cases are offline and require no live grant or
+environment fixture. The three negative-routing cases are also present in
 `erp_dv_query.biceval.json` so query-skill edits exercise the boundary. Its live-read
 outcome requirements apply only to live cases, not these planning scenarios.
 Every SQL case includes `**/skills/erp-sql/**` in `pr_file_filter`; both copies of

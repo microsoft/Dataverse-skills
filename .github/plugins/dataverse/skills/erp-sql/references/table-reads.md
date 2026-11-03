@@ -72,7 +72,7 @@ subprocess.run(
         "--client-ip", "<approved-public-IP-or-range-or-CIDR>",
         "--reason", "<verbatim-user-provided-reason>",
         "--role", "Reader",
-        "--table", "BATCH",
+        "--table", "<approved-table-or-schema.table>",
         "--top", "50",
     ],
     check=True,
@@ -81,33 +81,17 @@ subprocess.run(
 
 ## Read modes shared by both workflows
 
-`BATCH` is an example: use the table the user requested. The helper accepts a
+Use only the table the user explicitly supplied. The helper accepts a
 simple `TableName` or `schema.TableName`, not arbitrary SQL, predicates, or
 cross-database names. Pass read options to `session.py read` by default, or to
-`connect.py` only for the approved fallback above. The dedicated `--waiting-jobs`
-mode is the only supported status filter: use it instead of `--table`, optionally
-with `--top` (1-100).
-It resolves `BATCHJOB`, requires integer STATUS and RECID columns, and applies
-`WHERE STATUS = 1` to both the count and preview. The mapping is verified in
-Microsoft's [BatchStatus enum reference](https://learn.microsoft.com/en-us/dotnet/api/microsoft.dynamics.ax.xpp.batchstatus).
-This lists job headers, not individual `BATCH` tasks. It returns only available
-RECID, CAPTION, STATUS, STARTDATETIME, ENDDATETIME, BATCHGROUP, and COMPANY columns.
-Obtain approval for this exact read before granting access; disclose the matching
-total and whether the RECID-ascending preview is incomplete.
+`connect.py` only for the approved fallback above. `--top` bounds the preview
+to 1-100 rows; the count covers the whole selected table, not a business filter.
+No table-specific searches, status mappings, or built-in business-table names
+are provided. Missing table input requires a question, not an inferred mapping.
+Ordinary business-data and entity-discovery requests stay in **dv-query**;
+they do not authorize a SQL credential or firewall change.
 
-For virtual-entity metadata, use `--virtual-entity-name JobEntity --top 20`
-instead of `--table` or `--waiting-jobs`. This fixed mode searches only
-`CDSVIRTUALENTITYLIST`, resolving its schema and inspecting its columns first.
-It matches a case-insensitive literal substring in supported, non-secret text
-columns whose names contain `name`; the output identifies the searched columns.
-An entity-name fragment must be 1-128 ASCII letters, digits, or underscores,
-starting with a letter or underscore. Underscores are literal, not SQL wildcards.
-The same predicate applies to the whole-table matching count and bounded preview.
-Zero matches applies only to the reported columns at query time; a preview limit
-does not limit the count. If name columns are unavailable, fail explicitly rather
-than reporting absence. Obtain approval for this specific metadata search.
-
-It queries SQL metadata rather than assuming `dbo`.
+The helper queries SQL system metadata rather than assuming a schema or columns.
 If the unqualified name is ambiguous, require a schema. No visible match can mean
 an incorrect name or insufficient metadata permissions; do not fabricate rows or
 silently switch tables.
