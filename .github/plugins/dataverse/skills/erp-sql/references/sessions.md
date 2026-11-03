@@ -41,48 +41,54 @@ A plain `Popen` is not sufficient when the host cleans up child processes at
 tool-call or turn completion. Confirm that the host supports persistence before
 launching; do not bypass its detachment approval or use shell tricks.
 
-### Example: Windows host with a persistent PowerShell tool
+### Choose the host's launch mechanism
 
-When the host exposes the `powershell` tool with `mode`, `detach`, and `shellId`
-parameters, generate its arguments below. **This Python block only prints a
-launch specification; it does not start the owner or request credentials.**
-Replace placeholders with the resolved helper path and approved values.
+Inspect the current host's tool schema before calling it; these are conditional
+examples, not a shared tool API. **Background execution alone does not guarantee
+persistence across turns.** Check process lifetime, output access, and required
+approvals before any grant. Do not launch in a short-lived/headless runner that
+will terminate the owner when its request ends.
 
-```python
-import json
-import sys
-import uuid
+| Host | Launch mechanism, only when exposed and persistent |
+| --- | --- |
+| Claude Code | `Bash` with `run_in_background: true`; retain its task handle. Check the installed version's background-task lifetime limits. |
+| VS Code Copilot | `run_in_terminal` in its declared asynchronous/background mode; retain its terminal ID. Do not copy another host's parameter names. |
+| Copilot CLI on Windows | When its `powershell` schema supports them, use `mode: "async"` and `detach: true` with approval; retain the returned task handle. |
+| Gemini CLI | When exposed, `run_shell_command` with `is_background: true`; confirm retained-process and output-access support in the current runner. |
+| Cursor, Codex, or another host | Use a documented persistent-background facility only if the current tool schema and lifecycle support it; otherwise use the dedicated-terminal fallback below. |
 
-session_id = uuid.uuid4().hex
-argv = [
-    sys.executable, "-u", "<resolved-erp-sql-directory>/scripts/session.py", "start",
-    "--session", session_id,
-    "--environment", "<confirmed-dataverse-url>",
-    "--confirm-environment", "<confirmed-dataverse-url>",
-    "--role", "Reader",
-    "--client-ip", "<explicitly-approved-public-IPv4-scope>",
-    "--reason", "<verbatim-user-provided-reason>",
-]
-# PowerShell literal strings preserve spaces, apostrophes, and metacharacters.
-command = "& " + " ".join("'" + value.replace("'", "''") + "'" for value in argv)
-print(json.dumps({
-    "command": command,
-    "description": "Start the approved persistent ERP SQL owner",
-    "mode": "async",
-    "detach": True,
-    "shellId": "erp-sql-" + session_id,
-}))
+Host references: [Claude Code background commands](https://code.claude.com/docs/en/tools-reference#background-commands),
+[VS Code background terminals](https://code.visualstudio.com/docs/agents/run/tools#continue-terminal-commands-in-background),
+and [Gemini CLI shell arguments](https://geminicli.com/docs/tools/shell/#arguments).
+These describe host facilities, not successful ERP SQL tests on every host.
+
+The helper command is the same regardless of launch mechanism. Generate a fresh
+session ID once with Python's `uuid.uuid4().hex`, resolve the Python executable
+and helper path, and substitute the approved values. This is a **CLI template,
+not tool-call JSON**. Quote each substituted value as a literal argument for the
+selected shell, especially the verbatim reason; double quotes alone do not
+prevent shell expansion. Never interpolate user text as executable shell syntax.
+
+```
+python -u "<resolved-session.py-path>" start --session "<fresh-session-id>" --environment "<confirmed-dataverse-url>" --confirm-environment "<confirmed-dataverse-url>" --role Reader --client-ip "<explicitly-approved-public-IPv4-scope>" --reason "<verbatim-user-provided-reason>"
 ```
 
-Submit the emitted object as the **arguments to the host's `powershell` tool**,
-not as a shell script. `mode: "async"` returns control without waiting for owner
-exit; `detach: true` requests persistence across tool calls and turns. Retain the
-returned task handle and the chosen session ID. Do not submit the launch again.
+Submit the command **once** through the selected persistent facility. Retain its
+task/terminal handle and chosen session ID. Do not resubmit it to check readiness.
 
-On other hosts, use their documented persistent-background equivalent; do not
-assume these parameter names exist. If persistence is unavailable or denied,
-use a user-managed dedicated terminal, or explain the limitation and obtain
-approval for one-shot access **before requesting a grant**.
+### Dedicated-terminal fallback
+
+If persistent background execution is unavailable, uncertain, or denied, have
+the user start the same command in a dedicated terminal on the **same machine,
+OS user, execution environment, and workspace** as the session clients. Keep
+that terminal open while using the owner; it runs in the foreground there, not
+in a blocking agent tool call. Observe its readiness output and use another
+terminal/tool call for `status` and approved reads. A remote terminal that cannot
+share the local IPC endpoint is not a substitute.
+
+If neither approach is possible, stop before a grant, explain the limitation,
+and obtain approval for one-shot access instead. Never silently change modes
+or bypass a host policy to keep credentials alive.
 
 ### Wait for readiness, not process exit
 
@@ -92,9 +98,9 @@ only after the probe succeeds, containing `ready: true`, session ID, process ID,
 workspace, environment, role, IP scope, expiration, and idle timeout. No password
 or SQL login is included.
 
-- Use bounded reads of the **same background task's captured output**. For the
-  PowerShell host, use `read_powershell` with the returned `shellId`; do not wait
-  for a completion notification from this long-lived process.
+- Use the current host's output reader with the **same task/terminal handle**,
+  or inspect the dedicated terminal's output. Use bounded reads; do not wait
+  for process exit or a completion notification from this long-lived process.
 - Inspect successive output lines until a JSON object contains `ready: true`.
   **The first line is not the readiness record:** target, credential-received,
   propagation, and connection messages can precede it. Do not interpret one

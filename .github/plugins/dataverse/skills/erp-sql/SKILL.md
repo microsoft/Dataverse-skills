@@ -148,7 +148,7 @@ one-shot helper; no passwords are persisted or returned to the agent.
 
 Launch `start` once through a supported, explicitly approved persistent
 background task or user-managed dedicated terminal, never a foreground
-`subprocess.run` agent call. Follow the [non-blocking launch example](references/sessions.md).
+`subprocess.run` agent call. Follow the [host launch table and dedicated-terminal fallback](references/sessions.md).
 Inspect successive output lines for the JSON `ready: true` record; the first line
 can be a progress message. Verify readiness with `status`, retain the task handle
 and non-secret session ID in this conversation, and use `read`, `status`, and

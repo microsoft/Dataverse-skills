@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import shlex
 import struct
 import subprocess
 import sys
@@ -56,25 +57,55 @@ class SessionTests(unittest.TestCase):
         self.credentials = credentials()
         self.session = sessions.Session("sqlcmd", self.credentials, scope(), uuid.uuid4().hex)
 
-    def test_documented_start_only_builds_persistent_host_launch_arguments(self):
+    def test_documented_start_command_parses_without_host_tool_parameters(self):
         reference = SCRIPTS.parent / "references" / "sessions.md"
-        example = reference.read_text(encoding="utf-8").split("```python\n", 1)[1].split("```", 1)[0]
+        text = reference.read_text(encoding="utf-8")
+        command = text.split("```\n", 1)[1].split("```", 1)[0].strip()
+        argv = shlex.split(command)
+        self.assertEqual(argv[:2], ["python", "-u"])
+        session_id = uuid.uuid4().hex
         reason = "Developer's check; $env:PATH"
-        example = example.replace("<verbatim-user-provided-reason>", reason)
-        with mock.patch.object(subprocess, "run") as run, mock.patch.object(subprocess, "Popen") as popen:
-            with redirect_stdout(io.StringIO()) as output:
-                exec(compile(example, str(reference), "exec"), {})
-            run.assert_not_called()
-            popen.assert_not_called()
-        launch = json.loads(output.getvalue())
-        self.assertEqual(launch["mode"], "async")
-        self.assertIs(launch["detach"], True)
-        self.assertRegex(launch["shellId"], r"^erp-sql-[0-9a-f]{32}$")
-        self.assertTrue(launch["command"].startswith("& '"))
-        self.assertIn("'--session' '" + launch["shellId"].removeprefix("erp-sql-") + "'", launch["command"])
-        self.assertIn("'Developer''s check; $env:PATH'", launch["command"])
-        self.assertIn("'-u'", launch["command"])
-        self.assertIn("'start'", launch["command"])
+        values = {
+            "<resolved-session.py-path>": str(SCRIPTS / "session.py"),
+            "<fresh-session-id>": session_id,
+            "<confirmed-dataverse-url>": URL,
+            "<explicitly-approved-public-IPv4-scope>": IP,
+            "<verbatim-user-provided-reason>": reason,
+        }
+        argv = [values.get(value, value) for value in argv[2:]]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(sessions, "serve") as serve:
+            with mock.patch.object(sys, "stdout"), mock.patch.object(sys, "stderr"):
+                self.assertEqual(sessions.main(), 0)
+        serve.assert_called_once()
+        args = serve.call_args.args[0]
+        self.assertEqual(args.command, "start")
+        self.assertEqual(args.session, session_id)
+        self.assertEqual(args.environment, URL)
+        self.assertEqual(args.confirm_environment, URL)
+        self.assertEqual(args.role, "Reader")
+        self.assertEqual(args.client_ip, IP)
+        self.assertEqual(args.reason, reason)
+        self.assertIsNone(args.table)
+
+    def test_documented_start_selects_host_before_launch_and_retains_readiness_gates(self):
+        reference = SCRIPTS.parent / "references" / "sessions.md"
+        text = reference.read_text(encoding="utf-8")
+        start = text.split("## Start the owner process once", 1)[1].split(
+            "## Read table A, then table B using the same grant", 1
+        )[0]
+        for host in ("Claude Code", "VS Code Copilot", "Copilot CLI", "Gemini CLI", "Cursor", "Codex"):
+            with self.subTest(host=host):
+                self.assertIn(host, start)
+        self.assertIn("current host's tool schema", start)
+        self.assertIn("### Dedicated-terminal fallback", start)
+        self.assertIn("before a grant", start)
+        self.assertIn("ready: true", start)
+        self.assertIn("session.py status", start)
+        self.assertIn("Do not kill/relaunch", start)
+        self.assertNotIn("```python", start)
+        self.assertNotIn("json.dumps", start)
+        self.assertNotIn("shellId", start)
+        self.assertNotIn("read_powershell", start)
 
     def test_session_rejects_non_reader_scope_and_credentials(self):
         for role in ("Writer", "Admin", "reader", None):
