@@ -40,7 +40,7 @@ npx skills add microsoft/Dataverse-skills -s "*"
 npx skills add microsoft/Dataverse-skills -s "*" -g
 ```
 
-This is the recommended path for **JetBrains IDEs (PyCharm, Rider)** via Codex or Claude, and works with any agent that reads local skills. After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
+This works with any agent that reads local skills. JetBrains IDEs also have a native listing -- see [JetBrains IDEs](#jetbrains-ides-pycharm-rider). After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
 
 The per-marketplace installs below are alternatives for agents that have a dedicated plugin listing.
 
@@ -139,6 +139,16 @@ If the Gemini extension is already installed, import the same plugin with
 Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
 select an environment and register the Dataverse MCP server with `agy mcp add`;
 verify it with `agy mcp list` after restarting.
+
+### JetBrains IDEs (PyCharm, Rider)
+
+Requires JetBrains AI Assistant with Claude Agent or Codex.
+
+1. Open **Settings | Tools | AI Assistant | Skills**.
+2. Search for **dataverse**.
+3. Select **dataverse** and click **Install**.
+
+Then ask the agent to **"Connect to Dataverse"** to install the full `dv-*` skill set and set up authentication and MCP. The listing is published at [JetBrains/skills](https://github.com/JetBrains/skills/tree/main/dataverse).
 
 ## Verify the install
 
