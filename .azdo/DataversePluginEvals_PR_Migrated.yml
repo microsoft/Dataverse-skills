@@ -7,7 +7,8 @@
 # corpus, agent, model and runner) is defined in the template referenced
 # below, so changes to the evaluation do not require changes here.
 #
-# Runs alongside DataversePluginEvals_PR.yml until it replaces that file.
+# No pipeline builds this file yet. DataversePluginEvals_PR.yml stays the pull
+# request gate until this file replaces it.
 
 trigger:
   branches:

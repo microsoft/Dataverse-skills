@@ -183,7 +183,7 @@ For the full safety model — including confirmation flows, logging, irreversibl
 
 ## Evaluation
 
-Pull requests targeting `main` run automated dry-run evaluations in addition to the repository's static checks. During the evaluation-pipeline migration, both the existing and replacement gates run against the exact pull-request revision.
+Pull requests targeting `main` run automated dry-run evaluations in addition to the repository's static checks. A migration of the evaluation pipeline is under way: `.azdo/DataversePluginEvals_PR.yml` stays the gate until `.azdo/DataversePluginEvals_PR_Migrated.yml` replaces it.
 
 The evaluation corpus and orchestration are maintained in Microsoft engineering infrastructure rather than shipped as part of this public plugin repository. Contributors do not need access to that infrastructure: run `python .github/evals/static_checks.py` locally, exercise the changed skill with a representative prompt, and use the checks reported on the pull request as the authoritative evaluation result.
 
