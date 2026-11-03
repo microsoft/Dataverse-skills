@@ -64,7 +64,7 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-    EVAL-VERSION-01  All nine version fields match (7 files, 9 fields total)
+    EVAL-VERSION-01  All eleven version fields match (8 files, 11 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
@@ -598,14 +598,21 @@ def check_readme_skill_count(skills_dir, all_skill_names):
 # ---------------------------------------------------------------------------
 
 SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+GEMINI_CONTEXT_VERSION_PATTERN = re.compile(r"^app=dataverse-skills/([^;]+);")
+
+
+def _gemini_context_version(manifest):
+    context = manifest["mcpServers"]["dataverse"]["env"]["DATAVERSE_OPERATION_CONTEXT"]
+    match = GEMINI_CONTEXT_VERSION_PATTERN.match(context)
+    return match.group(1) if match else None
 
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All nine version fields match across manifest files.
+    EVAL-VERSION-01: All eleven version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The nine version fields live in seven files:
+    The eleven version fields live in eight files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
@@ -614,7 +621,10 @@ def check_version_consistency(repo_root):
       6. .github/plugins/dataverse/.codex-plugin/plugin.json -- version
       7. .cursor-plugin/marketplace.json -- metadata.version
       8. .cursor-plugin/marketplace.json -- plugins[0].version
-        9. .github/plugins/dataverse/gemini-extension.json -- version
+      9. .github/plugins/dataverse/gemini-extension.json -- version
+     10. .github/plugins/dataverse/gemini-extension.json --
+         mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
+     11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
     """
     failures = []
 
@@ -661,6 +671,16 @@ def check_version_consistency(repo_root):
         ),
         (
             ".github/plugins/dataverse/gemini-extension.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
+        (
+            ".github/plugins/dataverse/gemini-extension.json",
+            _gemini_context_version,
+            "mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT",
+        ),
+        (
+            "gemini-extension.json",
             lambda d: d.get("version"),
             "version",
         ),
