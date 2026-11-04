@@ -22,9 +22,10 @@ pr:
 
 resources:
   repositories:
+  # A service connection dedicated to this gate.
   - repository: dataversePlugin
     type: github
-    endpoint: bic-proxima-shared-stamp
+    endpoint: bic-proxima-dvskills-pr-gate
     name: bic/dataverse-plugin
     ref: refs/heads/main
 
