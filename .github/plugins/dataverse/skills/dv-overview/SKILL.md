@@ -174,6 +174,8 @@ The distinction matters: explicit MCP request → block and set up MCP; implicit
 
 For any real change, walk these three steps in order: confirm **where**, confirm the **container**, then persist the **result**.
 
+**Skill sequence for "new table → source control":** `dv-connect` (confirm environment) → `dv-solution` (publisher + solution; confirm the permanent prefix) → `dv-metadata` (create in the environment) → `dv-solution` (export + unpack). Never hand-write solution XML to create components.
+
 ### Step 1 — Confirm the Environment (MANDATORY)
 
 Dataverse work often spans multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
@@ -194,20 +196,7 @@ Before creating tables, columns, or other metadata, ensure a solution exists to 
 
 1. Ask the user: "What solution should these components go into?"
 2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
-
-```python
-# Quick reference — full pattern with publisher discovery is in dv-solution
-publisher_id = client.records.create("publisher", {
-    "uniquename": "<name>", "friendlyname": "<display>",
-    "customizationprefix": "<prefix>", "description": "<desc>",
-})
-solution_id = client.records.create("solution", {
-    "uniquename": "<Name>", "friendlyname": "<Display>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": f"/publishers({publisher_id})",
-})
-```
+3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records (`client.records.create("publisher", {...})`, then `client.records.create("solution", {..., "publisherid@odata.bind": f"/publishers({publisher_id})"})`; full pattern in `dv-solution`).
 
 4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
 
