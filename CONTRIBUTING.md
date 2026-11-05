@@ -53,8 +53,41 @@ We welcome new skill contributions! To add a new skill:
 1. Update relevant documentation if your change affects usage
 2. Ensure your skill follows the existing formatting patterns
 3. Test your changes locally with `claude --plugin-dir` (see [Local Development](#local-development) below)
-4. Your PR will be reviewed by maintainers
-5. Once approved, a maintainer will merge your contribution
+4. For workflow or action changes, follow the [GitHub Actions pinning policy](#github-actions-pinning-policy) and run its local checks
+5. Your PR will be reviewed by maintainers
+6. Once approved, a maintainer will merge your contribution
+
+## GitHub Actions Pinning Policy
+
+Every external `uses:` in `.github/workflows/` and in `action.yml` manifests
+(step actions, job-level reusable workflows, and composite-action steps) must
+reference a **full 40-character commit SHA**, with the release tag as a
+comment. Tags, branches, and short SHAs are not immutable.
+
+```yaml
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+```
+
+Local actions (`./path`) are exempt; `docker://` actions need `@sha256:<digest>`.
+Shipped plugin content under `.github/plugins/` is out of scope; pin it in a
+plugin release with a version bump.
+
+To add or upgrade an action:
+
+1. Pick a release in the **upstream** repository, read its notes, and resolve
+   the tag to its commit: `gh api repos/OWNER/REPO/commits/TAG --jq .sha`
+   (this peels annotated tags). Never copy a SHA from a fork.
+2. Update the SHA and its `# vX.Y.Z` comment together. Keep related actions,
+   such as CodeQL `init` and `analyze`, on the same release.
+3. Run `python .github/evals/check_action_pins.py` (requires `pyyaml`). The
+   required **Static skill checks** job runs the same check and annotates any
+   violation on the PR.
+
+The check runs from your PR's own copy of the script, so a change that needs a
+new `uses:` form can update `check_action_pins.py` in the same PR.
+
+Dependabot proposes weekly grouped updates with `ci:` titles that pass the PR
+metadata check.
 
 ## Local Development
 
