@@ -36,3 +36,7 @@ from the current plugin's helper source, preserving any local customizations.
 ERP SQL requires `load_env` and the public `get_cli_context(skill)` function,
 which returns the unwrapped value for the Dataverse CLI's `--context` flag.
 Native plugin installs prefer their bundled helper over the workspace copy.
+
+## JetBrains attribution
+
+A JetBrains install (skills under a JetBrains-managed agent path such as `aia/agents`, or installed with `-a junie`) appends `/jetbrains` to the agent in Step 3, so `.env` gets `DATAVERSE_PLUGIN_AGENT=<agent>/jetbrains` (e.g. `codex/jetbrains`) and `scripts/auth.py` stamps `agent=codex/jetbrains` into the operation context. Leave `ide` empty when the surface is unknown.
