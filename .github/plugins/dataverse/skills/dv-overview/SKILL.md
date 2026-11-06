@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP; load this first for orientation. Specialist skills self-route via their own frontmatter triggers. Finance and Operations / F&O business-data requests also require this skill first, then dv-query for reads.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP, or asks which skill, tool, or sequence of steps to use for tables, solutions, or records; load this first for orientation. Specialist skills self-route via their own frontmatter triggers. Finance and Operations / F&O business-data requests also require this skill first, then dv-query for reads.
 ---
 
 # Skill: Overview — What to Use and When
@@ -50,7 +50,7 @@ If no MCP tool is found, check for an existing CLI profile — it's the fastest 
 dataverse auth who
 ```
 
-If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect" or "set up" requests, run `dv-connect` regardless — it configures MCP, SDK, and PAC.
+If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect", "set up", or "verify connection" requests, run `dv-connect` regardless.
 
 If no CLI profile exists, check workspace init:
 
@@ -175,6 +175,8 @@ The distinction matters: explicit MCP request → block and set up MCP; implicit
 
 For any real change, walk these three steps in order: confirm **where**, confirm the **container**, then persist the **result**.
 
+**Skill sequence for "new table → source control":** `dv-connect` (confirm environment) → `dv-solution` (publisher + solution; confirm the permanent prefix) → `dv-metadata` (create in the environment) → `dv-solution` (export + unpack). Never hand-write solution XML to create components.
+
 ### Step 1 — Confirm the Environment (MANDATORY)
 
 Dataverse work often spans multiple environments (dev, test, staging, prod) and multiple sets of credentials. **Never assume** the active PAC auth profile, values in `.env`, or anything from memory or a previous session reflects the correct target for the current task.
@@ -195,20 +197,7 @@ Before creating tables, columns, or other metadata, ensure a solution exists to 
 
 1. Ask the user: "What solution should these components go into?"
 2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
-
-```python
-# Quick reference — full pattern with publisher discovery is in dv-solution
-publisher_id = client.records.create("publisher", {
-    "uniquename": "<name>", "friendlyname": "<display>",
-    "customizationprefix": "<prefix>", "description": "<desc>",
-})
-solution_id = client.records.create("solution", {
-    "uniquename": "<Name>", "friendlyname": "<Display>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": f"/publishers({publisher_id})",
-})
-```
+3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records (`client.records.create("publisher", {...})`, then `client.records.create("solution", {..., "publisherid@odata.bind": f"/publishers({publisher_id})"})`; full pattern in `dv-solution`).
 
 4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
 

@@ -1,6 +1,6 @@
 ---
 name: dv-connect
-description: One-step setup and connection diagnostics for a Dataverse environment — installs tools, authenticates, registers MCP, writes `.env`, and verifies active profiles and linked ERP endpoints. Use when starting a new project, switching environments, fixing authentication, troubleshooting MCP, or checking existing Dataverse / Finance and Operations connectivity or linkage.
+description: One-step setup and connection diagnostics for a Dataverse environment — installs tools, authenticates, registers MCP, writes `.env`, and verifies active profiles and linked ERP endpoints. Use when starting a new project, switching environments, fixing authentication, troubleshooting MCP, verifying which environment or identity is connected (WhoAmI, `DATAVERSE_URL` match), or checking existing Dataverse / Finance and Operations connectivity or linkage.
 ---
 
 # Skill: Connect

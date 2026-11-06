@@ -22,21 +22,11 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 1. **ERP MCP** for simple, interactive reads/writes. The Dataverse CLI ships an ERP MCP proxy — `dataverse mcp <erpUrl>` auto-routes to the ERP MCP endpoint when the URL host is an ERP host. One-time client allow-list via `dataverse mcp allow <appId> --erp --context "app=dataverse-skills/<ver>;skill=dv-connect;agent=<agent>"`. Setup is in `dv-connect`.
 
-2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD:
-   ```bash
-   dataverse data query  --target erp --table <EntitySet> --select "..." [--cross-company] [--top 100] --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-   dataverse data get    --target erp --table <EntitySet> --key "<composite>" --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-   dataverse data count  --target erp --table <EntitySet> [--filter "..."] --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-   dataverse data create --target erp --table <EntitySet> --data '{...}' --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-   dataverse data update --target erp --table <EntitySet> --key "<composite>" --data '{...}' --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-   dataverse data delete --target erp --table <EntitySet> --key "<composite>" [--no-confirm] --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-   dataverse data describe --target erp --table <EntitySet> --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-   ```
-   ERP URL is auto-discovered from the active auth profile — no separate connection step. `--json` is supported on read commands for script consumption.
+2. **Dataverse CLI `data` commands with `--target erp`** for medium volume, composite keys, cross-company, and ad-hoc CRUD. Reads, counts and runtime schema discovery (`data query|get|count|describe`) belong to **dv-query**, whose `references/erp-reads.md` holds the templates. Writes (`data create|update|delete`), including previews of a write the user will run themselves, belong to **dv-data**, whose `references/erp-writes.md` holds the templates. Load the specialist: the command templates, composite-key format and attribution are deliberately not repeated here. The ERP URL is auto-discovered from the active auth profile -- no separate connection step.
 
 3. **`dataverse api invoke --target erp`** for ERP Custom Services (`/api/services/<group>/<service>/<operation>`) — these are the "unbound action" surface (ERP OData has no truly unbound actions; global ops live under `/api/services/`). Discovery uses `dataverse api list --target erp --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"` and `dataverse api describe --target erp --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"`. Add the same context to `invoke`. Use `erp:ServiceGroup/Service/Operation` syntax or pass `--service-group`/`--service` separately.
 
-4. **`dataverse erp batch list|cancel`** for ERP batch jobs on the linked ERP instance. Add `--context "app=dataverse-skills/<ver>;skill=dv-admin;agent=<agent>"`.
+4. **ERP batch jobs** (`dataverse erp batch list|cancel`) on the linked ERP instance: load **dv-admin**, which owns the options, ordering and attribution.
 
 5. **PAC CLI X++ lifecycle** for source models and deployable packages: `pac package init --package-type erp`, `pac tool xpp install`, `pac package compile --package-type erp`, `pac package deploy --package-type erp`, and `pac package db-sync`. Use **erp-xpp**.
 
@@ -44,27 +34,7 @@ Same shape as Dataverse — MCP first, CLI for medium volume, dedicated commands
 
 ## Reads for ERP
 
-```bash
-# Small / interactive — ERP MCP if available, else CLI
-dataverse data query --target erp --table SalesOrderHeaders --top 10 \
-  --select "SalesOrderNumber,OrderingCustomerAccountNumber,SalesOrderStatus" \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-
-# Cross-company — all legal entities the user can read
-dataverse data query --target erp --table CustomerGroups --cross-company \
-  --select "CustomerGroupId,Description,dataAreaId" --top 50 \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-
-# Single record by composite key
-dataverse data get --target erp --table CustomerGroups \
-  --key "dataAreaId='usmf',CustomerGroupId='10'" \
-  --select "dataAreaId,CustomerGroupId,Description" \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-
-# Count
-dataverse data count --target erp --table Currencies --filter "CurrencyCode eq 'AED'" \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-```
+Load **dv-query** for ERP reads -- small and interactive (ERP MCP if available, else CLI), cross-company, single records by composite key, and counts. Its `references/erp-reads.md` holds the `data query|get|count --target erp` templates.
 
 What's different from Dataverse OData:
 
@@ -76,37 +46,13 @@ What's different from Dataverse OData:
 
 ## Writes for ERP
 
-For single-record CRUD, prefer ERP MCP (≤10 records). For programmatic / scripted writes, use the CLI:
+Load **dv-data** for ERP writes and write previews. For single-record CRUD prefer ERP MCP (10 records or fewer); for programmatic or scripted writes use the CLI, whose `data create|update|delete --target erp` templates (including `--no-confirm` for scripted deletes) are in dv-data's `references/erp-writes.md`.
 
-```bash
-dataverse data create --target erp --table CustomerGroups \
-  --data '{"dataAreaId":"usmf","CustomerGroupId":"demo","Description":"demo group"}' \
-  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-
-dataverse data update --target erp --table CustomerGroups \
-  --key "dataAreaId='usmf',CustomerGroupId='demo'" \
-  --data '{"Description":"demo group (updated)"}' \
-  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-
-dataverse data delete --target erp --table CustomerGroups \
-  --key "dataAreaId='usmf',CustomerGroupId='demo'" --no-confirm \
-  --context "app=dataverse-skills/<ver>;skill=dv-data;agent=<agent>"
-```
-
-`--no-confirm` suppresses the interactive prompt on `delete` for scripted use.
-
-For bulk writes, go to DMF (tier 5 above). There is no efficient Python SDK path for ERP today.
+For bulk writes, go to DMF (tier 6 above). There is no efficient Python SDK path for ERP today.
 
 ## Discover what's on an entity
 
-Before writing a query or action call against an unfamiliar ERP entity, use `data describe` — it returns the entity's schema, key fields, properties, navigations, and **bound actions** in one small JSON response (no expensive `$metadata` download):
-
-```bash
-dataverse data describe --target erp --table ExpMobileMasterData \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-dataverse data describe --target erp --table SalesOrderHeaders --json \
-  --context "app=dataverse-skills/<ver>;skill=dv-query;agent=<agent>"
-```
+Before writing a query or action call against an unfamiliar ERP entity, load **dv-query** and use `data describe --target erp` from its `references/erp-reads.md` -- it returns the entity's schema, key fields, properties, navigations, and **bound actions** in one small JSON response (no expensive `$metadata` download).
 
 The output reflects what is **actually routable at runtime** — empty `Actions[]` means the entity exposes no bound actions on this env (even if X++ declares some). This avoids the "try the action, get a 404, try a different name" exploration loop.
 
