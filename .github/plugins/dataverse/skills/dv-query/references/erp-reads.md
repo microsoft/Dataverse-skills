@@ -2,6 +2,19 @@
 
 **Skill loading:** If `dv-overview` has not been loaded in this session, load it before any ERP read. A Finance and Operations business-data query stays in `dv-query`; do not load `erp-xpp` unless the request is for X++ code development or deployment.
 
+**Routing boundaries:**
+
+| Request | Skill and surface |
+|---|---|
+| Ordinary Finance and Operations business-data reads | **dv-query**, using ERP MCP or CLI OData; no SQL credential or firewall flow |
+| ERP runtime entity/schema/action discovery, including finding a virtual entity | **dv-query**, using documented metadata discovery; no direct SQL grant |
+| SQL queries against Dataverse data or its TDS endpoint | **dv-query**; Dataverse SQL is not direct ERP database access |
+| Explicit Finance and Operations developer-database access — temporary JIT SQL credentials, physical-table reads (UDE only) | **erp-sql**, including follow-up reads in an established ERP SQL session |
+
+`dataverse data query --sql` and `client.query.sql()` in **dv-query** target
+Dataverse, not ERP SQL. Do not assume `--target erp --sql` is supported or route an
+ordinary ERP data question into JIT access merely because it mentions SQL.
+
 When the env is ERP-linked (ERP provisioned on the same Dataverse env), ERP reads do not go through `DataverseClient`. Use one of:
 
 1. **ERP MCP** for simple, interactive reads — if `dataverse mcp <erpUrl>` is wired up as an MCP server in your client. Discover its actual tools and parameter schemas; do not assume Dataverse MCP's `read_query` / `read_metadata` names or SQL shape apply to ERP.
