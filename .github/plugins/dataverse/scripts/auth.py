@@ -904,6 +904,56 @@ def _resolve_manifest_version():
     return version
 
 
+# AI_AGENT values (cross-vendor convention) mapped to this plugin's agent names.
+_AI_AGENT_ALIASES = {
+    "claude": "claude-code",
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "cursor": "cursor",
+    "cursor-cli": "cursor",
+    "gemini": "gemini-cli",
+    "gemini-cli": "gemini-cli",
+    "antigravity": "antigravity-cli",
+    "antigravity-cli": "antigravity-cli",
+    "copilot": "copilot",
+    "copilot-cli": "copilot",
+    "github-copilot": "copilot",
+    "github-copilot-cli": "copilot",
+    "github_copilot_vscode_agent": "copilot",
+    "github_copilot_cloud_agent": "copilot",
+}
+
+
+def _detect_agent():
+    """Return the coding agent that started this process, or None.
+
+    Coding agents mark the processes they launch with environment variables; the
+    list and precedence follow the GitHub CLI (internal/agents/detect.go). Only
+    agents in _ALLOWED_AGENTS are returned, so the context schema stays closed.
+    """
+    env = os.environ
+    ai_agent = env.get("AI_AGENT", "").strip().lower()
+    if ai_agent:
+        return _AI_AGENT_ALIASES.get(ai_agent)
+    # Amp also sets CLAUDECODE, so it is checked first.
+    if env.get("AGENT") == "amp":
+        return None
+    if env.get("CODEX_THREAD_ID") or env.get("CODEX_SANDBOX") or env.get("CODEX_CI"):
+        return "codex"
+    if env.get("GEMINI_CLI"):
+        return "gemini-cli"
+    if env.get("COPILOT_CLI"):
+        return "copilot"
+    if env.get("ANTIGRAVITY_AGENT"):
+        return "antigravity-cli"
+    if env.get("CLAUDECODE") or env.get("CLAUDE_CODE"):
+        return "claude-code"
+    # CURSOR_TRACE_ID is ignored: it is set in every Cursor terminal, including manual ones.
+    if env.get("CURSOR_AGENT") or env.get("CURSOR_EXTENSION_HOST_ROLE") == "agent-exec":
+        return "cursor"
+    return None
+
+
 def _current_agent():
     """Return the attribution agent, with an optional "/<surface>" suffix, fail-open.
 
@@ -911,12 +961,14 @@ def _current_agent():
     detected IDE surface, "<agent>/<surface>" (e.g. "codex/jetbrains"). The base is
     validated against the agent allowlist; the surface suffix only needs to be
     charset-safe (it is not enumerated, so a new surface needs no code change).
-    Anything unrecognized is coerced/dropped rather than raised -- attribution must
-    never gate the data operation.
+    When the base is missing, "unknown" or unrecognized, the agent that started this
+    process is detected from its environment markers (see _detect_agent), else
+    "unknown". Nothing here raises -- attribution must never gate the data operation.
     """
     raw = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
     base, sep, surface = raw.partition("/")
-    base = base if base in _ALLOWED_AGENTS else "unknown"
+    if base == "unknown" or base not in _ALLOWED_AGENTS:
+        base = _detect_agent() or "unknown"
     if sep and _SAFE_VALUE_RE.fullmatch(surface):
         return f"{base}/{surface}"
     return base
