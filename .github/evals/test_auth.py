@@ -655,6 +655,66 @@ class AgentAttributionFailOpen(_AuthTestBase):
         self.assertNotIn("/jetbrains", seen[1])
 
 
+class AgentDetectionForUnknown(_AuthTestBase):
+    def _agent(self, env):
+        with mock.patch.dict(os.environ, env, clear=True):
+            return auth._current_agent()
+
+    def test_process_markers_fill_missing_agent(self):
+        cases = {
+            "CLAUDECODE": "claude-code",
+            "CLAUDE_CODE": "claude-code",
+            "CODEX_THREAD_ID": "codex",
+            "CODEX_SANDBOX": "codex",
+            "GEMINI_CLI": "gemini-cli",
+            "COPILOT_CLI": "copilot",
+            "ANTIGRAVITY_AGENT": "antigravity-cli",
+            "CURSOR_AGENT": "cursor",
+        }
+        for marker, expected in cases.items():
+            self.assertEqual(self._agent({marker: "1"}), expected, marker)
+        self.assertEqual(self._agent({"CURSOR_EXTENSION_HOST_ROLE": "agent-exec"}), "cursor")
+
+    def test_ai_agent_aliases_map_to_plugin_names(self):
+        for value, expected in (("claude", "claude-code"), ("Gemini", "gemini-cli"),
+                                ("github_copilot_vscode_agent", "copilot"),
+                                ("cursor-cli", "cursor"), ("codex", "codex")):
+            self.assertEqual(self._agent({"AI_AGENT": value}), expected, value)
+
+    def test_ai_agent_wins_over_other_markers(self):
+        self.assertEqual(self._agent({"AI_AGENT": "codex", "CLAUDECODE": "1"}), "codex")
+
+    def test_unlisted_agent_stays_unknown(self):
+        self.assertEqual(self._agent({"AI_AGENT": "windsurf", "CLAUDECODE": "1"}), "unknown")
+        self.assertEqual(self._agent({"AGENT": "amp", "CLAUDECODE": "1"}), "unknown")
+
+    def test_cursor_trace_id_alone_is_not_an_agent(self):
+        self.assertEqual(self._agent({"CURSOR_TRACE_ID": "abc"}), "unknown")
+
+    def test_explicit_agent_is_never_overridden(self):
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "cursor", "CLAUDECODE": "1"}), "cursor")
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains", "CLAUDECODE": "1"}),
+            "codex/jetbrains")
+
+    def test_unknown_and_unrecognized_values_are_filled(self):
+        self.assertEqual(self._agent({"DATAVERSE_PLUGIN_AGENT": "unknown", "CODEX_CI": "1"}), "codex")
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "github-copilot", "COPILOT_CLI": "1"}), "copilot")
+
+    def test_surface_suffix_is_kept(self):
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "unknown/jetbrains", "CODEX_THREAD_ID": "t"}),
+            "codex/jetbrains")
+
+    def test_headers_and_cli_context_carry_detected_agent(self):
+        env = {"DATAVERSE_PLUGIN_VERSION": "1.18.0", "CLAUDECODE": "1"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertIn("agent=claude-code", auth.get_plugin_headers("dv-query")["User-Agent"])
+            self.assertIn("agent=claude-code", auth.get_cli_context("dv-query"))
+
+
 class SilentChainReasons(_AuthTestBase):
     def test_reasons_recorded_on_exhaustion(self):
         chain = auth._SilentChain([("a", _RaiseUnavailable()), ("b", _RaiseGeneric())])
