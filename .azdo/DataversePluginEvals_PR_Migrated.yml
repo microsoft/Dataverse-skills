@@ -1,0 +1,33 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+#
+# Pull request evaluation gate for the Dataverse skills plugin (dry-run).
+#
+# This file only declares when the gate runs. The evaluation itself (test
+# corpus, agent, model and runner) is defined in the template referenced
+# below, so changes to the evaluation do not require changes here.
+#
+# No pipeline builds this file yet. DataversePluginEvals_PR.yml stays the pull
+# request gate until this file replaces it.
+
+trigger:
+  branches:
+    include:
+    - main
+
+pr:
+  branches:
+    include:
+    - main
+
+resources:
+  repositories:
+  # A service connection dedicated to this gate.
+  - repository: dataversePlugin
+    type: github
+    endpoint: bic-proxima-dvskills-pr-gate
+    name: bic/dataverse-plugin
+    ref: refs/heads/main
+
+extends:
+  template: evals/.pipelines/templates/dataverse-skills-pr-gate.yml@dataversePlugin
