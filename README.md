@@ -12,6 +12,7 @@ Build, query, and manage [Microsoft Dataverse](https://learn.microsoft.com/en-us
 | **dv-metadata** | Authors and edits the Dataverse data model: tables, columns, relationships, forms, and views. |
 | **dv-solution** | Manages solution lifecycle — create, export, import, promote across environments, and validate deployments. |
 | **erp-xpp** | Handles the Finance and Operations X++ lifecycle: model and metadata authoring, matching SDK installation, compile/build, deployable package deployment, database synchronization, and verification of custom services/APIs, runnable X++ classes, and public OData data entities. |
+| **erp-sql** | Requests explicitly approved temporary Reader-only SQL access to Finance and Operations unified development environments (UDEs), verifies sqlcmd connectivity, and reads user-selected physical tables with bounded previews and reusable sessions, without exposing the password. |
 | **dv-admin** | Environment-level administration: bulk delete, retention/archival, organization settings, OrgDB settings, recycle bin, audit, and the allowlisted PPAC toggles. |
 | **dv-security** | Assigns security roles, manages user access, adds application users, configures business units, and handles admin self-elevation. |
 | **dv-overview** | Cross-cutting rules and tool routing; loaded before any other skill to direct each request to the right specialist. |
@@ -40,7 +41,7 @@ npx skills add microsoft/Dataverse-skills -s "*"
 npx skills add microsoft/Dataverse-skills -s "*" -g
 ```
 
-This is the recommended path for **JetBrains IDEs (PyCharm, Rider)** via Codex or Claude, and works with any agent that reads local skills. After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
+This works with any agent that reads local skills. JetBrains IDEs also have a native listing -- see [JetBrains IDEs](#jetbrains-ides-pycharm-rider). After installing, ask your agent to **"Connect to Dataverse"** — the `dv-connect` skill fetches the helper scripts and walks through authentication and MCP registration.
 
 The per-marketplace installs below are alternatives for agents that have a dedicated plugin listing.
 
@@ -140,6 +141,16 @@ Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
 select an environment and register the Dataverse MCP server with `agy mcp add`;
 verify it with `agy mcp list` after restarting.
 
+### JetBrains IDEs (PyCharm, Rider)
+
+Requires JetBrains AI Assistant with Claude Agent or Codex.
+
+1. Open **Settings | Tools | AI Assistant | Skills**.
+2. Search for **dataverse**.
+3. Select **dataverse** and click **Install**.
+
+Then ask the agent to **"Connect to Dataverse"** to install the full `dv-*` skill set and set up authentication and MCP. The listing is published at [JetBrains/skills](https://github.com/JetBrains/skills/tree/main/dataverse).
+
 ## Verify the install
 
 After installation, ask your agent:
@@ -157,6 +168,7 @@ After the connect flow finishes, describe what you want — the plugin picks MCP
 - *"Create a customer feedback table with name, rating, and comment columns"*
 - *"Pull the schema and pack it into a solution"*
 - *"Create a runnable X++ class, compile it, and deploy its Finance and Operations package"*
+- *"Get temporary Reader access and connect sqlcmd to my Finance and Operations developer database"*
 - *"Bulk delete activities older than 2024"*
 - *"Add a teammate to the sales team on the dev environment"*
 

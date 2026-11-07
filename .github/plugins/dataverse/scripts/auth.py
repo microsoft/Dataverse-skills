@@ -37,6 +37,7 @@ Functions:
   get_client(skill)     — returns a DataverseClient with plugin attribution
   get_token(scope=None) — returns a raw access token string
   get_plugin_headers(skill, token) — returns headers dict for raw Web API calls
+  get_cli_context(skill) — returns the unwrapped attribution value for CLI --context
 
 Usage:
     # PREFERRED — SDK with plugin attribution:
@@ -830,7 +831,7 @@ def get_token(scope=None):
 
 _ALLOWED_SKILLS = frozenset({
     "dv-overview", "dv-connect", "dv-data", "dv-query",
-    "dv-metadata", "dv-solution", "dv-admin", "dv-security", "erp-xpp",
+    "dv-metadata", "dv-solution", "dv-admin", "dv-security", "erp-xpp", "erp-sql",
     "unknown",
 })
 _ALLOWED_AGENTS = frozenset({
@@ -841,6 +842,10 @@ _ALLOWED_AGENTS = frozenset({
 _CONTEXT_RE = re.compile(
     r"^[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+(;[a-zA-Z0-9_-]+=[a-zA-Z0-9_./-]+)*$"
 )
+# Charset for the optional "<agent>/<surface>" suffix. The IDE surface is not
+# enumerated -- it only needs to be charset-safe (no spaces/PII), so a new surface
+# needs no code change.
+_SAFE_VALUE_RE = re.compile(r"[a-zA-Z0-9_.-]+")
 
 
 _PLUGIN_VERSION_CACHE = None
@@ -900,15 +905,21 @@ def _resolve_manifest_version():
 
 
 def _current_agent():
-    """Return the attribution agent, fail-open.
+    """Return the attribution agent, with an optional "/<surface>" suffix, fail-open.
 
-    An unrecognized host string (LLM host misdetection: 'github-copilot' vs
-    'copilot', 'claude', 'windsurf', ...) is coerced to "unknown" rather than
-    raised -- telemetry attribution must never gate the user's data operation.
-    Strict validation stays on the .env WRITE path (dv-connect guidance).
+    dv-connect writes DATAVERSE_PLUGIN_AGENT -- a bare agent (e.g. "codex") or, on a
+    detected IDE surface, "<agent>/<surface>" (e.g. "codex/jetbrains"). The base is
+    validated against the agent allowlist; the surface suffix only needs to be
+    charset-safe (it is not enumerated, so a new surface needs no code change).
+    Anything unrecognized is coerced/dropped rather than raised -- attribution must
+    never gate the data operation.
     """
-    agent = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
-    return agent if agent in _ALLOWED_AGENTS else "unknown"
+    raw = os.environ.get("DATAVERSE_PLUGIN_AGENT", "unknown")
+    base, sep, surface = raw.partition("/")
+    base = base if base in _ALLOWED_AGENTS else "unknown"
+    if sep and _SAFE_VALUE_RE.fullmatch(surface):
+        return f"{base}/{surface}"
+    return base
 
 
 def _validate_skill(skill):
@@ -918,13 +929,12 @@ def _validate_skill(skill):
 
 
 def _operation_context_str(skill):
-    """Assemble the closed-schema attribution string, fail-open.
+    """Assemble the attribution string, fail-open.
 
-    agent/version are already coerced to allow-listed / charset-safe values, so
-    the result satisfies _CONTEXT_RE. The final check is a defensive net: on any
-    mismatch it degrades to a minimal safe context instead of raising, so a bad
-    attribution value can never block the call. `skill` is a plugin-authored
-    literal validated strictly by the public entry points.
+    agent/version are already allow-listed / charset-safe (the agent may carry a
+    "<agent>/<surface>" suffix), so the result satisfies _CONTEXT_RE. The final
+    check is a defensive net: on any mismatch it degrades to a minimal safe context
+    instead of raising, so a bad attribution value can never block the call.
     """
     ctx_str = f"app=dataverse-skills/{_plugin_version()};skill={skill};agent={_current_agent()}"
     if not _CONTEXT_RE.match(ctx_str):
@@ -933,16 +943,26 @@ def _operation_context_str(skill):
     return ctx_str
 
 
-def _build_operation_context(skill):
-    """Build the operation_context for the SDK.
+def get_cli_context(skill):
+    """Return validated plugin attribution for CLI --context, without parentheses."""
+    _validate_skill(skill)
+    return _operation_context_str(skill)
 
-    SECURITY: Only closed-schema values from _ALLOWED_SKILLS and _ALLOWED_AGENTS
-    reach the string; agent/version are coerced (never passed through raw), so
-    nothing un-allow-listed is written to HTTP headers or server-side telemetry.
+
+def _build_operation_context(skill):
+    """Build the operation_context for the SDK, fail-open.
+
+    An older installed SDK may not yet accept the "<agent>/<surface>" suffix and
+    would raise. In that case strip the suffix and retry with the bare agent, so
+    attribution degrades gracefully and never gates the data operation.
     """
     ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
-    return OperationContext(user_agent_context=ctx_str)
+    try:
+        return OperationContext(user_agent_context=ctx_str)
+    except ValueError:
+        base_ctx = re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_.-]+", r"\1", ctx_str)
+        return OperationContext(user_agent_context=base_ctx)
 
 
 def get_client(skill, **kwargs):
