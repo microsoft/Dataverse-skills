@@ -43,6 +43,7 @@ For a planning-only X++ request, loading skills and reading local references is 
 |---|---|
 | Connect/authenticate, install or update PAC CLI | **dv-connect** |
 | Read or analyze ERP business data | **dv-query** |
+| Explicit direct developer-database SQL access or temporary SQL credentials | **erp-sql** |
 | Create/update/delete ERP business records or import DMF data | **dv-data** |
 | List/cancel ERP batch jobs | **dv-admin** |
 | Dataverse solution ALM | **dv-solution** |

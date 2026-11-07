@@ -465,6 +465,36 @@ class BuildSharedCacheAuthorityProbe(_AuthTestBase):
 
 
 class PluginVersionAttribution(_AuthTestBase):
+    def test_public_cli_context_matches_existing_attribution_without_parentheses(self):
+        env = {"DATAVERSE_PLUGIN_VERSION": "1.2.3", "DATAVERSE_PLUGIN_AGENT": "copilot"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            context = auth.get_cli_context("erp-sql")
+            self.assertEqual(context, "app=dataverse-skills/1.2.3;skill=erp-sql;agent=copilot")
+            self.assertEqual(context, auth._operation_context_str("erp-sql"))
+
+    def test_public_cli_context_preserves_jetbrains_surface_for_erp_sql(self):
+        for agent in ("codex/jetbrains", "claude-code/jetbrains"):
+            env = {"DATAVERSE_PLUGIN_VERSION": "1.18.0", "DATAVERSE_PLUGIN_AGENT": agent}
+            with self.subTest(agent=agent), mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(
+                    auth.get_cli_context("erp-sql"),
+                    f"app=dataverse-skills/1.18.0;skill=erp-sql;agent={agent}",
+                )
+
+    def test_public_cli_context_rejects_unknown_skills_before_version_lookup(self):
+        with mock.patch.object(auth, "_plugin_version") as version:
+            with self.assertRaisesRegex(ValueError, "Unknown skill"):
+                auth.get_cli_context("unapproved-skill")
+            version.assert_not_called()
+
+    def test_public_cli_context_keeps_safe_agent_and_version_fallbacks(self):
+        env = {"DATAVERSE_PLUGIN_VERSION": "@@@", "DATAVERSE_PLUGIN_AGENT": "not a host!"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                auth.get_cli_context("erp-sql"),
+                "app=dataverse-skills/unknown;skill=erp-sql;agent=unknown",
+            )
+
     def test_reads_from_env_when_set(self):
         auth._PLUGIN_VERSION_CACHE = None
         with mock.patch.dict(os.environ, {"DATAVERSE_PLUGIN_VERSION": "1.11.0"}, clear=True):
