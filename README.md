@@ -183,12 +183,6 @@ The plugin is designed around a least-privilege model — it cannot exceed the p
 
 For the full safety model — including confirmation flows, logging, irreversible operation handling, and planned improvements — see [docs/safety-and-guardrails.md](docs/safety-and-guardrails.md).
 
-## Evaluation
-
-Pull requests targeting `main` run automated dry-run evaluations in addition to the repository's static checks. A migration of the evaluation pipeline is under way: `.azdo/DataversePluginEvals_PR.yml` stays the gate until `.azdo/DataversePluginEvals_PR_Migrated.yml` replaces it.
-
-The current gate reads the evaluation corpus checked in under `evals/tests/`. The replacement pipeline's corpus and orchestration are maintained in Microsoft engineering infrastructure rather than in this public repository. Contributors do not need access to that infrastructure: run `python .github/evals/static_checks.py` locally, exercise the changed skill with a representative prompt, and use the checks reported on the pull request as the authoritative evaluation result.
-
 ## Contributing
 
 We welcome contributions — new skills, improvements to existing ones, and bug fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and local-development instructions.
