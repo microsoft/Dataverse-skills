@@ -68,8 +68,8 @@ CAT-7  Manifest Version Consistency
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
-    Anthropic's published skills loading model -- Level 1 (frontmatter, always
-    loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
+     Anthropic's published skills loading model — Level 1 (frontmatter, always
+     loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
        trigger) <5k tokens; Level 3 (`references/`, loaded on demand) unlimited.
        EVAL-BUDGET-01  Frontmatter <= 200 tokens (Level 1, with headroom)
        EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap)
@@ -80,8 +80,8 @@ CAT-9  Manifest Description Consistency
        Checks that the plugin description matches across all plugin.json
        manifests and the plugins[0].description of every marketplace.json,
        so a description edit can't land in one manifest and miss the others.
-    (Marketplace metadata.description and Antigravity's concise listing
-    description are intentionally distinct and are not compared.)
+             (Marketplace metadata.description and Antigravity's concise listing
+             description are intentionally distinct and are not compared.)
        EVAL-DESC-01  Plugin description identical across all manifests
 
 CAT-10 Manifest Asset References
@@ -473,7 +473,7 @@ def check_completeness(name, text, all_skill_names):
 # CAT-6  dv-admin Allowlist Enforcement
 # ---------------------------------------------------------------------------
 
-# Representative sample of allowlisted backend keys -- one per mechanism.
+# Representative sample of allowlisted backend keys — one per mechanism.
 # If any of these disappears from dv-admin, the allowlist is broken.
 # Not exhaustive (would make minor formatting edits painful); picked to cover
 # all 4 mechanisms (PAC CLI org column / OrgDB XML / recyclebinconfigs / settingdefinition).
@@ -496,7 +496,7 @@ _ALLOWLIST_REQUIRED_KEYS = [
     "PlanShareSecurityRolesEnabled",
 ]
 
-# Known out-of-scope settings -- the skill should name these explicitly as
+# Known out-of-scope settings — the skill should name these explicitly as
 # denylist examples so the agent has concrete "do not toggle" signal.
 _ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES = [
     "sessiontimeoutinmins",   # was allowlisted pre-1.2.0, removed
@@ -535,7 +535,7 @@ def check_allowlist(name, text):
     for denied in _ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES:
         if not re.search(rf"\b{re.escape(denied)}\b", text):
             failures.append(
-                f"EVAL-ALLOW-03 [{name}] denylist example '{denied}' no longer appears -- "
+                f"EVAL-ALLOW-03 [{name}] denylist example '{denied}' no longer appears — "
                 f"agent loses the explicit out-of-scope signal"
             )
 
@@ -544,7 +544,7 @@ def check_allowlist(name, text):
     for key in _ALLOWLIST_REQUIRED_KEYS:
         if not re.search(rf"\b{re.escape(key)}\b", text):
             failures.append(
-                f"EVAL-ALLOW-04 [{name}] allowlisted key '{key}' no longer appears -- "
+                f"EVAL-ALLOW-04 [{name}] allowlisted key '{key}' no longer appears — "
                 f"allowlist has drifted from the documented 37-toggle coverage"
             )
 
@@ -576,7 +576,7 @@ def check_readme_skill_count(skills_dir, all_skill_names):
     failures = []
     readme_path = skills_dir.parent.parent.parent.parent / "README.md"
     if not readme_path.exists():
-        # README is optional -- skip silently if not found
+        # README is optional — skip silently if not found
         return failures
 
     text = readme_path.read_text(encoding="utf-8")
@@ -1216,11 +1216,11 @@ BODY_TOKEN_REFERENCES_TRIGGER = 4000
 def check_token_budget(name, text, skill_dir):
     """
     EVAL-BUDGET-01: frontmatter <= FRONTMATTER_TOKEN_CAP tokens (Level 1)
-    EVAL-BUDGET-02: body <= BODY_TOKEN_CAP tokens (Level 2 -- Anthropic spec)
+    EVAL-BUDGET-02: body <= BODY_TOKEN_CAP tokens (Level 2 — Anthropic spec)
     EVAL-BUDGET-03: when body > BODY_TOKEN_REFERENCES_TRIGGER tokens, a
                     `references/` subfolder must exist (forces Level 3 split)
 
-    Anchor: Anthropic's Skills loading model -- Level 1 ~100 tok / Level 2 <5k tok / Level 3 unlimited.
+    Anchor: Anthropic's Skills loading model — Level 1 ~100 tok / Level 2 <5k tok / Level 3 unlimited.
     """
     failures = []
     m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
@@ -1232,7 +1232,7 @@ def check_token_budget(name, text, skill_dir):
     if fm_tokens > FRONTMATTER_TOKEN_CAP:
         failures.append(
             f"EVAL-BUDGET-01 [{name}] frontmatter is {fm_tokens} tokens, "
-            f"exceeds cap of {FRONTMATTER_TOKEN_CAP} (Anthropic Level 1 -- frontmatter "
+            f"exceeds cap of {FRONTMATTER_TOKEN_CAP} (Anthropic Level 1 — frontmatter "
             f"is loaded into context for every interaction across all skills). "
             f"Trim trigger phrases and over-long enumerations."
         )
@@ -1385,12 +1385,12 @@ def main():
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
         all_failures.extend(check_cli_attribution(rlabel, rtext))
 
-    # Cross-skill checks -- need all files loaded
+    # Cross-skill checks — need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
     all_failures.extend(check_overview_index(overview_path, all_skill_names))
     all_failures.extend(check_readme_skill_count(skills_dir, all_skill_names))
 
-    # Manifest version consistency -- check across repo root
+    # Manifest version consistency — check across repo root
     repo_root = skills_dir.parent.parent.parent.parent
     all_failures.extend(check_version_consistency(repo_root))
 
@@ -1401,7 +1401,7 @@ def main():
     all_failures.extend(check_gemini_extension(repo_root))
     all_failures.extend(check_fallback_nudge(repo_root))
 
-    # auth.py _ALLOWED_SKILLS sync -- check against actual skill directories
+    # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
     if all_failures:
