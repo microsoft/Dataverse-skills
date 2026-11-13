@@ -163,7 +163,7 @@ When a PR changes any published plugin content (`.github/plugins/dataverse/**`),
 9. `.github/plugins/dataverse/gemini-extension.json` — `version`
 10. `.github/plugins/dataverse/gemini-extension.json` — the `dataverse-skills/<version>` segment of `mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT`
 11. `gemini-extension.json` (repo root, read by the Gemini CLI extensions gallery) — `version`
-12. `.github/plugins/dataverse/plugin.json` — `version` (Antigravity Marketplace)
+12. `.github/plugins/dataverse/plugin.json`: `version` (Antigravity Marketplace)
 
 All twelve must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
 
