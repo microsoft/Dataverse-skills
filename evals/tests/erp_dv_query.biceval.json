@@ -1,7 +1,7 @@
 {
   "group": "DataverseSkills",
   "scenarioName": "ERP Query",
-  "description": "Read-only Finance and Operations query and discovery evals for dv-query. Tests cover ERP MCP and Dataverse CLI routing, composite keys, cross-company reads, local aggregation, and entity/action discovery.",
+  "description": "Read-only Finance and Operations query and discovery evals for dv-query. Tests cover ERP MCP and Dataverse CLI routing, composite keys, cross-company reads, local aggregation, and offline negative routing for ERP business-data and Dataverse SQL requests.",
   "enabled_evaluators": [
     {"name": "CortexConfigurations:Common/DeterministicAssertionEvaluator", "passing_score": 3, "priority": 1, "settings": {"supported_verbs": "CONTAINS,NOT_CONTAINS,SKILL_LOADED"}},
     {"name": "CortexConfigurations:Common/Skills/correctness.prompty", "passing_score": 3, "priority": 1},
@@ -11,8 +11,8 @@
     {"name": "CortexConfigurations:Common/Skills/DataversePathOutcome.prompty", "passing_score": 1, "priority": 1}
   ],
   "defaultAssertions": [
-    "PRIORITY_1: OUTCOME: A live read returns actual ERP data or an explicit successful service response with zero rows/not found. DNS, authentication, and transport failures are blockers, not successful empty results or a passing data outcome.",
-    "PRIORITY_2: FIRST_ATTEMPT: Agent used ERP MCP or the Dataverse CLI ERP target directly without trying Dataverse SDK, FetchXML, SQL, or unsupported ERP query features first.",
+    "PRIORITY_1: OUTCOME: For live read cases, return actual ERP data or an explicit successful service response with zero rows/not found. DNS, authentication, and transport failures are blockers, not successful empty results or a passing data outcome. Offline planning cases instead require no environment/authentication calls, command execution, or file writes; skill/reference reads are allowed.",
+    "PRIORITY_2: FIRST_ATTEMPT: For live ERP business-data reads, the first executed read uses ERP MCP or the Dataverse CLI ERP target, not Dataverse SDK, FetchXML, SQL, or unsupported ERP query features. Offline ERP business-data read plans propose ERP MCP or CLI OData on the ERP target. Entity-discovery plans use documented metadata discovery in dv-query. Offline Dataverse SQL plans stay on Dataverse through dv-query.",
     "PRIORITY_2: Every executed dataverse CLI command carries --context with app, skill=dv-query, and agent attribution; the app version comes from the loaded Dataverse plugin manifest, not the agent or CLI version."
   ],
   "tests": [
@@ -72,6 +72,69 @@
         "PRIORITY_1: The ERP CustomerGroups query uses cross-company and a top bound of 50 or less and includes dataAreaId.",
         "PRIORITY_1: Counts are computed from returned rows locally, not through ERP $apply, SQL, FetchXML, or DataverseClient.",
         "PRIORITY_1: OUTCOME: Counts match the returned sample and are explicitly described as sample counts, with no claim of complete per-company totals."
+      ]
+    },
+    {
+      "test_id": "erp_query_005_fo_sql_negative_routing",
+      "prompt": "Query my F&O customers with SQL. Planning only: explain which supported read path you would use, without connecting, authenticating, running commands, creating files, or changing database access or firewall settings.",
+      "expected_response": "The agent loads dv-query and explains the ERP MCP/OData path. It does not load erp-sql, interpret the word SQL as consent to JIT access, propose --target erp --sql, or use the Dataverse Python SDK for direct ERP data.",
+      "category": "erp-query",
+      "description": "Keep an ordinary F&O customer question out of the SQL grant workflow.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "negative-sql-routing"},
+      "custom_metadata": {"skill": "dv-overview,dv-query", "test_kind": "skill-contract", "expected_route": "dv-query"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**", "**/skills/erp-sql/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: No erp-sql skill-load event occurs; mentioning SQL in an ordinary ERP business-data request does not trigger developer-database access.",
+        "PRIORITY_1: The proposed ERP read uses ERP MCP or Dataverse CLI OData with --target erp, not --target erp --sql, FetchXML, client.query.sql(), or another DataverseClient ERP query.",
+        "PRIORITY_1: No SQL credentials, JIT reason, firewall IP scope, or approval for a grant is requested; the response stays within the requested read-planning task.",
+        "PRIORITY_1: No credential action is invoked through CLI, MCP, SDK, or raw HTTP, and neither connect.py nor session.py start is executed."
+      ]
+    },
+    {
+      "test_id": "erp_query_007_entity_discovery_negative_routing",
+      "prompt": "Find the virtual entity for customer invoices in Finance and Operations. Planning only: explain how you would discover it without connecting, authenticating, running commands, creating files, or changing database access or firewall settings. Skill/reference reads are allowed.",
+      "expected_response": "The agent loads dv-query and explains the documented entity/metadata-discovery path. It does not load erp-sql, infer a physical SQL table, invent a matching entity, or start a credential/firewall workflow.",
+      "category": "erp-query",
+      "description": "Keep virtual-entity discovery on metadata surfaces rather than direct SQL.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "negative-entity-routing"},
+      "custom_metadata": {"skill": "dv-overview,dv-query", "test_kind": "skill-contract", "expected_route": "dv-query"},
+      "pr_file_filter": ["**/skills/erp-sql/**", "**/skills/dv-query/**", "**/skills/dv-overview/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: No erp-sql skill-load event occurs; entity discovery does not imply consent to developer-database access.",
+        "PRIORITY_1: The plan uses documented entity/metadata discovery in dv-query, not an inferred physical-table SQL lookup, and does not fabricate a discovered entity.",
+        "PRIORITY_1: No SQL credentials, JIT reason, firewall IP scope, or approval for a grant is requested.",
+        "PRIORITY_1: No environment/authentication or credential-action calls occur; neither connect.py nor session.py start is executed."
+      ]
+    },
+    {
+      "test_id": "erp_query_006_dataverse_sql_negative_routing",
+      "prompt": "Run a SQL query on Dataverse accounts to select the first ten account names. Planning only for now: explain the supported query path without connecting, authenticating, executing the query, creating files, or changing database access or firewall settings.",
+      "expected_response": "The agent loads dv-query and proposes a bounded Dataverse SQL read, such as dataverse data query --sql or client.query.sql(), using the account logical table and the name field. It does not load erp-sql, use the ERP target, request SQL JIT credentials, or change firewall settings.",
+      "category": "erp-query",
+      "description": "Keep Dataverse SQL queries separate from F&O developer-database access.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "dv-query", "Type": "negative-dataverse-routing"},
+      "custom_metadata": {"skill": "dv-overview,dv-query", "test_kind": "skill-contract", "expected_route": "dv-query"},
+      "pr_file_filter": ["**/skills/dv-query/**", "**/skills/dv-overview/**", "**/skills/erp-sql/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: dv-overview",
+        "PRIORITY_1: SKILL_LOADED: dv-query",
+        "PRIORITY_1: No erp-sql skill-load event occurs, and no proposed query uses --target erp or the Finance and Operations SQL database.",
+        "PRIORITY_1: The plan uses a bounded Dataverse SQL read for the account logical table and name field through a supported dv-query surface, not a direct ERP SQL connection.",
+        "PRIORITY_1: No SQL credentials, JIT reason, firewall IP scope, or approval for a grant is requested; the response stays within the requested read-planning task.",
+        "PRIORITY_1: No credential action is invoked through CLI, MCP, SDK, or raw HTTP, and neither connect.py nor session.py start is executed."
       ]
     }
   ]

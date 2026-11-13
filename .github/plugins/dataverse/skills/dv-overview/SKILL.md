@@ -5,7 +5,7 @@ description: Foundational cross-cutting context for Dataverse / Power Platform w
 
 # Skill: Overview — What to Use and When
 
-Load this skill first for any Dataverse work — it holds the cross-cutting context every task needs: scope, the tool-capability reference, the hard rules, and the change lifecycle. It does **not** route; the agent auto-selects specialist skills via their own WHEN/DO NOT USE WHEN frontmatter triggers. Users describe what they want in plain English; the agent chains skills automatically and never asks the user to name a skill or command.
+Load this skill first for Dataverse work: scope, tool capabilities, hard rules, and the change lifecycle. It does **not** route; the agent auto-selects and chains specialist skills using their WHEN/DO NOT USE WHEN frontmatter triggers. Users describe tasks in plain English; never ask them to name a skill or command.
 
 ---
 
@@ -21,6 +21,7 @@ Dataverse / Power Platform work for **every persona** — builders and agent dev
 | Data reads & analytics — OData queries, QueryBuilder, FetchXML (aggregation + N:N joins), DataFrames | `dv-query` |
 | Solution ALM — create, export, import, pack/unpack, post-import validation | `dv-solution` |
 | Finance and Operations X++ — author, build, deploy, DB sync, verify | `erp-xpp` |
+| Finance and Operations UDE developer-database access (JIT SQL) | `erp-sql` |
 | Environment administration — bulk delete, retention/archival, org & OrgDB settings, recycle bin | `dv-admin` |
 | Security & access — roles, users, application users, business units, self-elevation (PAC CLI) | `dv-security` |
 

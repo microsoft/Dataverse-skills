@@ -126,6 +126,7 @@ For deeper schema inspection â€” full column metadata and table relationships â€
 
 | Need | Use instead |
 |---|---|
+| Explicit physical ERP SQL table read or a table read in an established JIT/sqlcmd workflow | **erp-sql** |
 | Create, update, delete records (Dataverse) | **dv-data** |
 | Query records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) |
 | Create, update, delete records or DMF imports (ERP) | **dv-data** |
