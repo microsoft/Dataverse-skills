@@ -157,15 +157,32 @@ Codex discovers the plugin via the repo-root `.agents/plugins/marketplace.json` 
 
 ### Testing with Google Antigravity
 
-Install the canonical plugin directory from your local clone:
+Validate and install the canonical plugin directory from your local clone:
 
 ```bash
+agy plugin validate --strict <path/to/repo>/.github/plugins/dataverse
 agy plugin install <path/to/repo>/.github/plugins/dataverse
+agy plugin list --json
 ```
 
-Restart `agy`, verify the nine Dataverse skills with `/skills`, and run
+Use a current Antigravity CLI that supports the documented `--strict` flag.
+Older builds such as 1.3.6 reject the documented flag order; update with
+`agy update` instead of relying on a path-first invocation. See Google's
+[publication guide](https://antigravity.google/docs/build-plugins/).
+
+Restart `agy`, verify the 10 Dataverse skills with `/skills`, and run
 `/dv-connect`. Reinstall after source edits because Antigravity stages a copy of
 the plugin rather than linking the working tree.
+
+The native manifest must include the Microsoft display name and publisher,
+matching release version, concise description, bundled square logo, and starter
+prompts. Keep the pre-install README at the plugin root and run the regression
+checks before submitting:
+
+```bash
+python .github/evals/test_antigravity.py
+python .github/evals/static_checks.py
+```
 
 ## Legal
 

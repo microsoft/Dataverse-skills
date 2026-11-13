@@ -64,12 +64,12 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-    EVAL-VERSION-01  All eleven version fields match (8 files, 11 fields total)
+    EVAL-VERSION-01  All twelve version fields match (9 files, 12 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
-       Anthropic's published skills loading model — Level 1 (frontmatter, always
-       loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
+    Anthropic's published skills loading model -- Level 1 (frontmatter, always
+    loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
        trigger) <5k tokens; Level 3 (`references/`, loaded on demand) unlimited.
        EVAL-BUDGET-01  Frontmatter <= 200 tokens (Level 1, with headroom)
        EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap)
@@ -80,8 +80,8 @@ CAT-9  Manifest Description Consistency
        Checks that the plugin description matches across all plugin.json
        manifests and the plugins[0].description of every marketplace.json,
        so a description edit can't land in one manifest and miss the others.
-       (The marketplace-level metadata.description is intentionally distinct
-       and is not compared.)
+    (Marketplace metadata.description and Antigravity's concise listing
+    description are intentionally distinct and are not compared.)
        EVAL-DESC-01  Plugin description identical across all manifests
 
 CAT-10 Manifest Asset References
@@ -112,6 +112,8 @@ CAT-13 Antigravity Plugin
     EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
     EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
     EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
+    EVAL-ANTIGRAVITY-05  Pre-install README is bundled
+    EVAL-ANTIGRAVITY-06  Bundled SVG logo is square and at least 128px
 
 CAT-14 Gemini Extension
     Checks the canonical Gemini manifest, settings, MCP declaration,
@@ -125,6 +127,7 @@ import argparse
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 try:
@@ -471,7 +474,7 @@ def check_completeness(name, text, all_skill_names):
 # CAT-6  dv-admin Allowlist Enforcement
 # ---------------------------------------------------------------------------
 
-# Representative sample of allowlisted backend keys — one per mechanism.
+# Representative sample of allowlisted backend keys -- one per mechanism.
 # If any of these disappears from dv-admin, the allowlist is broken.
 # Not exhaustive (would make minor formatting edits painful); picked to cover
 # all 4 mechanisms (PAC CLI org column / OrgDB XML / recyclebinconfigs / settingdefinition).
@@ -494,7 +497,7 @@ _ALLOWLIST_REQUIRED_KEYS = [
     "PlanShareSecurityRolesEnabled",
 ]
 
-# Known out-of-scope settings — the skill should name these explicitly as
+# Known out-of-scope settings -- the skill should name these explicitly as
 # denylist examples so the agent has concrete "do not toggle" signal.
 _ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES = [
     "sessiontimeoutinmins",   # was allowlisted pre-1.2.0, removed
@@ -533,7 +536,7 @@ def check_allowlist(name, text):
     for denied in _ALLOWLIST_REQUIRED_DENYLIST_EXAMPLES:
         if not re.search(rf"\b{re.escape(denied)}\b", text):
             failures.append(
-                f"EVAL-ALLOW-03 [{name}] denylist example '{denied}' no longer appears — "
+                f"EVAL-ALLOW-03 [{name}] denylist example '{denied}' no longer appears -- "
                 f"agent loses the explicit out-of-scope signal"
             )
 
@@ -542,7 +545,7 @@ def check_allowlist(name, text):
     for key in _ALLOWLIST_REQUIRED_KEYS:
         if not re.search(rf"\b{re.escape(key)}\b", text):
             failures.append(
-                f"EVAL-ALLOW-04 [{name}] allowlisted key '{key}' no longer appears — "
+                f"EVAL-ALLOW-04 [{name}] allowlisted key '{key}' no longer appears -- "
                 f"allowlist has drifted from the documented 37-toggle coverage"
             )
 
@@ -574,7 +577,7 @@ def check_readme_skill_count(skills_dir, all_skill_names):
     failures = []
     readme_path = skills_dir.parent.parent.parent.parent / "README.md"
     if not readme_path.exists():
-        # README is optional — skip silently if not found
+        # README is optional -- skip silently if not found
         return failures
 
     text = readme_path.read_text(encoding="utf-8")
@@ -609,10 +612,10 @@ def _gemini_context_version(manifest):
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All eleven version fields match across manifest files.
+    EVAL-VERSION-01: All twelve version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The eleven version fields live in eight files:
+    The twelve version fields live in nine files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
@@ -625,6 +628,7 @@ def check_version_consistency(repo_root):
      10. .github/plugins/dataverse/gemini-extension.json --
          mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
      11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
+    12. .github/plugins/dataverse/.antigravity-plugin/plugin.json -- version
     """
     failures = []
 
@@ -681,6 +685,11 @@ def check_version_consistency(repo_root):
         ),
         (
             "gemini-extension.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
+        (
+            ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
         ),
@@ -744,15 +753,14 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in seven plugin manifest fields (including
+# The shared description appears in six plugin manifest fields (including
 # Codex's long description) and the plugins[0] entry of three marketplace.json
-# catalogs. All ten describe the same plugin and must match. The
+# catalogs. These nine describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
-# describes the marketplace, not the plugin) and is deliberately excluded.
+# describes the marketplace, not the plugin), as is Antigravity's concise
+# Marketplace summary. Both are deliberately excluded.
 _DESCRIPTION_SOURCES = [
     (".github/plugins/dataverse/gemini-extension.json",
-     lambda d: d.get("description"), "description"),
-    (".github/plugins/dataverse/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.cursor-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
@@ -816,6 +824,7 @@ def check_description_consistency(repo_root):
 # resolves against that root.
 _PLUGIN_ROOT = ".github/plugins/dataverse"
 _LOGO_MANIFESTS = [
+    ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
     ".github/plugins/dataverse/.cursor-plugin/plugin.json",
     ".github/plugins/dataverse/.claude-plugin/plugin.json",
     ".github/plugins/dataverse/.github/plugin/plugin.json",
@@ -861,7 +870,7 @@ def check_manifest_assets(repo_root):
 def check_antigravity_plugin(repo_root):
     """Validate the native manifest and Antigravity integration contract."""
     failures = []
-    relative_path = ".github/plugins/dataverse/plugin.json"
+    relative_path = ".github/plugins/dataverse/.antigravity-plugin/plugin.json"
     manifest_path = repo_root / relative_path
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -869,6 +878,8 @@ def check_antigravity_plugin(repo_root):
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest file not found"]
     except json.JSONDecodeError as error:
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] invalid JSON: {error}"]
+    if not isinstance(manifest, dict):
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest root must be an object"]
 
     canonical_path = repo_root / ".github/plugins/dataverse/.claude-plugin/plugin.json"
     try:
@@ -881,13 +892,64 @@ def check_antigravity_plugin(repo_root):
     expected = {
         "$schema": "https://antigravity.google/schemas/v1/plugin.json",
         "name": canonical.get("name"),
-        "description": canonical.get("description"),
+        "displayName": "Microsoft Dataverse",
+        "version": canonical.get("version"),
+        "author": canonical.get("author"),
+        "homepage": "https://github.com/microsoft/Dataverse-skills",
+        "repository": "https://github.com/microsoft/Dataverse-skills",
+        "license": "MIT",
+        "logo": "assets/dataverse-logo.svg",
     }
-    if manifest != expected:
+    for field, value in expected.items():
+        if manifest.get(field) != value:
+            failures.append(
+                f"EVAL-ANTIGRAVITY-01 [{relative_path}] '{field}' must be {value!r}"
+            )
+    allowed_fields = set(expected) | {"description", "suggestedPrompts", "keywords"}
+    if set(manifest) - allowed_fields:
+        failures.append(f"EVAL-ANTIGRAVITY-01 [{relative_path}] unsupported fields")
+    description = manifest.get("description")
+    if not isinstance(description, str) or not description.strip() or len(description) > 160:
         failures.append(
-            f"EVAL-ANTIGRAVITY-01 [{relative_path}] must contain only the "
-            "official schema, canonical name, and canonical description"
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] description must be 1-160 characters"
         )
+    prompts = manifest.get("suggestedPrompts")
+    if not isinstance(prompts, list) or not 1 <= len(prompts) <= 3 or any(
+        not isinstance(prompt, str) or not prompt.strip() for prompt in prompts
+    ):
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] provide 1-3 nonempty suggestedPrompts"
+        )
+    keywords = manifest.get("keywords")
+    if not isinstance(keywords, list) or not keywords or any(
+        not isinstance(keyword, str) or not keyword or keyword != keyword.lower()
+        for keyword in keywords
+    ):
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] provide lowercase keywords"
+        )
+    plugin_root = repo_root / _PLUGIN_ROOT
+    if not (plugin_root / "README.md").is_file():
+        failures.append(
+            "EVAL-ANTIGRAVITY-05 [README.md] bundle pre-install documentation at plugin root"
+        )
+    logo_path = plugin_root / "assets/dataverse-logo.svg"
+    try:
+        logo = ET.parse(logo_path).getroot()
+        width = float(logo.attrib["width"])
+        height = float(logo.attrib["height"])
+        view_box = [float(value) for value in logo.attrib["viewBox"].split()]
+        if (
+            logo.tag != "{http://www.w3.org/2000/svg}svg"
+            or not width >= 128
+            or width != height
+            or len(view_box) != 4
+            or not view_box[2] > 0
+            or view_box[2] != view_box[3]
+        ):
+            raise ValueError("logo must have square dimensions and viewBox, at least 128px")
+    except (OSError, ET.ParseError, KeyError, ValueError) as error:
+        failures.append(f"EVAL-ANTIGRAVITY-06 [assets/dataverse-logo.svg] {error}")
 
     auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
     try:
@@ -1159,11 +1221,11 @@ BODY_TOKEN_REFERENCES_TRIGGER = 4000
 def check_token_budget(name, text, skill_dir):
     """
     EVAL-BUDGET-01: frontmatter <= FRONTMATTER_TOKEN_CAP tokens (Level 1)
-    EVAL-BUDGET-02: body <= BODY_TOKEN_CAP tokens (Level 2 — Anthropic spec)
+    EVAL-BUDGET-02: body <= BODY_TOKEN_CAP tokens (Level 2 -- Anthropic spec)
     EVAL-BUDGET-03: when body > BODY_TOKEN_REFERENCES_TRIGGER tokens, a
                     `references/` subfolder must exist (forces Level 3 split)
 
-    Anchor: Anthropic's Skills loading model — Level 1 ~100 tok / Level 2 <5k tok / Level 3 unlimited.
+    Anchor: Anthropic's Skills loading model -- Level 1 ~100 tok / Level 2 <5k tok / Level 3 unlimited.
     """
     failures = []
     m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
@@ -1175,7 +1237,7 @@ def check_token_budget(name, text, skill_dir):
     if fm_tokens > FRONTMATTER_TOKEN_CAP:
         failures.append(
             f"EVAL-BUDGET-01 [{name}] frontmatter is {fm_tokens} tokens, "
-            f"exceeds cap of {FRONTMATTER_TOKEN_CAP} (Anthropic Level 1 — frontmatter "
+            f"exceeds cap of {FRONTMATTER_TOKEN_CAP} (Anthropic Level 1 -- frontmatter "
             f"is loaded into context for every interaction across all skills). "
             f"Trim trigger phrases and over-long enumerations."
         )
@@ -1328,12 +1390,12 @@ def main():
         all_failures.extend(check_deprecated_read_api(rlabel, rtext))
         all_failures.extend(check_cli_attribution(rlabel, rtext))
 
-    # Cross-skill checks — need all files loaded
+    # Cross-skill checks -- need all files loaded
     overview_path = skills_dir / "dv-overview" / "SKILL.md"
     all_failures.extend(check_overview_index(overview_path, all_skill_names))
     all_failures.extend(check_readme_skill_count(skills_dir, all_skill_names))
 
-    # Manifest version consistency — check across repo root
+    # Manifest version consistency -- check across repo root
     repo_root = skills_dir.parent.parent.parent.parent
     all_failures.extend(check_version_consistency(repo_root))
 
@@ -1344,7 +1406,7 @@ def main():
     all_failures.extend(check_gemini_extension(repo_root))
     all_failures.extend(check_fallback_nudge(repo_root))
 
-    # auth.py _ALLOWED_SKILLS sync — check against actual skill directories
+    # auth.py _ALLOWED_SKILLS sync -- check against actual skill directories
     all_failures.extend(check_allowed_skills_sync(repo_root, all_skill_names))
 
     if all_failures:
