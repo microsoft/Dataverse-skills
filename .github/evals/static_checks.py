@@ -627,7 +627,7 @@ def check_version_consistency(repo_root):
      10. .github/plugins/dataverse/gemini-extension.json --
          mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
      11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
-    12. .github/plugins/dataverse/plugin.json -- version
+    12. .github/plugins/dataverse/.antigravity-plugin/plugin.json -- version
     """
     failures = []
 
@@ -688,7 +688,7 @@ def check_version_consistency(repo_root):
             "version",
         ),
         (
-            ".github/plugins/dataverse/plugin.json",
+            ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
         ),
@@ -823,7 +823,7 @@ def check_description_consistency(repo_root):
 # resolves against that root.
 _PLUGIN_ROOT = ".github/plugins/dataverse"
 _LOGO_MANIFESTS = [
-    ".github/plugins/dataverse/plugin.json",
+    ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
     ".github/plugins/dataverse/.cursor-plugin/plugin.json",
     ".github/plugins/dataverse/.claude-plugin/plugin.json",
     ".github/plugins/dataverse/.github/plugin/plugin.json",
@@ -869,7 +869,7 @@ def check_manifest_assets(repo_root):
 def check_antigravity_plugin(repo_root):
     """Validate the native manifest and Antigravity integration contract."""
     failures = []
-    relative_path = ".github/plugins/dataverse/plugin.json"
+    relative_path = ".github/plugins/dataverse/.antigravity-plugin/plugin.json"
     manifest_path = repo_root / relative_path
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -879,6 +879,13 @@ def check_antigravity_plugin(repo_root):
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] invalid JSON: {error}"]
     if not isinstance(manifest, dict):
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest root must be an object"]
+
+    legacy_relative_path = ".github/plugins/dataverse/plugin.json"
+    if (repo_root / legacy_relative_path).exists():
+        failures.append(
+            f"EVAL-ANTIGRAVITY-07 [{legacy_relative_path}] remove the root manifest; "
+            "Antigravity ignores it when the provider-specific manifest exists"
+        )
 
     canonical_path = repo_root / ".github/plugins/dataverse/.claude-plugin/plugin.json"
     try:
