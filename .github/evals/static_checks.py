@@ -112,7 +112,6 @@ CAT-13 Antigravity Plugin
     EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
     EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
     EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
-    EVAL-ANTIGRAVITY-05  Pre-install README is bundled
     EVAL-ANTIGRAVITY-06  Bundled SVG logo is square and at least 128px
 
 CAT-14 Gemini Extension
@@ -628,7 +627,7 @@ def check_version_consistency(repo_root):
      10. .github/plugins/dataverse/gemini-extension.json --
          mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
      11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
-    12. .github/plugins/dataverse/.antigravity-plugin/plugin.json -- version
+    12. .github/plugins/dataverse/plugin.json -- version
     """
     failures = []
 
@@ -689,7 +688,7 @@ def check_version_consistency(repo_root):
             "version",
         ),
         (
-            ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
+            ".github/plugins/dataverse/plugin.json",
             lambda d: d.get("version"),
             "version",
         ),
@@ -824,7 +823,7 @@ def check_description_consistency(repo_root):
 # resolves against that root.
 _PLUGIN_ROOT = ".github/plugins/dataverse"
 _LOGO_MANIFESTS = [
-    ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
+    ".github/plugins/dataverse/plugin.json",
     ".github/plugins/dataverse/.cursor-plugin/plugin.json",
     ".github/plugins/dataverse/.claude-plugin/plugin.json",
     ".github/plugins/dataverse/.github/plugin/plugin.json",
@@ -870,7 +869,7 @@ def check_manifest_assets(repo_root):
 def check_antigravity_plugin(repo_root):
     """Validate the native manifest and Antigravity integration contract."""
     failures = []
-    relative_path = ".github/plugins/dataverse/.antigravity-plugin/plugin.json"
+    relative_path = ".github/plugins/dataverse/plugin.json"
     manifest_path = repo_root / relative_path
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -929,10 +928,6 @@ def check_antigravity_plugin(repo_root):
             f"EVAL-ANTIGRAVITY-01 [{relative_path}] provide lowercase keywords"
         )
     plugin_root = repo_root / _PLUGIN_ROOT
-    if not (plugin_root / "README.md").is_file():
-        failures.append(
-            "EVAL-ANTIGRAVITY-05 [README.md] bundle pre-install documentation at plugin root"
-        )
     logo_path = plugin_root / "assets/dataverse-logo.svg"
     try:
         logo = ET.parse(logo_path).getroot()

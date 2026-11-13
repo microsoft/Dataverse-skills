@@ -27,9 +27,8 @@ class AntigravityPackagingTests(unittest.TestCase):
             Path("gemini-extension.json"),
             Path(".github/plugin/marketplace.json"),
             Path(".cursor-plugin/marketplace.json"),
-            PLUGIN_ROOT / ".antigravity-plugin/plugin.json",
+            PLUGIN_ROOT / "plugin.json",
             PLUGIN_ROOT / "gemini-extension.json",
-            PLUGIN_ROOT / "README.md",
             PLUGIN_ROOT / ".claude-plugin/plugin.json",
             PLUGIN_ROOT / ".github/plugin/plugin.json",
             PLUGIN_ROOT / ".cursor-plugin/plugin.json",
@@ -43,7 +42,7 @@ class AntigravityPackagingTests(unittest.TestCase):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO_ROOT / relative, target)
-        self.manifest_path = self.root / PLUGIN_ROOT / ".antigravity-plugin/plugin.json"
+        self.manifest_path = self.root / PLUGIN_ROOT / "plugin.json"
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
 
     def check_manifest(self, manifest):
@@ -89,14 +88,19 @@ class AntigravityPackagingTests(unittest.TestCase):
         self.assertTrue(self.check_manifest({**self.manifest, "version": "0.0.0"}))
         self.assertTrue(any("version mismatch" in issue for issue in static_checks.check_version_consistency(self.root)))
 
-    def test_preinstall_readme_is_required(self):
-        (self.root / PLUGIN_ROOT / "README.md").unlink()
-        self.assertTrue(any("EVAL-ANTIGRAVITY-05" in issue for issue in self.check_manifest(self.manifest)))
+    def test_preinstall_readme_is_optional(self):
+        readme_path = self.root / PLUGIN_ROOT / "README.md"
+        self.assertFalse(readme_path.exists())
+        self.assertEqual(self.check_manifest(self.manifest), [])
+        readme_path.write_text("# Optional plugin documentation\n", encoding="utf-8")
+        self.assertEqual(self.check_manifest(self.manifest), [])
+        readme_path.unlink()
+        self.assertEqual(self.check_manifest(self.manifest), [])
 
     def test_missing_logo_is_rejected(self):
         (self.root / PLUGIN_ROOT / "assets/dataverse-logo.svg").unlink()
         self.assertTrue(any("EVAL-ANTIGRAVITY-06" in issue for issue in self.check_manifest(self.manifest)))
-        self.assertTrue(any(".antigravity-plugin/plugin.json" in issue for issue in static_checks.check_manifest_assets(self.root)))
+        self.assertTrue(any("[.github/plugins/dataverse/plugin.json]" in issue for issue in static_checks.check_manifest_assets(self.root)))
 
     def test_invalid_logo_shapes_are_rejected(self):
         logo_path = self.root / PLUGIN_ROOT / "assets/dataverse-logo.svg"

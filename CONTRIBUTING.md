@@ -176,8 +176,9 @@ the plugin rather than linking the working tree.
 
 The native manifest must include the Microsoft display name and publisher,
 matching release version, concise description, bundled square logo, and starter
-prompts. Keep the pre-install README at the plugin root and run the regression
-checks before submitting:
+prompts. Keep it at the existing plugin-root `plugin.json` path. Setup and usage
+documentation remains in this repository's main README; a package-local README
+is optional. Run the regression checks before submitting:
 
 ```bash
 python .github/evals/test_antigravity.py
