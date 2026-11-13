@@ -1,0 +1,27 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "dataverse",
+  "displayName": "Microsoft Dataverse",
+  "version": "1.19.0",
+  "description": "Build and manage Microsoft Dataverse solutions: connect environments, query and import data, design schemas, configure security, and manage solution lifecycles.",
+  "logo": "assets/dataverse-logo.svg",
+  "suggestedPrompts": [
+    "Connect to my Dataverse environment and show me its custom tables",
+    "Create a support ticket data model in my Dataverse solution",
+    "Profile my Dataverse data and summarize data quality issues"
+  ],
+  "author": {
+    "name": "Microsoft",
+    "url": "https://www.microsoft.com"
+  },
+  "homepage": "https://github.com/microsoft/Dataverse-skills",
+  "repository": "https://github.com/microsoft/Dataverse-skills",
+  "license": "MIT",
+  "keywords": [
+    "dataverse",
+    "power-platform",
+    "dynamics-365",
+    "microsoft",
+    "data"
+  ]
+}

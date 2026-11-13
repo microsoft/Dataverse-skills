@@ -64,12 +64,12 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-    EVAL-VERSION-01  All eleven version fields match (8 files, 11 fields total)
+    EVAL-VERSION-01  All twelve version fields match (9 files, 12 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
-       Anthropic's published skills loading model — Level 1 (frontmatter, always
-       loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
+     Anthropic's published skills loading model — Level 1 (frontmatter, always
+     loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
        trigger) <5k tokens; Level 3 (`references/`, loaded on demand) unlimited.
        EVAL-BUDGET-01  Frontmatter <= 200 tokens (Level 1, with headroom)
        EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap)
@@ -80,8 +80,8 @@ CAT-9  Manifest Description Consistency
        Checks that the plugin description matches across all plugin.json
        manifests and the plugins[0].description of every marketplace.json,
        so a description edit can't land in one manifest and miss the others.
-       (The marketplace-level metadata.description is intentionally distinct
-       and is not compared.)
+             (Marketplace metadata.description and Antigravity's concise listing
+             description are intentionally distinct and are not compared.)
        EVAL-DESC-01  Plugin description identical across all manifests
 
 CAT-10 Manifest Asset References
@@ -112,6 +112,7 @@ CAT-13 Antigravity Plugin
     EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
     EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
     EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
+    EVAL-ANTIGRAVITY-06  Bundled SVG logo is square and at least 128px
 
 CAT-14 Gemini Extension
     Checks the canonical Gemini manifest, settings, MCP declaration,
@@ -125,6 +126,7 @@ import argparse
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 try:
@@ -609,10 +611,10 @@ def _gemini_context_version(manifest):
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All eleven version fields match across manifest files.
+    EVAL-VERSION-01: All twelve version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The eleven version fields live in eight files:
+    The twelve version fields live in nine files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
@@ -625,6 +627,7 @@ def check_version_consistency(repo_root):
      10. .github/plugins/dataverse/gemini-extension.json --
          mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
      11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
+    12. .github/plugins/dataverse/.antigravity-plugin/plugin.json -- version
     """
     failures = []
 
@@ -681,6 +684,11 @@ def check_version_consistency(repo_root):
         ),
         (
             "gemini-extension.json",
+            lambda d: d.get("version"),
+            "version",
+        ),
+        (
+            ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
         ),
@@ -744,15 +752,14 @@ def check_version_consistency(repo_root):
 # CAT-9  Manifest Description Consistency
 # ---------------------------------------------------------------------------
 
-# The plugin description appears in seven plugin manifest fields (including
+# The shared description appears in six plugin manifest fields (including
 # Codex's long description) and the plugins[0] entry of three marketplace.json
-# catalogs. All ten describe the same plugin and must match. The
+# catalogs. These nine describe the same plugin and must match. The
 # marketplace-level metadata.description is intentionally different (it
-# describes the marketplace, not the plugin) and is deliberately excluded.
+# describes the marketplace, not the plugin), as is Antigravity's concise
+# Marketplace summary. Both are deliberately excluded.
 _DESCRIPTION_SOURCES = [
     (".github/plugins/dataverse/gemini-extension.json",
-     lambda d: d.get("description"), "description"),
-    (".github/plugins/dataverse/plugin.json",
      lambda d: d.get("description"), "description"),
     (".github/plugins/dataverse/.cursor-plugin/plugin.json",
      lambda d: d.get("description"), "description"),
@@ -816,6 +823,7 @@ def check_description_consistency(repo_root):
 # resolves against that root.
 _PLUGIN_ROOT = ".github/plugins/dataverse"
 _LOGO_MANIFESTS = [
+    ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
     ".github/plugins/dataverse/.cursor-plugin/plugin.json",
     ".github/plugins/dataverse/.claude-plugin/plugin.json",
     ".github/plugins/dataverse/.github/plugin/plugin.json",
@@ -861,7 +869,7 @@ def check_manifest_assets(repo_root):
 def check_antigravity_plugin(repo_root):
     """Validate the native manifest and Antigravity integration contract."""
     failures = []
-    relative_path = ".github/plugins/dataverse/plugin.json"
+    relative_path = ".github/plugins/dataverse/.antigravity-plugin/plugin.json"
     manifest_path = repo_root / relative_path
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -869,6 +877,15 @@ def check_antigravity_plugin(repo_root):
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest file not found"]
     except json.JSONDecodeError as error:
         return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] invalid JSON: {error}"]
+    if not isinstance(manifest, dict):
+        return [f"EVAL-ANTIGRAVITY-01 [{relative_path}] manifest root must be an object"]
+
+    legacy_relative_path = ".github/plugins/dataverse/plugin.json"
+    if (repo_root / legacy_relative_path).exists():
+        failures.append(
+            f"EVAL-ANTIGRAVITY-07 [{legacy_relative_path}] remove the root manifest; "
+            "Antigravity ignores it when the provider-specific manifest exists"
+        )
 
     canonical_path = repo_root / ".github/plugins/dataverse/.claude-plugin/plugin.json"
     try:
@@ -881,13 +898,60 @@ def check_antigravity_plugin(repo_root):
     expected = {
         "$schema": "https://antigravity.google/schemas/v1/plugin.json",
         "name": canonical.get("name"),
-        "description": canonical.get("description"),
+        "displayName": "Microsoft Dataverse",
+        "version": canonical.get("version"),
+        "author": canonical.get("author"),
+        "homepage": "https://github.com/microsoft/Dataverse-skills",
+        "repository": "https://github.com/microsoft/Dataverse-skills",
+        "license": "MIT",
+        "logo": "assets/dataverse-logo.svg",
     }
-    if manifest != expected:
+    for field, value in expected.items():
+        if manifest.get(field) != value:
+            failures.append(
+                f"EVAL-ANTIGRAVITY-01 [{relative_path}] '{field}' must be {value!r}"
+            )
+    allowed_fields = set(expected) | {"description", "suggestedPrompts", "keywords"}
+    if set(manifest) - allowed_fields:
+        failures.append(f"EVAL-ANTIGRAVITY-01 [{relative_path}] unsupported fields")
+    description = manifest.get("description")
+    if not isinstance(description, str) or not description.strip() or len(description) > 160:
         failures.append(
-            f"EVAL-ANTIGRAVITY-01 [{relative_path}] must contain only the "
-            "official schema, canonical name, and canonical description"
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] description must be 1-160 characters"
         )
+    prompts = manifest.get("suggestedPrompts")
+    if not isinstance(prompts, list) or not 1 <= len(prompts) <= 3 or any(
+        not isinstance(prompt, str) or not prompt.strip() for prompt in prompts
+    ):
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] provide 1-3 nonempty suggestedPrompts"
+        )
+    keywords = manifest.get("keywords")
+    if not isinstance(keywords, list) or not keywords or any(
+        not isinstance(keyword, str) or not keyword or keyword != keyword.lower()
+        for keyword in keywords
+    ):
+        failures.append(
+            f"EVAL-ANTIGRAVITY-01 [{relative_path}] provide lowercase keywords"
+        )
+    plugin_root = repo_root / _PLUGIN_ROOT
+    logo_path = plugin_root / "assets/dataverse-logo.svg"
+    try:
+        logo = ET.parse(logo_path).getroot()
+        width = float(logo.attrib["width"])
+        height = float(logo.attrib["height"])
+        view_box = [float(value) for value in logo.attrib["viewBox"].split()]
+        if (
+            logo.tag != "{http://www.w3.org/2000/svg}svg"
+            or not width >= 128
+            or width != height
+            or len(view_box) != 4
+            or not view_box[2] > 0
+            or view_box[2] != view_box[3]
+        ):
+            raise ValueError("logo must have square dimensions and viewBox, at least 128px")
+    except (OSError, ET.ParseError, KeyError, ValueError) as error:
+        failures.append(f"EVAL-ANTIGRAVITY-06 [assets/dataverse-logo.svg] {error}")
 
     auth_path = repo_root / ".github/plugins/dataverse/scripts/auth.py"
     try:
