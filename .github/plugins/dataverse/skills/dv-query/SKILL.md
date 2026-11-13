@@ -128,7 +128,9 @@ For deeper schema inspection â€” full column metadata and table relationships â€
 |---|---|
 | Explicit physical ERP SQL table read or a table read in an established JIT/sqlcmd workflow | **erp-sql** |
 | Create, update, delete records (Dataverse) | **dv-data** |
-| Query, create, update, delete records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) and [`erp-writes`](../dv-data/references/erp-writes.md) |
+| Query records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) |
+| Create, update, delete records or DMF imports (ERP) | **dv-data** |
+| List or cancel ERP (Finance and Operations) batch jobs | **dv-admin** |
 | Create tables, columns, relationships | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
 
