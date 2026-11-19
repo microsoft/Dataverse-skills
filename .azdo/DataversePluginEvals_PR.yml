@@ -105,6 +105,11 @@ steps:
     agentType: 'CopilotCliAgent'
     agentConfigFile: 'copilot_agent_config.json'
     azureServiceConnection: ${{ parameters.azureServiceConnection }}
+    # Attach a bearer token to BIC Evaluation Service calls (LocalEvalRunner docs/OFFLINE_EVAL_AUTH.md).
+    # The scope comes from this pipeline definition's BicEvalTokenScope variable, so the service's app ID
+    # stays out of this public repository; the default connection's managed identity is on the service's
+    # caller allowlist. Without a scope, LocalEvalRunner fails this step from 2026-11-08 UTC.
+    tokenScope: '$(BicEvalTokenScope)'
     concurrency: ${{ parameters.concurrency }}
     serviceName: 'DataverseSkillsPlugin'
     # Resolve the external eval script from the checked-out LocalEvalRunner repo:
