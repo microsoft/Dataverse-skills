@@ -714,6 +714,24 @@ class AgentDetectionForUnknown(_AuthTestBase):
             self.assertIn("agent=claude-code", auth.get_plugin_headers("dv-query")["User-Agent"])
             self.assertIn("agent=claude-code", auth.get_cli_context("dv-query"))
 
+    def test_headers_and_cli_context_read_env_file_without_get_token(self):
+        # Building headers before get_token() must still pick up the agent from .env.
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, ".env").write_text(
+                "DATAVERSE_PLUGIN_AGENT=codex/jetbrains\nDATAVERSE_PLUGIN_VERSION=1.20.0\n",
+                encoding="utf-8",
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertIn("agent=codex/jetbrains",
+                                  auth.get_plugin_headers("dv-query")["User-Agent"])
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertIn("agent=codex/jetbrains", auth.get_cli_context("dv-query"))
+            finally:
+                os.chdir(cwd)
+
 
 class SilentChainReasons(_AuthTestBase):
     def test_reasons_recorded_on_exhaustion(self):

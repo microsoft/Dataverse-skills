@@ -997,6 +997,7 @@ def _operation_context_str(skill):
 
 def get_cli_context(skill):
     """Return validated plugin attribution for CLI --context, without parentheses."""
+    load_env()
     _validate_skill(skill)
     return _operation_context_str(skill)
 
@@ -1084,6 +1085,7 @@ def get_plugin_headers(skill, token=None):
     :param token: Optional bearer token (from get_token()).
     :returns: Headers dict with User-Agent and optional Authorization.
     """
+    load_env()
     _validate_skill(skill)
     _emit_raw_fallback_hint()
     ctx_str = _operation_context_str(skill)
