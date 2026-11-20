@@ -141,6 +141,13 @@ def load_env():
     is absent, so returning users on ephemeral-workspace hosts (ChatGPT desktop
     app, Codex) skip the full dv-connect setup.
     """
+    _load_env_file()
+    if not os.environ.get("DATAVERSE_URL") or not os.environ.get("TENANT_ID"):
+        _load_user_config()
+
+
+def _load_env_file():
+    """Load the project .env (repo root, then cwd) into os.environ without overwriting."""
     script_dir = Path(__file__).resolve().parent
     candidates = [script_dir.parent / ".env", Path(".env")]
     env_path = next((p for p in candidates if p.exists()), None)
@@ -150,8 +157,6 @@ def load_env():
             if line and not line.startswith("#") and "=" in line:
                 key, _, value = line.partition("=")
                 os.environ.setdefault(key.strip(), value.strip())
-    if not os.environ.get("DATAVERSE_URL") or not os.environ.get("TENANT_ID"):
-        _load_user_config()
 
 
 _credential = None
@@ -904,24 +909,22 @@ def _resolve_manifest_version():
     return version
 
 
-# AI_AGENT values (cross-vendor convention) mapped to this plugin's agent names.
-_AI_AGENT_ALIASES = {
-    "claude": "claude-code",
-    "claude-code": "claude-code",
-    "codex": "codex",
-    "cursor": "cursor",
-    "cursor-cli": "cursor",
-    "gemini": "gemini-cli",
-    "gemini-cli": "gemini-cli",
-    "antigravity": "antigravity-cli",
-    "antigravity-cli": "antigravity-cli",
-    "copilot": "copilot",
-    "copilot-cli": "copilot",
-    "github-copilot": "copilot",
-    "github-copilot-cli": "copilot",
-    "github_copilot_vscode_agent": "copilot",
-    "github_copilot_cloud_agent": "copilot",
-}
+def _agent_from_ai_agent(value):
+    """Map an AI_AGENT value to an allowed agent by name stem, or None.
+
+    Matches derive from _ALLOWED_AGENTS ("claude-code" -> stem "claude"), so vendor
+    variants such as "claude", "cursor-cli" or "github_copilot_vscode_agent" map
+    without a per-value table, and adding an agent to the allowlist is enough.
+    """
+    value = re.sub(r"^github[-_]", "", value.strip().lower())
+    stems = sorted(
+        ((re.sub(r"-(cli|code)$", "", a), a) for a in _ALLOWED_AGENTS if a != "unknown"),
+        key=lambda pair: -len(pair[0]),
+    )
+    for stem, agent in stems:
+        if value == agent or value.startswith(stem):
+            return agent
+    return None
 
 
 def _detect_agent():
@@ -932,9 +935,9 @@ def _detect_agent():
     agents in _ALLOWED_AGENTS are returned, so the context schema stays closed.
     """
     env = os.environ
-    ai_agent = env.get("AI_AGENT", "").strip().lower()
-    if ai_agent:
-        return _AI_AGENT_ALIASES.get(ai_agent)
+    ai_agent = env.get("AI_AGENT", "")
+    if ai_agent.strip():
+        return _agent_from_ai_agent(ai_agent)
     # Amp also sets CLAUDECODE, so it is checked first.
     if env.get("AGENT") == "amp":
         return None
@@ -997,7 +1000,7 @@ def _operation_context_str(skill):
 
 def get_cli_context(skill):
     """Return validated plugin attribution for CLI --context, without parentheses."""
-    load_env()
+    _load_env_file()
     _validate_skill(skill)
     return _operation_context_str(skill)
 
@@ -1005,17 +1008,23 @@ def get_cli_context(skill):
 def _build_operation_context(skill):
     """Build the operation_context for the SDK, fail-open.
 
-    An older installed SDK may not yet accept the "<agent>/<surface>" suffix and
-    would raise. In that case strip the suffix and retry with the bare agent, so
-    attribution degrades gracefully and never gates the data operation.
+    An older installed SDK may reject the "<agent>/<surface>" suffix, or an agent it
+    does not list (SDK <= 1.1.0 rejects gemini-cli / antigravity-cli). Retry with the
+    bare agent, then with agent=unknown, so attribution never gates the data operation.
     """
     ctx_str = _operation_context_str(skill)
     from PowerPlatform.Dataverse.core.config import OperationContext
-    try:
-        return OperationContext(user_agent_context=ctx_str)
-    except ValueError:
-        base_ctx = re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_.-]+", r"\1", ctx_str)
-        return OperationContext(user_agent_context=base_ctx)
+    candidates = (
+        ctx_str,
+        re.sub(r"(;agent=[a-zA-Z0-9_-]+)/[a-zA-Z0-9_.-]+", r"\1", ctx_str),
+        re.sub(r";agent=[a-zA-Z0-9_./-]+", ";agent=unknown", ctx_str),
+    )
+    for candidate in candidates[:-1]:
+        try:
+            return OperationContext(user_agent_context=candidate)
+        except ValueError:
+            continue
+    return OperationContext(user_agent_context=candidates[-1])
 
 
 def get_client(skill, **kwargs):
@@ -1085,7 +1094,7 @@ def get_plugin_headers(skill, token=None):
     :param token: Optional bearer token (from get_token()).
     :returns: Headers dict with User-Agent and optional Authorization.
     """
-    load_env()
+    _load_env_file()
     _validate_skill(skill)
     _emit_raw_fallback_hint()
     ctx_str = _operation_context_str(skill)
