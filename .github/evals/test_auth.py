@@ -30,6 +30,13 @@ _SCRIPTS = Path(__file__).resolve().parent.parent / "plugins" / "dataverse" / "s
 sys.path.insert(0, str(_SCRIPTS))
 import auth  # noqa: E402  (import after sys.path insert)
 
+# Imported before the per-test azure fakes replace azure.core in sys.modules.
+try:
+    from PowerPlatform.Dataverse.core import config as _sdk_config
+    _SDK_IMPORT_ERROR = None
+except Exception as _exc:  # SDK not installed in this environment
+    _sdk_config, _SDK_IMPORT_ERROR = None, _exc
+
 
 # --- fakes for azure-identity / azure-core -------------------------------
 
@@ -630,10 +637,9 @@ class AgentAttributionFailOpen(_AuthTestBase):
     def test_build_operation_context_strips_suffix_when_sdk_rejects(self):
         # An older installed SDK that rejects the "<agent>/<surface>" suffix must not
         # break the op: auth.py strips the suffix and retries with the bare agent.
-        try:
-            from PowerPlatform.Dataverse.core import config as sdk_config
-        except Exception as exc:  # SDK not importable here -> can't exercise SDK path
-            self.skipTest(f"Dataverse SDK not importable: {exc}")
+        if _sdk_config is None:
+            self.skipTest(f"Dataverse SDK not importable: {_SDK_IMPORT_ERROR}")
+        sdk_config = _sdk_config
         real_oc = sdk_config.OperationContext
         seen = []
 
@@ -653,6 +659,110 @@ class AgentAttributionFailOpen(_AuthTestBase):
         self.assertIn("agent=codex/jetbrains", seen[0])
         self.assertIn("agent=codex", seen[1])
         self.assertNotIn("/jetbrains", seen[1])
+
+
+class AgentDetectionForUnknown(_AuthTestBase):
+    def _agent(self, env):
+        with mock.patch.dict(os.environ, env, clear=True):
+            return auth._current_agent()
+
+    def test_process_markers_fill_missing_agent(self):
+        cases = {
+            "CLAUDECODE": "claude-code",
+            "CLAUDE_CODE": "claude-code",
+            "CODEX_THREAD_ID": "codex",
+            "CODEX_SANDBOX": "codex",
+            "GEMINI_CLI": "gemini-cli",
+            "COPILOT_CLI": "copilot",
+            "ANTIGRAVITY_AGENT": "antigravity-cli",
+            "CURSOR_AGENT": "cursor",
+        }
+        for marker, expected in cases.items():
+            self.assertEqual(self._agent({marker: "1"}), expected, marker)
+        self.assertEqual(self._agent({"CURSOR_EXTENSION_HOST_ROLE": "agent-exec"}), "cursor")
+
+    def test_ai_agent_aliases_map_to_plugin_names(self):
+        for value, expected in (("claude", "claude-code"), ("Gemini", "gemini-cli"),
+                                ("github_copilot_vscode_agent", "copilot"),
+                                ("cursor-cli", "cursor"), ("codex", "codex")):
+            self.assertEqual(self._agent({"AI_AGENT": value}), expected, value)
+
+    def test_ai_agent_wins_over_other_markers(self):
+        self.assertEqual(self._agent({"AI_AGENT": "codex", "CLAUDECODE": "1"}), "codex")
+
+    def test_ai_agent_variants_map_without_a_table_entry(self):
+        for value, expected in (("github_copilot_cli_agent", "copilot"), ("Claude-Code", "claude-code"),
+                                ("antigravity", "antigravity-cli"), ("unknown", "unknown")):
+            self.assertEqual(self._agent({"AI_AGENT": value}), expected, value)
+
+    def test_agent_an_old_sdk_rejects_falls_back_to_unknown(self):
+        # SDK <= 1.1.0 lists only claude-code/copilot/cursor/codex/unknown; a detected
+        # gemini-cli must not make get_client raise.
+        if _sdk_config is None:
+            self.skipTest(f"Dataverse SDK not importable: {_SDK_IMPORT_ERROR}")
+        sdk_config = _sdk_config
+        real_oc = sdk_config.OperationContext
+        old_sdk_agents = {"claude-code", "copilot", "cursor", "codex", "unknown"}
+
+        def old_sdk_oc(user_agent_context):
+            if user_agent_context.split("agent=", 1)[1] not in old_sdk_agents:
+                raise ValueError("Unknown agent")
+            return real_oc(user_agent_context=user_agent_context)
+
+        env = {"DATAVERSE_PLUGIN_VERSION": "1.20.0", "GEMINI_CLI": "1",
+               "DATAVERSE_PLUGIN_AGENT": "unknown/jetbrains"}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(sdk_config, "OperationContext", old_sdk_oc):
+            ctx = auth._build_operation_context("dv-query")
+        self.assertTrue(ctx.user_agent_context.endswith(";agent=unknown"))
+
+    def test_unlisted_agent_stays_unknown(self):
+        self.assertEqual(self._agent({"AI_AGENT": "windsurf", "CLAUDECODE": "1"}), "unknown")
+        self.assertEqual(self._agent({"AGENT": "amp", "CLAUDECODE": "1"}), "unknown")
+
+    def test_cursor_trace_id_alone_is_not_an_agent(self):
+        self.assertEqual(self._agent({"CURSOR_TRACE_ID": "abc"}), "unknown")
+
+    def test_explicit_agent_is_never_overridden(self):
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "cursor", "CLAUDECODE": "1"}), "cursor")
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "codex/jetbrains", "CLAUDECODE": "1"}),
+            "codex/jetbrains")
+
+    def test_unknown_and_unrecognized_values_are_filled(self):
+        self.assertEqual(self._agent({"DATAVERSE_PLUGIN_AGENT": "unknown", "CODEX_CI": "1"}), "codex")
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "github-copilot", "COPILOT_CLI": "1"}), "copilot")
+
+    def test_surface_suffix_is_kept(self):
+        self.assertEqual(
+            self._agent({"DATAVERSE_PLUGIN_AGENT": "unknown/jetbrains", "CODEX_THREAD_ID": "t"}),
+            "codex/jetbrains")
+
+    def test_headers_and_cli_context_carry_detected_agent(self):
+        env = {"DATAVERSE_PLUGIN_VERSION": "1.18.0", "CLAUDECODE": "1"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self.assertIn("agent=claude-code", auth.get_plugin_headers("dv-query")["User-Agent"])
+            self.assertIn("agent=claude-code", auth.get_cli_context("dv-query"))
+
+    def test_headers_and_cli_context_read_env_file_without_get_token(self):
+        # Building headers before get_token() must still pick up the agent from .env.
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, ".env").write_text(
+                "DATAVERSE_PLUGIN_AGENT=codex/jetbrains\nDATAVERSE_PLUGIN_VERSION=1.20.0\n",
+                encoding="utf-8",
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertIn("agent=codex/jetbrains",
+                                  auth.get_plugin_headers("dv-query")["User-Agent"])
+                with mock.patch.dict(os.environ, {}, clear=True):
+                    self.assertIn("agent=codex/jetbrains", auth.get_cli_context("dv-query"))
+            finally:
+                os.chdir(cwd)
 
 
 class SilentChainReasons(_AuthTestBase):
