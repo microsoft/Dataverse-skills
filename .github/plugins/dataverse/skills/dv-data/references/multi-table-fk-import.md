@@ -210,3 +210,44 @@ def bulk_create(logical_name, records, chunk_size=1000):
                 raise
     return all_guids
 ```
+
+## If a create script fails partway
+
+Small related-record writes -- a few accounts, their contacts, their activities -- usually use `client.records.create()` without alternate keys. When such a script fails partway, the records it created before the failure already exist. Do not re-run the whole script: that creates duplicates in the customer's environment. Look up what already exists by the values you set, then create only what is missing:
+
+```python
+companies = ["Contoso", "Fabrikam", "Adventure Works"]
+name_filter = " or ".join("name eq '{}'".format(n.replace("'", "''")) for n in companies)
+account_ids = {r["name"]: r["accountid"]
+               for r in client.records.list("account", select=["accountid", "name"], filter=name_filter)}
+for name in companies:
+    if name not in account_ids:
+        account_ids[name] = client.records.create("account", {"name": name})
+```
+
+Do the same for child rows before creating them -- match contacts on the email you set, activities on their subject and regarding row. Report the final IDs from the lookup, not from the failed run's output.
+
+## Lookup resolution during a single-table import
+
+If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs a GUID, pre-resolve with a lookup dict:
+
+```python
+# Build email -> GUID map first
+email_to_guid = {}
+for r in client.records.list("new_customer", select=["new_customerid", "new_email"]):
+    email_to_guid[r["new_email"]] = r["new_customerid"]
+
+# Use it during import
+records = []
+for row in rows:
+    customer_guid = email_to_guid.get(row["customer_email"])
+    if not customer_guid:
+        print(f"Skipping row — unknown email: {row['customer_email']}")
+        continue
+    records.append({
+        "new_channel": row["channel"],
+        "new_CustomerId@odata.bind": f"/new_customers({customer_guid})",  # verify entity set name via EntityDefinitions
+    })
+
+guids = client.records.create("new_interaction", records)
+```

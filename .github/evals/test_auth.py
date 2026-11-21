@@ -18,6 +18,7 @@ Guards the #108 invariants:
     SNI options.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -509,16 +510,51 @@ class PluginVersionAttribution(_AuthTestBase):
             self.assertRegex(auth._plugin_version(), r"^\d+\.\d+\.\d+")
 
     def test_unknown_when_env_absent_and_manifest_unreachable(self):
-        import tempfile
         auth._PLUGIN_VERSION_CACHE = None
         cwd = os.getcwd()
-        with mock.patch.dict(os.environ, {}, clear=True), \
+        with tempfile.TemporaryDirectory() as root, \
+                mock.patch.object(auth, "__file__", str(Path(root) / "scripts" / "auth.py")), \
+                mock.patch.dict(os.environ, {}, clear=True), \
                 mock.patch("urllib.request.urlopen", side_effect=OSError("no network")):
             try:
-                os.chdir(tempfile.gettempdir())
+                os.chdir(root)
                 self.assertEqual(auth._plugin_version(), "unknown")
             finally:
                 os.chdir(cwd)
+
+    def _version_from_bundle(self, files):
+        auth._PLUGIN_VERSION_CACHE = None
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as elsewhere:
+            for relative, data in files.items():
+                path = Path(root) / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(data), encoding="utf-8")
+            with mock.patch.object(auth, "__file__", str(Path(root) / "scripts" / "auth.py")), \
+                    mock.patch.dict(os.environ, {}, clear=True), \
+                    mock.patch("urllib.request.urlopen", side_effect=AssertionError("network")):
+                try:
+                    os.chdir(elsewhere)
+                    return auth._resolve_manifest_version()
+                finally:
+                    os.chdir(cwd)
+                    auth._PLUGIN_VERSION_CACHE = None
+
+    def test_antigravity_bundle_root_manifest_resolves_without_network(self):
+        # The Marketplace bundle drops .claude-plugin/ and lifts the native
+        # manifest to the installed root plugin.json.
+        version = self._version_from_bundle({"plugin.json": {"name": "dataverse", "version": "9.8.7"}})
+        self.assertEqual(version, "9.8.7")
+
+    def test_antigravity_source_manifest_resolves_without_network(self):
+        version = self._version_from_bundle(
+            {".antigravity-plugin/plugin.json": {"name": "dataverse", "version": "9.8.6"}}
+        )
+        self.assertEqual(version, "9.8.6")
+
+    def test_unrelated_root_manifest_is_ignored(self):
+        version = self._version_from_bundle({"plugin.json": {"name": "other", "version": "1.0.0"}})
+        self.assertEqual(version, "unknown")
 
     def test_antigravity_agent_is_emitted_in_operation_context(self):
         env = {
@@ -745,6 +781,23 @@ class WorkspaceTokenCachePath(_AuthTestBase):
                         os.chdir(cwd)
         self.assertIsNotNone(results[0])
         self.assertEqual(results[0], results[1])
+
+    def test_installed_plugin_root_never_hosts_the_cache(self):
+        # Antigravity runs auth.py from ~/.gemini/config/plugins/dataverse/scripts;
+        # a relative cache dir must land in the cwd, not the read-only plugin root.
+        with tempfile.TemporaryDirectory() as plugin, tempfile.TemporaryDirectory() as work:
+            (Path(plugin) / "skills").mkdir()
+            (Path(plugin) / "plugin.json").write_text('{"name": "dataverse"}', encoding="utf-8")
+            cwd = os.getcwd()
+            try:
+                os.chdir(work)
+                with mock.patch.object(auth, "__file__", str(Path(plugin) / "scripts" / "auth.py")), \
+                        mock.patch.dict(os.environ, {"DATAVERSE_TOKEN_CACHE_DIR": ".dataverse"}, clear=True):
+                    path = auth._workspace_token_cache_path()
+            finally:
+                os.chdir(cwd)
+            self.assertEqual(path.parent.resolve(), (Path(work) / ".dataverse").resolve())
+            self.assertFalse((Path(plugin) / ".dataverse").exists())
 
 
 class WorkspaceCacheAutoDefault(_AuthTestBase):

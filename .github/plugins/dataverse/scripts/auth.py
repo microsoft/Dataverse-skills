@@ -332,6 +332,42 @@ def _should_use_workspace_cache():
     return "default"
 
 
+# Manifests that mark a directory as an installed (or source) plugin root rather
+# than a user workspace. Antigravity lifts .antigravity-plugin/plugin.json to the
+# installed root plugin.json and drops .claude-plugin/.
+_PLUGIN_MANIFESTS = (
+    ".antigravity-plugin/plugin.json",
+    "plugin.json",
+    ".claude-plugin/plugin.json",
+    ".github/plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+    ".cursor-plugin/plugin.json",
+    "gemini-extension.json",
+)
+
+
+def _is_plugin_root(path):
+    """True when ``path`` is a plugin install/source root (skills/ + a manifest)."""
+    try:
+        return (path / "skills").is_dir() and any(
+            (path / manifest).is_file() for manifest in _PLUGIN_MANIFESTS
+        )
+    except OSError:
+        return False
+
+
+def _workspace_root():
+    """Directory that anchors workspace-relative paths such as the token cache.
+
+    The deployed ``<project>/scripts/auth.py`` copy anchors to ``<project>`` so the
+    location does not depend on where the process starts. When this file runs from
+    an installed plugin (e.g. ``~/.gemini/config/plugins/dataverse``), that parent
+    is the read-only, update-replaced plugin root, so anchor to the cwd instead.
+    """
+    script_root = Path(__file__).resolve().parent.parent
+    return Path.cwd() if _is_plugin_root(script_root) else script_root
+
+
 def _workspace_token_cache_path():
     """Return the MSAL v3 cache file path used to persist the device-code refresh
     token across separate Python processes, or None to keep the OS default cache.
@@ -340,7 +376,8 @@ def _workspace_token_cache_path():
 
     Resolution (see _should_use_workspace_cache):
       - DATAVERSE_TOKEN_CACHE_DIR set to a path -> use it (a relative dir is anchored
-        to the workspace root, matching how load_env finds .env).
+        to the workspace root, matching how load_env finds .env; never inside an
+        installed plugin directory -- see _workspace_root).
       - opt-out value (off/false/0/no/none) -> None.
       - unset on a HEADLESS, non-CI host (ChatGPT web / Codex sandbox / SSH / container)
         -> DEFAULT to ``<workspace>/.dataverse`` (the OS cache lives under $HOME, which
@@ -366,11 +403,7 @@ def _workspace_token_cache_path():
     try:
         path = Path(cache_dir)
         if not path.is_absolute():
-            # Anchor a relative dir to the workspace root (this file's parent dir's
-            # parent -- the deployed <project>/scripts/auth.py layout), NOT the
-            # current working directory, so the cache location is stable no matter
-            # where the process is launched from (matches how load_env finds .env).
-            path = Path(__file__).resolve().parent.parent / path
+            path = _workspace_root() / path
         path.mkdir(parents=True, exist_ok=True)
         # Defense in depth: exclude the token cache from git even if the repo-root
         # .gitignore does not cover this dir.
@@ -873,24 +906,31 @@ def _plugin_version():
 def _resolve_manifest_version():
     """Resolve the plugin version from the canonical manifest, cached per process.
 
-    Tries a local manifest (present on repo-clone / plugin installs), then fetches
-    it from GitHub (npx / registry installs ship no manifest). Network and parse
-    failures degrade to "unknown" -- this never raises.
+    Tries a local manifest -- this plugin's own root first (Antigravity bundles ship
+    plugin.json / .antigravity-plugin/plugin.json and no .claude-plugin/), then the
+    cwd for repo clones -- and finally fetches it from GitHub (npx / registry
+    installs ship no manifest). Only a manifest named "dataverse" counts. Network
+    and parse failures degrade to "unknown" -- this never raises.
     """
     global _PLUGIN_VERSION_CACHE
     if _PLUGIN_VERSION_CACHE is not None:
         return _PLUGIN_VERSION_CACHE
     import json
 
+    plugin_root = Path(__file__).resolve().parent.parent
+    candidates = [plugin_root / manifest for manifest in _PLUGIN_MANIFESTS[:3]]
+    candidates += [Path(".claude-plugin/plugin.json"),
+                   Path(".github/plugins/dataverse/.claude-plugin/plugin.json")]
     version = "unknown"
-    for manifest in (".claude-plugin/plugin.json",
-                     ".github/plugins/dataverse/.claude-plugin/plugin.json"):
+    for manifest in candidates:
         try:
             with open(manifest, encoding="utf-8") as fh:
-                version = json.load(fh).get("version") or version
-            break
+                data = json.load(fh)
         except (OSError, ValueError):
             continue
+        if isinstance(data, dict) and data.get("name") == "dataverse" and data.get("version"):
+            version = data["version"]
+            break
     if version == "unknown":
         try:
             import urllib.request

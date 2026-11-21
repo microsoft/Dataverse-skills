@@ -1,6 +1,6 @@
 ---
 name: dv-security
-description: Security-role assignment, user access, application users, business units, and admin self-elevation in Dataverse environments. Use when the user wants to give someone access, grant a role, become an admin, or add a service principal.
+description: Security-role assignment, user access, application users, business units, and admin self-elevation in Dataverse environments. Use when the user wants to give someone access, grant a role, become an admin, or add a service principal. Don't use for generic IAM, Azure RBAC, Entra ID directory administration, OS or database permissions, or security reviews outside Dataverse.
 ---
 
 # Skill: Security — Role Assignment and Self-Elevation

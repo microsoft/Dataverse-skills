@@ -130,3 +130,13 @@ print(f"View: {env_url}/main.aspx?pagetype=entitylist&etn={TABLE}", flush=True)
 - Use `555-01xx` phone numbers — obviously fake
 - Skip lookup fields unless user explicitly asks
 - Skip system fields: `createdon`, `modifiedon`, `ownerid`, `statecode`, `statuscode`
+
+## Confirmation-flow examples
+
+**Generate N sample records (destructive — preview the snippet, ask for env):**
+- ❌ "Which environment should I target? Please provide the Dataverse URL."
+- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
+
+**Sample data on a custom entity (schema unknown — prose is enough):**
+- ❌ "I need more info about the entity. What are the required fields?"
+- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."

@@ -137,9 +137,12 @@ agy plugin install https://github.com/microsoft/Dataverse-skills/tree/main/.gith
 If the Gemini extension is already installed, import the same plugin with
 `agy plugin import gemini` instead.
 
-Restart `agy`, then use `/skills` to verify discovery. Invoke `/dv-connect` to
-select an environment and register the Dataverse MCP server with `agy mcp add`;
-verify it with `agy mcp list` after restarting.
+Restart `agy`, then use `/skills` to verify discovery. The plugin bundles a
+pinned Dataverse MCP server and installs **disabled** until you set its
+**Dataverse environment URL** in `/plugin` (or **Customizations > Plugins** in
+the app). Then invoke `/dv-connect` to sign in and verify the environment.
+Skill-only installs can register a user-scope server with `agy mcp add`
+instead; verify it with `agy mcp list` after restarting.
 
 ### JetBrains IDEs (PyCharm, Rider)
 

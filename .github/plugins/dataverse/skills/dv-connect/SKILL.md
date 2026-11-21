@@ -1,6 +1,6 @@
 ---
 name: dv-connect
-description: One-step setup and connection diagnostics for a Dataverse environment — installs tools, authenticates, registers MCP, writes `.env`, and verifies active profiles and linked ERP endpoints. Use when starting a new project, switching environments, fixing authentication, troubleshooting MCP, or checking existing Dataverse / Finance and Operations connectivity or linkage.
+description: One-step setup and connection diagnostics for a Dataverse environment — installs tools, authenticates, registers MCP, writes `.env`, and verifies active profiles and linked ERP endpoints. Use when starting a new project, switching environments, fixing authentication, troubleshooting MCP, verifying which environment or identity is connected (WhoAmI, `DATAVERSE_URL` match), or checking existing Dataverse / Finance and Operations connectivity or linkage. Don't use for non-Dataverse database or API connections, or Azure / Entra sign-in problems unrelated to Dataverse.
 ---
 
 # Skill: Connect
@@ -153,7 +153,7 @@ Present authentication options:
 
 Write `.env` directly — do not instruct the user to create it:
 
-Use one detected `tool_type` to derive both `MCP_CLIENT_ID` and canonical attribution. Set `PLUGIN_VERSION` from the loaded manifest; Antigravity uses `.claude-plugin/plugin.json` because native `plugin.json` has none.
+Use one detected `tool_type` to derive both `MCP_CLIENT_ID` and canonical attribution. Set `PLUGIN_VERSION` from the loaded manifest; Antigravity reads the installed root `plugin.json` (`.antigravity-plugin/plugin.json` in source), since bundles omit `.claude-plugin/`.
 
 ```python
 tool_type = "<copilot | claude | cursor | codex | gemini | antigravity | unknown>"

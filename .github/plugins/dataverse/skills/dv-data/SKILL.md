@@ -1,6 +1,6 @@
 ---
 name: dv-data
-description: Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables, or plan or perform Finance and Operations (ERP) record writes and DMF package imports.
+description: Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads, AI-generated sample data. Use when the user wants to write, modify, seed, or import data records into Dataverse tables, or plan or perform Finance and Operations (ERP) record writes and DMF package imports. Don't use for non-Dataverse databases or files, read-only queries (dv-query), or schema changes (dv-metadata).
 ---
 
 # Skill: Data — Create, Update, Delete, and Bulk Import
@@ -64,7 +64,7 @@ import requests                        # WRONG for SDK-supported ops
 
 Forms/views (`systemform`/`savedquery`) **are** ordinary records — create/modify them with `client.records.*` (see **dv-metadata**), and read N:N with `records.list(expand=...)`. For the genuine gaps below, prefer the managed `dataverse api` escape hatch over raw `urllib`:
 - Global option sets — see **dv-metadata**
-- N:N record association — CLI `dataverse data associate`, or `POST /api/data/v9.2/<entity>(<id>)/<nav-property>/$ref`
+- N:N record association — CLI `dataverse data associate`. There is no `client.records.associate`; a lookup (1:N, e.g. contact → parent account) is not a gap — use `dataverse data associate` or `client.records.update` (see [Link existing records](#link-existing-records-lookup))
 - `$apply` aggregation — use `client.query.fetchxml()`; see **dv-query**
 - Unbound actions (e.g., `PublishXml`, `InstallSampleData`) — `dataverse api request`/`invoke`
 
@@ -162,6 +162,23 @@ print(f"Created: {guid}")
 | Custom: `new_AccountId` | `new_AccountId@odata.bind` | ~~`new_accountid@odata.bind`~~ |
 | System polymorphic: `customerid` | `customerid_account@odata.bind` | ~~`customerid@odata.bind`~~ |
 | System: `parentcustomerid` | `parentcustomerid_account@odata.bind` | ~~`_parentcustomerid_value@odata.bind`~~ |
+| Activity regarding (`phonecall` -> account) | `regardingobjectid_account_phonecall@odata.bind` | ~~`regardingobjectid@odata.bind`~~ |
+
+### Link existing records (lookup)
+
+To link records that already exist, update the child's lookup with the real IDs returned by create — do not hand-build a `$ref` request:
+
+```python
+client.records.update("contact", contact_id, {
+    "parentcustomerid_account@odata.bind": f"/accounts({account_id})",
+})
+```
+
+CLI: `dataverse data associate` (example above) works for lookups as well as N:N.
+
+### Activities (phone call, task, email, appointment)
+
+Create the activity open, then mark it done with ONE update that sets a matching `statecode` + `statuscode` pair -- the codes differ per table. Pattern and code table: [`references/activities.md`](references/activities.md).
 
 ### Find the Navigation Property Name
 
@@ -296,28 +313,7 @@ for i in range(0, len(records), chunk_size):
 
 ### Lookup resolution during import
 
-If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs a GUID, pre-resolve with a lookup dict:
-
-```python
-# Build email -> GUID map first
-email_to_guid = {}
-for r in client.records.list("new_customer", select=["new_customerid", "new_email"]):
-    email_to_guid[r["new_email"]] = r["new_customerid"]
-
-# Use it during import
-records = []
-for row in rows:
-    customer_guid = email_to_guid.get(row["customer_email"])
-    if not customer_guid:
-        print(f"Skipping row — unknown email: {row['customer_email']}")
-        continue
-    records.append({
-        "new_channel": row["channel"],
-        "new_CustomerId@odata.bind": f"/new_customers({customer_guid})",  # verify entity set name via EntityDefinitions
-    })
-
-guids = client.records.create("new_interaction", records)
-```
+If the CSV has a human-readable key (e.g., `customer_email`) but Dataverse needs a GUID, pre-resolve a key -> GUID dict with one `client.records.list(...)` call, skip rows whose key is unknown (report them), and bind with `"new_CustomerId@odata.bind": f"/new_customers({guid})"` (verify the entity set name). Full snippet: [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md#lookup-resolution-during-a-single-table-import).
 
 ### Required field discovery for system tables
 
@@ -365,6 +361,8 @@ except HttpError as e:
     # 429 — rate limited; SDK retries automatically, reduce batch size if persistent
 ```
 
+**A script that fails partway may already have created some records.** Never re-run it as-is -- that duplicates them in the customer's environment. Look up what exists by the values you set and create only what is missing: [`references/multi-table-fk-import.md`](references/multi-table-fk-import.md#if-a-create-script-fails-partway).
+
 ---
 
 ## Writing ERP data
@@ -392,13 +390,4 @@ For the schema-driven `fake()` template, the `EntityDefinitions` query, and the 
 Key invariants:
 - Skip Lookup, Uniqueidentifier, State, Status, Owner, Customer fields unless the user explicitly provides values.
 - `UserLocalizedLabel` may be null — dereference safely.
-
-### Confirmation-flow examples
-
-**Generate N sample records (destructive — preview the snippet, ask for env):**
-- ❌ "Which environment should I target? Please provide the Dataverse URL."
-- ✅ "I'll run the Sample Data Generation snippets with `TABLE=\"contact\"`, `COUNT=20`. Uses `CreateMultiple`, `.example.com` emails, `555-01xx` phones, against the active `pac auth list` environment. Confirm to proceed, or specify a different environment."
-
-**Sample data on a custom entity (schema unknown — prose is enough):**
-- ❌ "I need more info about the entity. What are the required fields?"
-- ✅ "Custom entity — I'll query `EntityDefinitions` for `cr123_project` to discover required columns, then generate 5 records inline mapping each column to a generator by `AttributeType` and call `client.records.create(\"cr123_project\", records)`. Confirm to proceed, or tell me a different count."
+- Don't stop to ask for the environment or schema: state the active environment, table, and count, then ask to confirm. For a custom table, say you will discover required columns from `EntityDefinitions` first. Examples: [`references/sample-data-generation.md`](references/sample-data-generation.md#confirmation-flow-examples).

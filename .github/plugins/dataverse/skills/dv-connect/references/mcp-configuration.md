@@ -92,9 +92,19 @@ Store this path for use in steps 2 and 5.
 
 **If TOOL_TYPE is `antigravity`:**
 
-Antigravity CLI manages MCP servers at user scope through `agy mcp`. Do not
-write `.agents/mcp_config.json`; Antigravity CLI 1.2.10 does not discover that
-file. The CLI persists registrations in `~/.gemini/config/mcp_config.json`.
+Prefer the **plugin-scoped** server. The installed plugin ships
+`mcp_config.json` with a `dataverse` server (runtime name
+`dataverse_dataverse`) that runs the pinned `@microsoft/dataverse` package
+against the `DATAVERSE_URL` plugin variable. It is removed with the plugin and
+leaves nothing in the user's global configuration. Because that variable is
+required, Antigravity installs the plugin **disabled** until the user fills it
+in; store `ANTIGRAVITY_SCOPE=plugin`.
+
+Use `ANTIGRAVITY_SCOPE=user` only when the plugin-scoped server is unavailable
+(skills installed without the plugin) or the user needs a second environment.
+That path uses `agy mcp`, which persists registrations in
+`~/.gemini/config/mcp_config.json`. Do not write `.agents/mcp_config.json`;
+Antigravity CLI 1.2.10 does not discover that file.
 
 **If TOOL_TYPE is `gemini`:**
 
@@ -152,8 +162,10 @@ If the environment URL from `.env` is already in `CONFIGURED_URLS`, the MCP serv
 
 **If TOOL_TYPE is `antigravity`:**
 
-Run `agy mcp list`. If a `dataverse-{orgname}` entry already uses the selected
-environment URL, do not add a duplicate.
+Run `agy plugin list --json` and `agy mcp list`. If the plugin is enabled and
+`dataverse_dataverse` resolves to the selected environment URL, do not add
+anything. If a user-scope `dataverse-{orgname}` entry already uses that URL, do
+not add a duplicate.
 
 **If TOOL_TYPE is `gemini`:**
 
@@ -302,14 +314,26 @@ Enter `USER_URL`, restart Gemini, and verify with `gemini mcp list`.
 
 **If TOOL_TYPE is `antigravity`:**
 
-Register through Antigravity's native CLI:
+With `ANTIGRAVITY_SCOPE=plugin` (default), do not run `agy mcp add`. Ask the
+user to set the plugin variable instead: open `/plugin` in the CLI (or
+**Customizations > Plugins > Microsoft Dataverse** in the Antigravity App),
+enter `USER_URL` as **Dataverse environment URL**, and enable the plugin
+(`agy plugin enable dataverse` prompts for it too). The bundled server supports
+the GA endpoint only; if the user explicitly requested Preview, use the
+user-scope command below.
+
+With `ANTIGRAVITY_SCOPE=user`, register through Antigravity's native CLI with
+the same pinned package version as the plugin's `mcp_config.json`:
 
 ```
-agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli" dataverse-{orgname} npx -y @microsoft/dataverse@latest mcp {USER_URL}
+agy mcp add --env "DATAVERSE_OPERATION_CONTEXT=app=dataverse-skills/{DATAVERSE_PLUGIN_VERSION};skill=mcp-direct;agent=antigravity-cli" dataverse-{orgname} npx -y @microsoft/dataverse@1.0.88 mcp {USER_URL}
 ```
 
-Append `--preview` only when the user explicitly selected Preview. Restart
-`agy`, confirm registration with `agy mcp list`, then confirm connection in `/mcp`.
+Append `--preview` only when the user explicitly selected Preview. Remove the
+entry with `agy mcp remove dataverse-{orgname}` when it is no longer needed;
+uninstalling the plugin does not remove user-scope registrations.
+
+Restart `agy`, confirm registration with `agy mcp list`, then confirm connection in `/mcp`.
 
 **If TOOL_TYPE is `copilot`:**
 

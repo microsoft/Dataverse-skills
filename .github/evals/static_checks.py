@@ -38,6 +38,7 @@ CAT-4  Skill Structure & Discoverability
        EVAL-STRUCT-02  Frontmatter 'name' matches the skill directory name
        EVAL-STRUCT-03  Description contains a 'Use when' routing hint
        EVAL-STRUCT-04  Description is <= 1024 chars (Anthropic spec hard limit)
+       EVAL-STRUCT-06  Description has a "Don't use for ..." negative boundary
        EVAL-STRUCT-05  Frontmatter parses as valid YAML (catches unquoted colons,
                        malformed mappings, and other syntax errors that break the
                        skill manifest on GitHub and at plugin-load time)
@@ -64,7 +65,7 @@ CAT-6  dv-admin Allowlist Enforcement
 CAT-7  Manifest Version Consistency
        Checks that the plugin version matches across all marketplace and plugin
        manifest files, preventing drift when version bumps miss a file.
-    EVAL-VERSION-01  All twelve version fields match (9 files, 12 fields total)
+    EVAL-VERSION-01  All thirteen version fields match (10 files, 13 fields total)
        EVAL-VERSION-02  Version format is valid semver (x.y.z)
 
 CAT-8  Skill Token Budget (Anthropic Skills spec)
@@ -72,9 +73,12 @@ CAT-8  Skill Token Budget (Anthropic Skills spec)
      loaded across every interaction) ~100 tokens; Level 2 (body, loaded on
        trigger) <5k tokens; Level 3 (`references/`, loaded on demand) unlimited.
        EVAL-BUDGET-01  Frontmatter <= 200 tokens (Level 1, with headroom)
-       EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap)
+       EVAL-BUDGET-02  Body       <= 5,000 tokens (Level 2 cap), measured as the
+                       larger of tiktoken and chars/4 so the verdict does not
+                       depend on whether tiktoken is installed
        EVAL-BUDGET-03  Skills with body > 4,000 tokens must have a `references/`
                        subfolder (forces Level 3 split before Level 2 fills up)
+       EVAL-BUDGET-04  Body       <= 22,000 bytes (Antigravity truncates at 24,000)
 
 CAT-9  Manifest Description Consistency
        Checks that the plugin description matches across all plugin.json
@@ -112,6 +116,7 @@ CAT-13 Antigravity Plugin
     EVAL-ANTIGRAVITY-02  auth.py allows Antigravity attribution
     EVAL-ANTIGRAVITY-03  README installs the canonical plugin directory
     EVAL-ANTIGRAVITY-04  MCP guidance has path, server name, and attribution
+    EVAL-ANTIGRAVITY-05  Plugin-scoped mcp_config.json is pinned and matches docs
     EVAL-ANTIGRAVITY-06  Bundled SVG logo is square and at least 128px
 
 CAT-14 Gemini Extension
@@ -410,6 +415,14 @@ def check_structure(name, text):
             f"exceeds Anthropic's {DESCRIPTION_CHAR_LIMIT}-char limit"
         )
 
+    # EVAL-STRUCT-06: hosts that route on frontmatter alone (Antigravity) need a
+    # negative trigger boundary so generic SQL / IAM / CI-CD prompts don't match.
+    if "Don't use for" not in desc:
+        failures.append(
+            f"EVAL-STRUCT-06 [{name}] description missing a \"Don't use for ...\" "
+            f"negative trigger boundary"
+        )
+
     # EVAL-STRUCT-05: frontmatter must parse as valid YAML.
     # Without this, descriptions with unquoted colons (e.g., "data model: add a
     # column") render fine to a regex-extractor but break GitHub's YAML parser
@@ -611,10 +624,10 @@ def _gemini_context_version(manifest):
 
 def check_version_consistency(repo_root):
     """
-    EVAL-VERSION-01: All twelve version fields match across manifest files.
+    EVAL-VERSION-01: All thirteen version fields match across manifest files.
     EVAL-VERSION-02: Version format is valid semver (x.y.z).
 
-    The twelve version fields live in nine files:
+    The thirteen version fields live in ten files:
       1. .github/plugin/marketplace.json -- metadata.version
       2. .github/plugin/marketplace.json -- plugins[0].version
       3. .github/plugins/dataverse/.claude-plugin/plugin.json -- version
@@ -628,6 +641,8 @@ def check_version_consistency(repo_root):
          mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
      11. gemini-extension.json (repo root, read by the Gemini gallery) -- version
     12. .github/plugins/dataverse/.antigravity-plugin/plugin.json -- version
+     13. .github/plugins/dataverse/mcp_config.json --
+         mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT (app version)
     """
     failures = []
 
@@ -691,6 +706,11 @@ def check_version_consistency(repo_root):
             ".github/plugins/dataverse/.antigravity-plugin/plugin.json",
             lambda d: d.get("version"),
             "version",
+        ),
+        (
+            ".github/plugins/dataverse/mcp_config.json",
+            _gemini_context_version,
+            "mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT",
         ),
     ]
 
@@ -1008,6 +1028,62 @@ def check_antigravity_plugin(repo_root):
             "unsupported .agents/mcp_config.json path to .gitignore"
         )
 
+    failures.extend(_check_antigravity_mcp_config(repo_root, manifest, normalized_mcp_reference))
+    return failures
+
+
+ANTIGRAVITY_MCP_PACKAGE = re.compile(r"^@microsoft/dataverse@(\d+\.\d+\.\d+)$")
+
+
+def _check_antigravity_mcp_config(repo_root, manifest, normalized_mcp_reference):
+    """EVAL-ANTIGRAVITY-05: plugin-scoped MCP server pinned, attributed, and documented."""
+    relative_path = f"{_PLUGIN_ROOT}/mcp_config.json"
+    try:
+        config = json.loads((repo_root / relative_path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [f"EVAL-ANTIGRAVITY-05 [{relative_path}] file not found"]
+    except json.JSONDecodeError as error:
+        return [f"EVAL-ANTIGRAVITY-05 [{relative_path}] invalid JSON: {error}"]
+    if not isinstance(config, dict) or set(config) != {"mcpServers"}:
+        return [f"EVAL-ANTIGRAVITY-05 [{relative_path}] root must contain only mcpServers"]
+    servers = config["mcpServers"]
+    server = servers.get("dataverse") if isinstance(servers, dict) else None
+    if not isinstance(server, dict):
+        return [f"EVAL-ANTIGRAVITY-05 [{relative_path}] missing mcpServers.dataverse"]
+
+    failures = []
+    args = server.get("args")
+    package = args[1] if isinstance(args, list) and len(args) == 4 else ""
+    pin = ANTIGRAVITY_MCP_PACKAGE.match(package) if isinstance(package, str) else None
+    if (
+        server.get("command") != "npx"
+        or not pin
+        or args != ["-y", package, "mcp", "${DATAVERSE_URL}"]
+    ):
+        failures.append(
+            f"EVAL-ANTIGRAVITY-05 [{relative_path}] server must run "
+            "'npx -y @microsoft/dataverse@<x.y.z> mcp ${DATAVERSE_URL}' (pinned, not @latest)"
+        )
+    expected_context = (
+        f"app=dataverse-skills/{manifest.get('version')};skill=mcp-direct;agent=antigravity-cli"
+    )
+    env = server.get("env") if isinstance(server.get("env"), dict) else {}
+    if env.get("DATAVERSE_OPERATION_CONTEXT") != expected_context:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-05 [{relative_path}] DATAVERSE_OPERATION_CONTEXT "
+            f"must equal {expected_context!r}"
+        )
+    variables = server.get("variables")
+    names = [v.get("name") for v in variables if isinstance(v, dict)] if isinstance(variables, list) else []
+    if names != ["DATAVERSE_URL"]:
+        failures.append(
+            f"EVAL-ANTIGRAVITY-05 [{relative_path}] server variables must declare only DATAVERSE_URL"
+        )
+    if pin and f"npx -y {package} mcp" not in normalized_mcp_reference:
+        failures.append(
+            "EVAL-ANTIGRAVITY-05 [mcp-configuration.md] agy mcp add must use the "
+            f"same pinned package as mcp_config.json ({package})"
+        )
     return failures
 
 
@@ -1218,6 +1294,8 @@ def check_allowed_skills_sync(repo_root, all_skill_names):
 FRONTMATTER_TOKEN_CAP = 200
 BODY_TOKEN_CAP = 5000
 BODY_TOKEN_REFERENCES_TRIGGER = 4000
+# Antigravity hard-truncates SKILL.md bodies at 24,000 bytes; keep 2 KB headroom.
+BODY_BYTE_CAP = 22000
 
 
 def check_token_budget(name, text, skill_dir):
@@ -1244,11 +1322,19 @@ def check_token_budget(name, text, skill_dir):
             f"Trim trigger phrases and over-long enumerations."
         )
 
-    body_tokens = count_tokens(body)
+    body_tokens = max(count_tokens(body), len(body) // 4)
     if body_tokens > BODY_TOKEN_CAP:
         failures.append(
             f"EVAL-BUDGET-02 [{name}] body is {body_tokens} tokens, "
             f"exceeds cap of {BODY_TOKEN_CAP} (Anthropic Level 2). "
+            f"Split long content into `references/<topic>.md` files."
+        )
+
+    body_bytes = len(body.encode("utf-8"))
+    if body_bytes > BODY_BYTE_CAP:
+        failures.append(
+            f"EVAL-BUDGET-04 [{name}] body is {body_bytes} bytes, exceeds "
+            f"{BODY_BYTE_CAP} (Antigravity truncates SKILL.md bodies at 24,000). "
             f"Split long content into `references/<topic>.md` files."
         )
 

@@ -1,6 +1,6 @@
 ---
 name: dv-solution
-description: Dataverse solution lifecycle — create, export, import, promote across environments, and validate deployments. Use when the user wants to package customizations, deploy to another environment, or move work between dev / test / prod.
+description: Dataverse solution lifecycle — create, export, import, promote across environments, and validate deployments. Use when the user wants to package customizations, deploy to another environment, or move work between dev / test / prod. Don't use for generic CI/CD pipelines, source-control workflows, or application deployments that don't move Dataverse solutions.
 ---
 
 # Skill: Solution
