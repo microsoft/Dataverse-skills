@@ -1,6 +1,6 @@
 ---
 name: dv-overview
-description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP; load this first for orientation. Specialist skills self-route via their own frontmatter triggers. Finance and Operations / F&O business-data requests also require this skill first, then dv-query for reads.
+description: Foundational cross-cutting context for Dataverse / Power Platform work — scope and the skill map, the tool-capability reference, the safety rules, and the safe change lifecycle. Use when the user mentions Dataverse, Dynamics 365, Power Platform, CRM, or ERP, or asks which skill, tool, or sequence of steps to use for tables, solutions, or records; load this first for orientation. Specialist skills self-route via their own frontmatter triggers. Finance and Operations / F&O business-data requests also require this skill first, then dv-query for reads. Don't use for general programming, SQL, or cloud questions that don't involve Dataverse or Power Platform.
 ---
 
 # Skill: Overview — What to Use and When
@@ -11,7 +11,7 @@ Load this skill first for Dataverse work: scope, tool capabilities, hard rules, 
 
 ## What This Plugin Covers
 
-Dataverse / Power Platform work for **every persona** — builders and agent devs, data scientists, environment admins, and business users — delivered by specialist skills. The agent loads and routes to these automatically via their frontmatter triggers — you never invoke them by name.
+Dataverse / Power Platform work for **every persona** (builders, data scientists, admins, business users), delivered by these specialist skills:
 
 | Area | Skill |
 | --- | --- |
@@ -50,7 +50,7 @@ If no MCP tool is found, check for an existing CLI profile — it's the fastest 
 dataverse auth who
 ```
 
-If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect" or "set up" requests, run `dv-connect` regardless — it configures MCP, SDK, and PAC.
+If that shows an active profile with an environment URL, use CLI directly for data operations (see `dv-query`/`dv-data` examples) — no `.env`, `auth.py`, or workspace setup needed. For explicit "connect", "set up", or "verify connection" requests, run `dv-connect` regardless.
 
 If no CLI profile exists, check workspace init:
 
@@ -116,8 +116,6 @@ Each skill documents a tested sequence — follow it when it fits. The skills ar
 
 ## Tool Capabilities — Which Tool for Which Job
 
-Understanding the real limits of each tool prevents hallucinated paths. This is the one piece of context no individual skill owns.
-
 | Tool | Use for | Does NOT support |
 | --- | --- | --- |
 | **MCP Server** | Data CRUD (create/read/update/delete records, batch up to 25 per call), table create/update/delete + column add (incl. local choice/multiselect + lookup/customer), schema + record inspection via `describe`, metadata search (`search`), data + file-content search (`search_data`, when Dataverse search is enabled), file upload/download | Forms, Views, **global** Option Sets, **N:N** relationships, alternate keys, Solutions (lookup + local choice/multiselect columns **are** supported via `create_table`/`update_table`). **Note:** table creation may timeout but still succeed — always `describe` (e.g. `describe('tables/{name}')`) before retrying. Run queries sequentially (parallel calls timeout). Column names with spaces normalize to underscores (e.g., `"Specialty Area"` → `cr9ac_specialty_area`). **SQL (`read_query`):** supports `JOIN`, `GROUP BY` (COUNT/SUM/AVG/MIN/MAX), `TOP`, `WHERE`, `ORDER BY`; does NOT support `DISTINCT`, `HAVING`, subqueries, `OFFSET`, `UNION`, `CASE`/`IF`, `CAST`/`CONVERT`, CTE, or date functions. For those, use `client.query.sql()` (also allows `DISTINCT`, <5K rows), `$apply`, or a builder->DataFrame with pandas — see `dv-query`. **Bulk:** MCP `create_record`/`update_record`/`delete_record` batch up to 25 records per call; for larger bulk use the SDK `CreateMultiple` — see `dv-data`. |
@@ -153,27 +151,15 @@ Understanding the real limits of each tool prevents hallucinated paths. This is 
 
 ### MCP Availability Check
 
-If the user's request involves MCP — explicitly or implicitly — search your callable tools for any tool whose name or description contains `dataverse` (same search as Hard Rule 0).
-
-**If MCP NOT available and user explicitly asked for MCP** ("use MCP to query"):
-1. **Do NOT silently fall back** to the Python SDK or Web API
-2. Tell the user: "Dataverse MCP tools aren't configured in this session yet."
-3. Load `dv-connect` to set up the MCP server
-4. After MCP is configured, **stop** — the session must restart for MCP tools to appear. Do not proceed with SDK.
-
-**If MCP NOT available and user asked a data question** ("how many accounts?"):
-1. Use the CLI (if profile exists) or SDK to answer. Do not block the user.
-2. After answering, offer: "MCP would handle this conversationally — want me to set it up?"
-
-The distinction matters: explicit MCP request → block and set up MCP; implicit question → answer with SDK, offer MCP setup.
-
-**If MCP tools ARE available**, prefer MCP for simple reads/queries/small CRUD. Use the SDK only when a script is needed.
+Search callable tools for `dataverse` (same as Hard Rule 0). If MCP is missing and the user **explicitly** asked for MCP, do not silently fall back: say so, load `dv-connect`, and stop for the session restart. If they only asked a data question, answer with the CLI or SDK, then offer MCP setup. When MCP tools are available, prefer them for simple reads and small CRUD. Details: [`references/mcp-availability.md`](references/mcp-availability.md).
 
 ---
 
 ## The Change Lifecycle — Operate Safely
 
 For any real change, walk these three steps in order: confirm **where**, confirm the **container**, then persist the **result**.
+
+**Skill sequence for "new table → source control":** `dv-connect` (confirm environment) → `dv-solution` (publisher + solution; confirm the permanent prefix) → `dv-metadata` (create in the environment) → `dv-solution` (export + unpack). Never hand-write solution XML to create components.
 
 ### Step 1 — Confirm the Environment (MANDATORY)
 
@@ -195,20 +181,7 @@ Before creating tables, columns, or other metadata, ensure a solution exists to 
 
 1. Ask the user: "What solution should these components go into?"
 2. If a solution name is in `.env` (`SOLUTION_NAME`), confirm it with the user
-3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow. Use the SDK — **never raw Web API** — to create publisher and solution records:
-
-```python
-# Quick reference — full pattern with publisher discovery is in dv-solution
-publisher_id = client.records.create("publisher", {
-    "uniquename": "<name>", "friendlyname": "<display>",
-    "customizationprefix": "<prefix>", "description": "<desc>",
-})
-solution_id = client.records.create("solution", {
-    "uniquename": "<Name>", "friendlyname": "<Display>",
-    "version": "1.0.0.0",
-    "publisherid@odata.bind": f"/publishers({publisher_id})",
-})
-```
+3. If no solution exists yet, **load the `dv-solution` skill** and follow its publisher discovery + solution creation flow, creating both records with the SDK (`client.records.create`) — **never raw Web API**.
 
 4. Pass `solution="<UniqueName>"` on all SDK calls, or include `"MSCRM.SolutionName": "<UniqueName>"` header on raw Web API metadata calls.
 
@@ -233,7 +206,7 @@ The repo is always the source of truth.
 
 ## Scripts
 
-The plugin ships `scripts/auth.py` (Azure Identity token/credential acquisition — used by all other scripts and the SDK). Any Web API call beyond a one-off query should be a Python script committed to `/scripts/`, using `scripts/auth.py` for tokens. For writes see `dv-data`; queries and analytics see `dv-query`; post-import validation see `dv-solution`.
+`scripts/auth.py` provides tokens and credentials for the SDK and every script. Commit any Web API call beyond a one-off query as a Python script in `/scripts/` that uses it. Writes: `dv-data`; queries: `dv-query`; post-import validation: `dv-solution`.
 
 ---
 

@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "dataverse": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@microsoft/dataverse@1.0.88",
+        "mcp",
+        "${DATAVERSE_URL}"
+      ],
+      "env": {
+        "DATAVERSE_OPERATION_CONTEXT": "app=dataverse-skills/1.20.0;skill=mcp-direct;agent=antigravity-cli"
+      },
+      "variables": [
+        {
+          "name": "DATAVERSE_URL",
+          "title": "Dataverse environment URL",
+          "description": "Base URL of the Dataverse environment to connect to, for example https://contoso.crm.dynamics.com (no trailing slash).",
+          "link": "https://admin.powerplatform.microsoft.com/environments"
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: dv-query
-description: Bulk reads, multi-page iteration, and analytics over Dataverse data. Use when the user wants to read, list, filter, aggregate, group, join, or analyze records — including pandas DataFrame workflows and notebook exploration. Also covers ERP (Finance and Operations / F&O) business-data reads and runtime entity, schema, or action discovery; load dv-overview first, then this skill.
+description: Bulk reads, multi-page iteration, and analytics over Dataverse data. Use when the user wants to read, list, filter, aggregate, group, join, or analyze records — including pandas DataFrame workflows and notebook exploration. Also covers ERP (Finance and Operations / F&O) business-data reads and runtime entity, schema, or action discovery; load dv-overview first, then this skill. Don't use for general SQL or pandas work on non-Dataverse data, Dataverse writes (dv-data), or direct ERP SQL database access (erp-sql).
 ---
 
 # Skill: Query — Read and Analyze Dataverse Records
@@ -128,7 +128,9 @@ For deeper schema inspection — full column metadata and table relationships �
 |---|---|
 | Explicit physical ERP SQL table read or a table read in an established JIT/sqlcmd workflow | **erp-sql** |
 | Create, update, delete records (Dataverse) | **dv-data** |
-| Query, create, update, delete records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) and [`erp-writes`](../dv-data/references/erp-writes.md) |
+| Query records (ERP) | See [`references/erp-reads.md`](references/erp-reads.md) |
+| Create, update, delete records or DMF imports (ERP) | **dv-data** |
+| List or cancel ERP (Finance and Operations) batch jobs | **dv-admin** |
 | Create tables, columns, relationships | **dv-metadata** |
 | Export or deploy solutions | **dv-solution** |
 

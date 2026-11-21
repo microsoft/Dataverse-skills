@@ -1,6 +1,6 @@
 ---
 name: dv-metadata
-description: Dataverse schema authoring and inspection — tables, columns, relationships, forms, and views. Use when the user wants to define, evolve, or inspect the data model — add a column, create a table, set up a lookup, customize a form, build a view, or list existing columns and relationships.
+description: Dataverse schema authoring and inspection — tables, columns, relationships, forms, and views. Use when the user wants to define, evolve, or inspect the data model — add a column, create a table, set up a lookup, customize a form, build a view, or list existing columns and relationships. Don't use for general SQL DDL or ORM schema design outside Dataverse, record data changes (dv-data), or solution packaging (dv-solution).
 ---
 
 # Skill: Metadata — Making Changes
@@ -102,34 +102,7 @@ info = client.tables.create(
 print(f"Created: {info['table_schema_name']}")
 ```
 
-**Web API fallback (ONLY when you need OwnershipType, HasActivities, or other properties the SDK doesn't expose):**
-
-```python
-# Helper for Label boilerplate
-def label(text):
-    return {"@odata.type": "Microsoft.Dynamics.CRM.Label",
-            "LocalizedLabels": [{"@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-                                  "Label": text, "LanguageCode": 1033}]}
-
-entity = {
-    "@odata.type": "Microsoft.Dynamics.CRM.EntityMetadata",
-    "SchemaName": "new_ProjectBudget",
-    "DisplayName": label("Project Budget"),
-    "DisplayCollectionName": label("Project Budgets"),
-    "Description": label(""),
-    "OwnershipType": "UserOwned",
-    "HasActivities": False, "HasNotes": False, "IsActivity": False,
-    "PrimaryNameAttribute": "new_name",
-    "Attributes": [{
-        "@odata.type": "Microsoft.Dynamics.CRM.StringAttributeMetadata",
-        "SchemaName": "new_name",
-        "DisplayName": label("Name"),
-        "RequiredLevel": {"Value": "ApplicationRequired"},
-        "MaxLength": 100, "IsPrimaryName": True,
-    }]
-}
-# POST to /api/data/v9.2/EntityDefinitions with MSCRM.SolutionUniqueName header
-```
+**Web API fallback** (ONLY when you need OwnershipType, HasActivities, or other properties the SDK doesn't expose): POST an `EntityMetadata` payload to `EntityDefinitions` with the `MSCRM.SolutionUniqueName` header -- see [`references/table-create-web-api.md`](references/table-create-web-api.md).
 
 ---
 
@@ -154,7 +127,7 @@ created = client.tables.add_columns(
 print(created)  # ['new_Description', 'new_Amount', 'new_Active']
 ```
 
-Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"` / `"money"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets).
+Supported type strings: `"string"` / `"text"`, `"int"` / `"integer"`, `"decimal"`, `"float"` / `"double"`, `"datetime"` / `"date"`, `"bool"` / `"boolean"`, `"file"`, and `Enum` subclasses (for local option sets). `"money"` is a `"decimal"` alias, **not** currency ([currency-columns](references/currency-columns.md)).
 
 **Choice (picklist) column via SDK:**
 
@@ -164,24 +137,20 @@ from enum import IntEnum
 class BudgetStatus(IntEnum):
     DRAFT = 100000000
     APPROVED = 100000001
-    REJECTED = 100000002
 
-created = client.tables.add_columns(
-    "new_ProjectBudget",
-    {"new_Status": BudgetStatus},
-)
+created = client.tables.add_columns("new_ProjectBudget", {"new_Status": BudgetStatus})
 ```
 
 **Set constraints — pass a dict spec** instead of a bare type string (keys: `max_length`, `min_value`, `max_value`, `precision`, `format`, `required`, `display_name`); works on `create` and `add_columns`, no raw Web API:
 
 ```python
 client.tables.add_columns("new_ProjectBudget", {
-    "new_Amount":  {"type": "money", "min_value": 0, "max_value": 1000000000, "precision": 2},
+    "new_Amount":  {"type": "decimal", "min_value": 0, "max_value": 1000000000, "precision": 2},
     "new_Comment": {"type": "memo", "max_length": 2000, "display_name": "Comment"},
 })
 ```
 
-Change an existing column in place with `update_column(table, col, spec)` or `update_columns(table, {col: spec})` — same keys; all specs are validated before any write.
+Change an existing column with `update_column(table, col, spec)` or `update_columns(table, {col: spec})` — same keys, validated before any write.
 
 ---
 
@@ -338,13 +307,7 @@ Or check `solutions/<SOLUTION_NAME>/Other/Solution.xml` after the first pull —
 
 ## FormXml Pitfalls
 
-- **All `id` attributes must be valid GUIDs** in `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` format. Do not use strings like `"general"`.
-- **`labelid` is also a GUID** — not a human-readable string.
-- **Subgrid controls require a valid `<ViewId>`** — must be the GUID of an existing SavedQuery. Create the view first.
-- **Cell, section, tab, and control IDs must all be unique** across the entire form.
-- **Control `classid` values** — see the classid table above.
-
-**Tip:** Create forms in the maker portal and pull via `pac solution export` — use the pulled XML as a template for programmatic creation.
+Every `id`, `labelid`, cell, section, tab, and control ID must be a unique GUID, and a subgrid needs the GUID of an existing view. Full list: [`references/forms-and-views.md`](references/forms-and-views.md#formxml-pitfalls).
 
 ---
 
@@ -364,15 +327,7 @@ This prevents downstream failures when the user tries to insert data using incor
 
 ## Common Web API Error Codes
 
-| Error Code | Meaning | Recovery |
-|---|---|---|
-| `0x80040216` | Transient metadata cache error. Column or table metadata not yet propagated. | Wait 3-5 seconds and retry. Usually succeeds on second attempt. |
-| `0x80048d19` | Invalid property in payload. A field name doesn't match any column on the table. | Check logical column names — use `EntityDefinitions(LogicalName='...')/Attributes` to verify. |
-| `0x80040237` | Schema name already exists. | Verify the column/table exists before creating a new one — it may have been created by a previous timed-out call. |
-| `0x8004431a` | Publisher prefix mismatch. | Ensure all schema names use the solution's publisher prefix. |
-| `0x80060891` | Metadata cache not ready after table creation. | Call `GET EntityDefinitions(LogicalName='...')` first to force cache refresh, then retry. |
-
-Always translate error codes to plain English before presenting them to the user.
+`0x80040216` / `0x80060891` (metadata not yet propagated) -- wait and retry; `0x80048d19` (unknown property) -- verify logical names; `0x80040237` (schema name exists) -- check before re-creating; `0x8004431a` -- publisher prefix mismatch. Recovery table: [`references/troubleshooting.md`](references/troubleshooting.md). Always translate error codes to plain English before presenting them to the user.
 
 ---
 
@@ -464,21 +419,7 @@ For SDK code samples (single + composite + idempotent + status-check), the agent
 
 ## EntityDefinitions Filter Limitation
 
-**`startswith()` is NOT supported as a filter on `EntityDefinitions`.** This query will return a 400 error:
-
-```
-GET /api/data/v9.2/EntityDefinitions?$filter=startswith(LogicalName,'new_')  # BROKEN
-```
-
-To retrieve metadata for multiple custom tables, query each table individually:
-```python
-GET /api/data/v9.2/EntityDefinitions(LogicalName='new_projectbudget')?$select=LogicalName,EntitySetName
-```
-
-Or query all and filter client-side:
-```python
-GET /api/data/v9.2/EntityDefinitions?$select=LogicalName,EntitySetName
-```
+`startswith()` is NOT supported as a filter on `EntityDefinitions` (400). Query each table by `LogicalName`, or select all and filter client-side -- see [`references/troubleshooting.md`](references/troubleshooting.md#entitydefinitions-filter-limitation).
 
 ---
 

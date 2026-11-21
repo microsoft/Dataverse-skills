@@ -55,14 +55,14 @@ Every `python` fenced block must contain at least one executable line. Comment-o
 
 ### Frontmatter description
 
-Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers. The two halves do different jobs — the first describes what the skill does, the second describes what to look for in a request. **Describe the capability domain, not the execution tool** — tool choice belongs to the overview's Tool Capabilities matrix + Hard Rule 2, so a description says what the skill covers (e.g. `record CRUD and bulk operations`), not how it runs (e.g. `via the Python SDK`). Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and don't include `Do not use when:` lists. Hard cap: 1024 chars.
+Follow Anthropic's published Skills format: one third-person descriptive sentence followed by an inline `Use when ...` clause naming user-intent triggers, then one concise `Don't use for ...` sentence naming the adjacent non-Dataverse (or sibling-skill) requests it must not catch. The parts do different jobs — the first describes what the skill does, the second what to look for in a request, the third what to reject. Hosts such as Antigravity route on frontmatter alone, so the negative boundary is what keeps generic SQL, IAM, or CI/CD prompts from mis-triggering (`EVAL-STRUCT-06`). **Describe the capability domain, not the execution tool** — tool choice belongs to the overview's Tool Capabilities matrix + Hard Rule 2, so a description says what the skill covers (e.g. `record CRUD and bulk operations`), not how it runs (e.g. `via the Python SDK`). Don't enumerate quoted trigger phrases (burns Level 1 tokens on every interaction across all skills) and keep the exclusion to one sentence, not a list. Hard cap: 1024 chars.
 
-Example: `Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables.`
+Example: `Record-level CRUD and bulk operations — create, update, delete, upsert, CSV import, multi-table foreign-key loads. Use when the user wants to write, modify, seed, or import data records into Dataverse tables. Don't use for non-Dataverse databases or files, read-only queries (dv-query), or schema changes (dv-metadata).`
 
 ### Token budget — Anthropic Skills spec
 
 - **Frontmatter (Level 1, always loaded):** ≤ 200 tokens. Strive for ~100.
-- **SKILL.md body (Level 2, loaded on trigger):** ≤ 5,000 tokens.
+- **SKILL.md body (Level 2, loaded on trigger):** ≤ 5,000 tokens, measured as the larger of tiktoken and chars/4 so the result is the same with or without tiktoken installed, and ≤ 22,000 bytes (Antigravity hard-truncates bodies at 24,000 bytes).
 - **`references/<topic>.md` (Level 3, loaded on demand):** unlimited.
 
 When a skill body grows past ~4,000 tokens, split long content (Python snippets, edge-case tables, deep-dive workflows) into `references/<topic>.md`. The body keeps a Quick Reference + key invariants + a one-line pointer to the reference. Keep references one level deep — body links directly, references don't link to other references.
@@ -150,7 +150,7 @@ Contributors who aren't on the maintainers team need two team members to review.
 
 ## Version Bumping
 
-When a PR changes any published plugin content (`.github/plugins/dataverse/**`), bump the plugin version before merging. Version must be updated in all twelve fields (across nine files):
+When a PR changes any published plugin content (`.github/plugins/dataverse/**`), bump the plugin version before merging. Version must be updated in all thirteen fields (across ten files):
 
 1. `.github/plugin/marketplace.json` — top-level `metadata.version`
 2. `.github/plugin/marketplace.json` — plugin entry `version`
@@ -164,8 +164,11 @@ When a PR changes any published plugin content (`.github/plugins/dataverse/**`),
 10. `.github/plugins/dataverse/gemini-extension.json` — the `dataverse-skills/<version>` segment of `mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT`
 11. `gemini-extension.json` (repo root, read by the Gemini CLI extensions gallery) — `version`
 12. `.github/plugins/dataverse/.antigravity-plugin/plugin.json`: `version` (Antigravity Marketplace)
+13. `.github/plugins/dataverse/mcp_config.json` — the `dataverse-skills/<version>` segment of `mcpServers.dataverse.env.DATAVERSE_OPERATION_CONTEXT` (Antigravity plugin-scoped MCP server)
 
-All twelve must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
+All thirteen must match. The static eval (`python .github/evals/static_checks.py`) verifies version consistency and will fail if any field drifts.
+
+`mcp_config.json` also pins the `@microsoft/dataverse` package version (Antigravity requires a pinned package). When adopting a newer CLI release, update that pin and the `agy mcp add` command in `skills/dv-connect/references/mcp-configuration.md` together; `EVAL-ANTIGRAVITY-05` fails if they differ.
 
 Run the PR-level bump check to verify the bump level matches the structural changes in your branch:
 

@@ -1,6 +1,6 @@
 ---
 name: erp-sql
-description: Temporary Finance and Operations SQL access and bounded physical-table reads for unified development environments (UDEs) only, requiring the environment System administrator (sysAdmin) role. Use when the user explicitly requests direct ERP SQL access, a temporary SQL password, a sqlcmd connection, or a table read in an established ERP SQL workflow.
+description: Temporary Finance and Operations SQL access and bounded physical-table reads for unified development environments (UDEs) only, requiring the environment System administrator (sysAdmin) role. Use when the user explicitly requests direct ERP SQL access, a temporary SQL password, a sqlcmd connection, or a table read in an established ERP SQL workflow. Don't use for general SQL, Dataverse TDS / SQL queries (dv-query), production or sandbox databases, or any SQL writes.
 ---
 
 # Skill: Finance and Operations SQL Access
@@ -73,15 +73,9 @@ session or use a firewall error as the source for a new scope.
 
 ## Discover the contract, not the password
 
-**IPv4 only:** the approved SQL firewall scope must be a public IPv4 address or
-bounded IPv4 range/CIDR. Azure SQL firewall endpoints do not accept IPv6.
-Reject IPv6 before requesting credentials; do not substitute an IPv4 address
-without a new user-supplied value and explicit approval.
-
-**API documentation gap:** the product database access page linked above documents
-the Visual Studio **Tools > SQL Credentials for Dynamics 365 FinOps** workflow,
-not this Dataverse action or its request/response schema. Environment metadata
-does not establish a publicly documented or supported API contract.
+The firewall scope is **public IPv4 only**; reject IPv6 before requesting
+credentials. The action has no public API contract; see
+[the action contract notes](references/action-contract.md).
 
 **Before either helper starts a new grant**, discover the action in the confirmed
 environment. The following **metadata reads** do not request credentials and are
@@ -92,19 +86,10 @@ dataverse api list sql --target dataverse --environment <dataverse-url> --json -
 dataverse api describe msprov_getfinopssqljitaccessasync --target dataverse --environment <dataverse-url> --json --context "app=dataverse-skills/<ver>;skill=erp-sql;agent=<agent>"
 ```
 
-Treat `msprov_getfinopssqljitaccessasync` as a discovery candidate, not a fixed
-public contract. Use `api describe` to inspect its binding, method, and
-request/response field names and types. Compare these with the current
-`scripts/connect.py` adapter (`ACTION`, `request_credentials`, and
-`validate_credentials`). Its fixed path and field mappings are implementation
-assumptions; the helper does not perform metadata discovery itself.
-
+Compare the described binding and fields with the `scripts/connect.py` adapter.
 If the action is absent, discovery fails, or the schema cannot be verified as
-compatible, **stop before requesting credentials**. Do not guess fields, substitute
-an endpoint, or bypass validation. Direct the user to the documented Visual Studio
-workflow instead. Discovery alone does not resolve the public API support gap;
-API-owner confirmation/public documentation is still needed before claiming a
-supported integration.
+compatible, **stop before requesting credentials** and direct the user to the
+documented Visual Studio workflow; never guess fields or substitute an endpoint.
 
 Do not invoke it through MCP `invoke_api` or a bare terminal command: that would display the password. Use the helper below, which invokes the **managed Dataverse CLI** and captures its output in process. No raw HTTP or new authentication flow is needed.
 
@@ -180,25 +165,11 @@ grant; credentials can expire or be invalidated by a later grant.
 
 If credentials are absent, report the operation ID and stop. Do not invent polling endpoints or assume the operation completed. Inspect the environment's actual operation-history schema and obtain approval before any follow-up operation.
 
-**Client-IP response format:** the live API can return `ipaddress` as `start-end`, even for a single approved address (for example, `8.8.8.8-8.8.8.8`). The helper normalizes approved CIDRs to explicit inclusive ranges for `sqljitclientipaddress`. Require both returned endpoints to equal the approved bounds exactly; reject broader, narrower, reversed, non-public, or oversized scopes. A single IP and an identical-endpoint range are equivalent. Never disable IP validation to make a connection succeed. A local validation failure after the API call does not undo a granted credential or its invalidation of prior credentials. Disclose this, repeat the invalidation warning, and obtain fresh approval before another grant.
+**Client-IP response format:** the returned `ipaddress` must equal the approved bounds exactly (a single IP can come back as `start-end`); never disable IP validation. A local validation failure does not undo the grant; repeat the invalidation warning and obtain fresh approval before another. See [the action contract notes](references/action-contract.md).
 
 ## Common mistakes
 
-| Wrong | Correct |
-|---|---|
-| Requesting this action with `--target erp` | The action is on the linked **Dataverse** environment |
-| Inventing a reason or pre-filling the reason form | Explicitly ask for the user's reason with an empty free-text field; submit their confirmed text verbatim |
-| Offering Writer or escalating after a failure | Only Reader is supported; obtain explicit approval and stop on permission failures |
-| Guessing a credential endpoint or using an Entra token as the SQL password | Discover and verify the action's metadata before granting access; use only the returned SQL credentials |
-| Printing the response or using `sqlcmd -P <password>` | Capture in Python; use child-only `SQLCMDPASSWORD` |
-| Using `-C` to make a TLS failure disappear | Fix certificate trust, hostname, or client configuration |
-| Assuming `-K ReadOnly` prevents writes | Require Reader credentials; a client intent flag is not an authorization boundary |
-| Requesting another grant after every login failure | Allow propagation, retry the same credentials within bounds, then report failure |
-| Checking only that credentials were returned | Verify sqlcmd's exit code and actual database/login |
-| New JIT grant for each metadata/count/data query | Keep one credential response in memory for the entire approved read |
-| Retrying propagation only for the initial probe | Apply the same bounded retry/expiry checks to every SQL command |
-| Combining `-h -1` with `-y 0` | Use the helper's tested text-preview flags; these options conflict |
-| Parsing ordinary sqlcmd output as JSON | Use the text preview; only managed CLI API output is parsed as JSON |
+Never print the credential response, pass `sqlcmd -P`, add `-C`, offer Writer, invent the reason, or request a new grant per query or login retry. The full Wrong/Correct table is in [troubleshooting](references/troubleshooting.md).
 
 ## Read a physical ERP table
 
@@ -232,15 +203,10 @@ See [table-read guidance](references/table-reads.md) for the complete reusable i
 **Before any replacement grant**, repeat the same-user/environment credential-invalidation
 warning, including the impact on Visual Studio, SSMS, or another SQL session, and
 obtain fresh explicit approval. This applies to firewall/IP corrections, expiry,
-failed validation, and owner restarts. Earlier approval is not consent to another
-invalidation; retries using the same credentials do not request a new grant.
+failed validation, and owner restarts. Retries using the same credentials do not
+request a new grant.
 
-- **Revoked/expired sign-in:** repair the affected CLI through **dv-connect**, then rerun preflight. Do not inspect token cache files.
-- **Missing action or unsupported deployment type:** stop; do not fall back to LCS or invent another endpoint.
-- **Permission failure:** report it; do not self-elevate or switch to Writer.
-- **Network/firewall failure:** SQL-reported IPs are diagnostics used only to check whether bounded retries stay inside the user-approved scope, not a discovery source for a new grant. An out-of-scope, missing, invalid, or ambiguous IP stops the workflow. Do not copy it into `--client-ip`, generate a range, or recommend an IP lookup. Ask the user to supply any replacement IP/range themselves, repeat the credential-invalidation warning, and obtain fresh explicit approval before a new grant. In-scope failures use bounded retries with the same credentials; never broaden the allowlist or disable TLS.
-- **Expired credentials:** repeat the invalidation warning and obtain fresh approval before a new request; another tool may have obtained newer credentials for the same user/environment. Never reuse expired credentials.
-- **Changing SQL egress:** if a user-supplied correction is followed by another out-of-scope SQL-reported IP, stop requesting grants. Do not infer a subnet, accumulate grants, or repeatedly chase addresses. Resume only after the user independently supplies and explicitly approves a replacement scope, with the invalidation warning repeated.
-- **Sanitized command failure:** the helper reports the command, recognized diagnostic code/class, exit code where available, and validated SQL client IP for firewall errors, but intentionally withholds raw output that could contain credentials. Use metadata/auth checks for diagnosis, not credential-response logging.
-
-The sqlcmd password and TLS behavior follow the [Microsoft sqlcmd reference](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility).
+Stop on a missing action or unsupported deployment type, report permission
+failures without self-elevating, and never derive a new IP scope from a
+SQL-reported address. Per-failure recovery (sign-in, firewall, expiry, changing
+egress, sanitized errors) is in [troubleshooting](references/troubleshooting.md).

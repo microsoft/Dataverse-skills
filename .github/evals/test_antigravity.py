@@ -34,6 +34,7 @@ class AntigravityPackagingTests(unittest.TestCase):
             PLUGIN_ROOT / ".cursor-plugin/plugin.json",
             PLUGIN_ROOT / ".codex-plugin/plugin.json",
             PLUGIN_ROOT / "assets/dataverse-logo.svg",
+            PLUGIN_ROOT / "mcp_config.json",
             PLUGIN_ROOT / "scripts/auth.py",
             PLUGIN_ROOT / "skills/dv-connect/SKILL.md",
             PLUGIN_ROOT / "skills/dv-connect/references/mcp-configuration.md",
@@ -124,6 +125,35 @@ class AntigravityPackagingTests(unittest.TestCase):
             with self.subTest(logo=logo):
                 logo_path.write_text(logo, encoding="utf-8")
                 self.assertTrue(any("EVAL-ANTIGRAVITY-06" in issue for issue in self.check_manifest(self.manifest)))
+    def check_mcp_config(self, mutate):
+        path = self.root / PLUGIN_ROOT / "mcp_config.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        mutate(config["mcpServers"]["dataverse"])
+        path.write_text(json.dumps(config), encoding="utf-8")
+        return [i for i in static_checks.check_antigravity_plugin(self.root) if "EVAL-ANTIGRAVITY-05" in i]
+
+    def test_plugin_scoped_mcp_server_passes(self):
+        self.assertEqual(self.check_mcp_config(lambda server: None), [])
+
+    def test_unpinned_mcp_package_fails(self):
+        def unpin(server):
+            server["args"][1] = "@microsoft/dataverse@latest"
+        self.assertTrue(self.check_mcp_config(unpin))
+
+    def test_mcp_context_must_track_plugin_version(self):
+        def drift(server):
+            server["env"]["DATAVERSE_OPERATION_CONTEXT"] = (
+                "app=dataverse-skills/0.0.0;skill=mcp-direct;agent=antigravity-cli"
+            )
+        self.assertTrue(self.check_mcp_config(drift))
+
+    def test_mcp_url_variable_is_required(self):
+        self.assertTrue(self.check_mcp_config(lambda server: server.pop("variables")))
+
+    def test_docs_must_use_the_pinned_package(self):
+        def bump(server):
+            server["args"][1] = "@microsoft/dataverse@9.9.9"
+        self.assertTrue(any("mcp-configuration.md" in i for i in self.check_mcp_config(bump)))
 
 
 if __name__ == "__main__":

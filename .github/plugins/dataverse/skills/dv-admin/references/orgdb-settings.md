@@ -28,6 +28,40 @@ for child in sorted(root, key=lambda c: c.tag):
     print(f"  {child.tag} = {child.text}", flush=True)
 ```
 
+**Read specific OrgDB settings** (use this when the user names keys -- report every requested key, including absent ones):
+
+```python
+import os, sys
+from xml.etree import ElementTree as ET
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts"))
+from auth import get_client
+
+ALLOWED = {
+    "IsMCPEnabled", "IsMCPPreviewEnabled", "SearchAndCopilotIndexMode", "IsLinkToFabricEnabled",
+    "IsFabricVirtualTableEnabled", "ShowDataInM365Copilot", "EnableWorkIQ",
+    "IsLockdownOfUnmanagedCustomizationEnabled", "EnableSecurityOnAttachment", "EnableTDSEndpoint",
+    "AllowAccessToTDSEndpoint", "EnableOwnershipAcrossBusinessUnits",
+    "CreateOnlyNonEmptyAddressRecordsForEligibleEntities", "EnableDeleteAddressRecords",
+    "BlockDeleteManagedAttributeMap", "EnableSystemUserDelete", "IsExcelToExistingTableWithAssistedMappingEnabled",
+}
+REQUESTED = ["IsMCPEnabled", "EnableTDSEndpoint", "EnableSecurityOnAttachment"]  # exact PascalCase
+
+refused = [k for k in REQUESTED if k not in ALLOWED]
+if refused:
+    sys.exit(f"Out of scope for dv-admin (not allowlisted): {', '.join(refused)}")
+
+client = get_client("dv-admin")
+orgs = list(client.records.list("organization", select=["organizationid", "orgdborgsettings"]))
+root = ET.fromstring(orgs[0].get("orgdborgsettings") or "<OrgSettings></OrgSettings>")
+for key in REQUESTED:
+    element = root.find(key)
+    # An absent element means the platform default applies; say so rather than skipping the key.
+    value = element.text if element is not None else "not set (platform default)"
+    print(f"  {key} = {value}", flush=True)
+```
+
+If only some requested keys are allowlisted, read the allowlisted ones and name the rest as out of scope in the same reply.
+
 **Update or add an OrgDB setting:**
 
 ```python
