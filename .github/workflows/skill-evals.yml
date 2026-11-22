@@ -27,6 +27,8 @@ jobs:
           python-version: '3.12'
       - name: Run ERP SQL unit and local IPC tests
         run: python -m unittest discover -s .github/evals -p "test_erp_sql*.py"
+      - name: Run ERP X++ metadata lookup tests
+        run: python -m unittest discover -s .github/evals -p "test_erp_xpp*.py"
 
   static-checks:
     name: Static skill checks

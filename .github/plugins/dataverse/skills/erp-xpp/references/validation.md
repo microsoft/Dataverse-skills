@@ -122,6 +122,7 @@ Use the file path, line/column, diagnostic text, and stage log path printed by P
 | ZIP missing after compile | Packaging did not run, the model failed earlier, or output path differs | Check the compile summary and package line; do not use an older ZIP. |
 | Package ZIP not found during solution deployment | A configured model was not compiled into `<root>/bin` | Compile the missing model and rerun the planned solution deployment. |
 | Circular model dependency | Model descriptor references form a cycle | Review `<ModuleReferences>` and remove the cycle; do not manually reorder around it. |
+| `A reference to 'Dynamics.AX.<Package>' is required`, or a type `is not found` | The descriptor lacks a package that the model, or a standard object it extends, uses | Run `scripts/xpp_lookup.py model <Model> --include <root>/src --compile-log <log>`, add the listed packages to `<ModuleReferences>`, and recompile; repeat until clean. Do not change code to avoid the reference. |
 | `EnvironmentStateInvalid` | ERP orchestration is still settling from a previous deployment | Check the previous operation state, wait for the environment to settle, then retry once. |
 | Deployment reaches `Failed` or `Cancelled` | Server rejected or could not apply the package | Capture operation ID, status code, friendly/raw message, and PAC log; fix that cause before retrying. |
 | Deployment polling times out | Client wait limit elapsed; server state is unknown | Query `asyncoperations` and check LCS. Do not redeploy until the original operation is terminal. |

@@ -15,6 +15,7 @@ description: X++ code development lifecycle for Finance and Operations — scaff
 > 6. **Pin every runtime surface before ERP verification.** PAC and the Dataverse CLI have separate active profiles. Before any `dataverse ... --target erp` check, require `dataverse auth who` and `dataverse org who --json` to match the confirmed Dataverse and linked ERP URLs. Validate ERP MCP according to its transport: direct HTTP must target `<erp-url>/mcp`; an stdio proxy must receive the base `<erp-url>` and route effectively to `/mcp`. Profile selection does not retarget an existing MCP connection.
 > 7. **Treat runtime verification as possible data mutation.** After the separate post-deployment opt-in, inspect the X++ implementation, disclose exact test inputs and expected mutations, and obtain confirmation for those inputs and effects. Do not apply a generic test matrix to non-idempotent operations.
 > 8. **All additional validation after an ERP X++ package deployment is opt-in.** After `pac package deploy --package-type erp`, capture PAC's terminal result, then ask whether the user wants any further validation and which checks to run. Do not query the async operation, execute an X++ artifact, query its ERP entity, or test its security unless selected. For runtime validation, confirm exact inputs, success criteria, and failure criteria; never invent values or execute an unapproved failure path. This rule is scoped to ERP X++ package deployment, not Dataverse solution ALM.
+> 9. **Extend standard objects; look them up first.** Never edit or copy a standard object's XML. Before writing an extension, get the target's names and signatures from `scripts/xpp_lookup.py`. Do not open standard XML files under `PackagesLocalDirectory`; they are too large to read. The helper reads the installed SDK: if none is installed yet, install it first (step 6 of the end-to-end workflow), or tell the user which names are unverified. Either way, the compile is the final check.
 
 PAC CLI is the managed surface for the X++ lifecycle. Do not replace these commands with raw Dataverse APIs, direct calls to the ERP sidecar, LCS upload automation, or hand-written compiler invocations.
 
@@ -33,6 +34,8 @@ For a planning-only X++ request, loading skills and reading local references is 
 | Run DB sync only | `pac package db-sync` |
 | Create an ERP custom service | Author its X++ class/contracts plus `AxService` and `AxServiceGroup` metadata, then compile and deploy |
 | Create an ERP `ICustomAPI` action | Author an `ICustomAPI` class, action menu item, and privilege/duty/role security, then compile, deploy, DB-sync when required, and verify through ERP MCP |
+| Change a standard table, form, or class (new field, grid column, validation, CoC, event handler) | Look up the target with `scripts/xpp_lookup.py`, then author extensions per [`references/extensions.md`](references/extensions.md) |
+| Check a model's descriptor and package references | `scripts/xpp_lookup.py model <Model> --include <root>/src` (add `--compile-log <log>` after a failed compile) |
 | Author, compile, deploy, and verify | Follow [End-to-end workflow](#end-to-end-workflow) |
 
 **There is no `pac package build` or top-level `pac xpp` command.** For ERP, `pac package compile --package-type erp` compiles labels and X++, runs best-practice checks, and builds deployable managed ZIPs.
@@ -125,7 +128,7 @@ The repo root contains `.erp/xpp.json`; source defaults to `src/`. Each model ha
   src/<Model>/<Model>/AxClass/<Class>.xml
 ```
 
-Run `pac package init` instead of hand-writing the descriptor/config. Add metadata files surgically after inspecting existing paths. PAC compiles and packages authored metadata; it does not scaffold custom services, `ICustomAPI` actions, or data entities. For runnable classes, labels, custom services, `ICustomAPI` actions, public OData data entities, and artifact-specific verification, use [`references/authoring.md`](references/authoring.md).
+Run `pac package init` instead of hand-writing the descriptor/config. Add metadata files surgically after inspecting existing paths. PAC compiles and packages authored metadata; it does not scaffold custom services, `ICustomAPI` actions, or data entities. For runnable classes, labels, custom services, `ICustomAPI` actions, public OData data entities, and artifact-specific verification, use [`references/authoring.md`](references/authoring.md). For changes to standard objects (table and form extensions, Chain of Command, event handlers, required fields and validation), use [`references/extensions.md`](references/extensions.md) and its lookup helper.
 
 ## Compile/build rules
 
@@ -135,6 +138,7 @@ Run `pac package init` instead of hand-writing the descriptor/config. Add metada
 - If multiple SDKs are installed, pass `--app-version`; otherwise PAC may reject ambiguous selection.
 - Treat `Compile summary: ... failed` or any nonzero exit as failure even if a ZIP already exists from an earlier run.
 - Verify the output ZIP was produced by the current run under `<root>/bin/`.
+- Before compiling a model that uses or extends standard objects, run `scripts/xpp_lookup.py model <Model> --include <root>/src`. When the compiler reports `A reference to 'Dynamics.AX.<Package>' is required` or a type that `is not found`, rerun it with `--compile-log <log>`, add the listed packages to `<ModuleReferences>`, and compile again. Add only the packages it lists. The check is advice and never replaces the compile; if it can't run, compile and fix references from the log. See [Model references](references/extensions.md#model-references).
 - If label compilation reports `XPPLC2010` and PAC fails despite exit code 0 from LabelC, add a valid label resource; do not delete logs or bypass the stage.
 
 ## Deploy and DB-sync rules
@@ -156,7 +160,7 @@ For “make this X++ change and deploy it”:
 1. Inspect the repo and preserve existing work.
 2. Confirm model/class names, publisher, and layer before scaffolding a new model.
 3. Run `pac package init --package-type erp` only when the model does not exist.
-4. Add or edit the requested X++ metadata, such as classes, contracts, custom services, service groups, `ICustomAPI` actions and security, public data entities, and required labels.
+4. Add or edit the requested X++ metadata, such as classes, contracts, custom services, service groups, `ICustomAPI` actions and security, public data entities, and required labels. For a change to a standard object, look up each target with `scripts/xpp_lookup.py` and write extensions, never edits to the standard XML.
 5. Confirm/authenticate the target environment and verify ERP linkage/version.
 6. Install or reuse the matching SDK.
 7. Compile non-incrementally and require zero compile errors. Address best-practice warnings unless the user accepts them.
@@ -186,3 +190,5 @@ For “make this X++ change and deploy it”:
 | `pac package db-sync --db-sync None` | `None` is deploy-only; standalone modes are `Full`, `Module`, `Incremental` |
 | Module sync without `--modules` | Add `--modules ModelA,ModelB` |
 | Incremental sync without `--argument-file` | Add a valid `IncrementalSyncParameters` JSON file |
+| Reading a standard AOT file to find a method or control | `scripts/xpp_lookup.py members` / `form --control` |
+| A CoC wrapper signature written from memory | The `wrapper:` line from `xpp_lookup.py members --member` |
