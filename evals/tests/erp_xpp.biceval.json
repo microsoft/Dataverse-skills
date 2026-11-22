@@ -70,6 +70,66 @@
         "PRIORITY_1: Runtime checks require selected checks plus approved exact inputs, expected effects, success criteria, and failure criteria; the agent does not invent test values or run an unapproved failure path.",
         "PRIORITY_1: No environment calls or local file writes occur, and the hypothetical deployment is not presented as a deployment actually performed in this evaluation."
       ]
+    },
+    {
+      "test_id": "erp_xpp_004_extension_plan_with_lookup",
+      "prompt": "Plan an X++ change: add a customer line reference field to sales order lines, show it as a column in the order lines grid on the SalesTable form, and require it only for customers flagged as needing one. Planning only: do not write files, compile, deploy, or connect to an environment.",
+      "expected_response": "The agent loads erp-xpp and its extensions reference. It plans a SalesLine table extension (EDT-based field) and a CustTable flag, a SalesTable form extension whose new control's parent is the real lines grid, Chain of Command on SalesLine.validateWrite, and a required marker set from the SalesLine form data source. Exact signatures and control names come from scripts/xpp_lookup.py when an SDK is installed; otherwise the plan says they must be looked up before writing. No standard XML is edited or read whole.",
+      "category": "erp-xpp",
+      "description": "Plan changes to standard objects as extensions grounded in a metadata lookup, not memory.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "erp-xpp", "Type": "extension-plan"},
+      "custom_metadata": {"skill": "erp-xpp", "test_kind": "skill-contract"},
+      "pr_file_filter": ["**/skills/erp-xpp/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: erp-xpp",
+        "PRIORITY_1: The plan uses extensions (table extension, form extension, Chain of Command or event handler) and never edits, copies, or overlayers the standard SalesLine table or SalesTable form.",
+        "PRIORITY_1: Wrapper signatures and grid/control names are taken from scripts/xpp_lookup.py output, or the plan states they must be looked up first; guessed names or signatures are not presented as confirmed, and the agent does not read a whole standard AOT file into context.",
+        "PRIORITY_1: The conditional requirement shows the required-field marker (mandatory() on the form data source field) and validates with checkFailed in validateWrite rather than throw error.",
+        "PRIORITY_1: The plan checks that the model descriptor references the packages it needs (scripts/xpp_lookup.py model) before compiling.",
+        "PRIORITY_1: The new table field is followed by a Module DB sync after deployment, and no files are written or environment calls made."
+      ]
+    },
+    {
+      "test_id": "erp_xpp_005_validation_user_experience",
+      "prompt": "A Finance and Operations user wants a new field on a standard table to be required, and wants saving to be blocked with a message when it is empty. How should the X++ change do this so it matches the standard user experience? Advice only: do not write files or connect to an environment.",
+      "expected_response": "The agent recommends Mandatory = Yes on the field when it is always required, so forms show the required marker and the platform blocks the save without code. For a conditional rule it recommends setting mandatory() on the form data source field and reporting from a validateWrite wrapper with checkFailed and a label, returning false, not throw error. A wrapper keeps the base signature without default values.",
+      "category": "erp-xpp",
+      "description": "Required fields show the marker and validation reports with checkFailed.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "erp-xpp", "Type": "validation-ux"},
+      "custom_metadata": {"skill": "erp-xpp", "test_kind": "skill-contract"},
+      "pr_file_filter": ["**/skills/erp-xpp/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: erp-xpp",
+        "PRIORITY_1: For an always-required field the response recommends the field's Mandatory property, which shows the required marker and needs no validation code.",
+        "PRIORITY_1: Validation in validate* methods reports with checkFailed and a label and returns false; the response does not recommend throw error for this.",
+        "PRIORITY_1: No files are written and no environment calls occur."
+      ]
+    },
+    {
+      "test_id": "erp_xpp_006_missing_model_reference",
+      "prompt": "pac package compile failed for my X++ model with: A reference to 'Dynamics.AX.Directory, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' is required to compile this module. What should I change? Advice only: do not edit files, compile, or connect to an environment.",
+      "expected_response": "The agent explains that the model descriptor's ModuleReferences lacks the Directory package, recommends adding it (checking the descriptor with scripts/xpp_lookup.py model and the compile log), recompiling, and repeating for any further missing package. It does not suggest changing or removing the code or extension to avoid the reference, or adding packages nobody asked for.",
+      "category": "erp-xpp",
+      "description": "Missing package references are fixed in the model descriptor.",
+      "priority": 1,
+      "mode": "offline",
+      "safety_tier": "read-only",
+      "tags": {"Suite": "Regression", "Domain": "ERP", "Skill": "erp-xpp", "Type": "model-references"},
+      "custom_metadata": {"skill": "erp-xpp", "test_kind": "skill-contract"},
+      "pr_file_filter": ["**/skills/erp-xpp/**"],
+      "assertions": [
+        "PRIORITY_1: SKILL_LOADED: erp-xpp",
+        "PRIORITY_1: The fix is adding Directory to the model descriptor's ModuleReferences and recompiling, repeating for any further missing package; the response may use scripts/xpp_lookup.py model with --compile-log to list them.",
+        "PRIORITY_1: The response does not recommend editing, removing, or rewriting X++ code or extensions to avoid the reference.",
+        "PRIORITY_2: The response adds only the package the compiler or the model check names, not a broad list of references copied from another package or model.",
+        "PRIORITY_1: No files are written and no environment calls occur."
+      ]
     }
   ]
 }

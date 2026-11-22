@@ -2,7 +2,7 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "dataverse",
   "displayName": "Microsoft Dataverse",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "description": "Build and manage Microsoft Dataverse solutions: connect environments, query and import data, design schemas, configure security, and manage solution lifecycles.",
   "logo": "assets/dataverse-logo.svg",
   "suggestedPrompts": [
